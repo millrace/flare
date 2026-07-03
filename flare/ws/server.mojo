@@ -338,6 +338,13 @@ struct WsConnection(Movable):
 
     var _stream: TcpStream
     var _peer: SocketAddr
+    var origin: String
+    """The `Origin` header from the upgrade handshake (empty if absent). Exposed
+    so a handler can reject cross-site WebSocket connections — browsers do NOT
+    apply the same-origin policy to `ws://` connects, so any website can open a
+    socket to a loopback server unless the handler checks this. Populated on the
+    shared-listener path (`HttpServer.serve`); empty on the standalone
+    `WsServer` path, which doesn't parse the header."""
     var _prebuf: List[UInt8]
     """Bytes already drained from the socket before this
     ``WsConnection`` took ownership of the fd. Non-empty only on the
@@ -354,6 +361,7 @@ struct WsConnection(Movable):
     def __init__(out self, var stream: TcpStream, peer: SocketAddr):
         self._stream = stream^
         self._peer = peer
+        self.origin = String("")
         self._prebuf = List[UInt8]()
 
     def __init__(
@@ -361,6 +369,7 @@ struct WsConnection(Movable):
         var stream: TcpStream,
         peer: SocketAddr,
         var prebuf: List[UInt8],
+        var origin: String = String(""),
     ):
         """Construct a ``WsConnection`` seeded with already-buffered
         post-handshake bytes.
@@ -368,10 +377,13 @@ struct WsConnection(Movable):
         Used by the ``HttpServer`` WebSocket-upgrade seam to hand off
         any frame bytes the HTTP reactor had already read past the
         upgrade request. ``prebuf`` is consumed by the first
-        ``recv``/``_recv_one`` before any socket read.
+        ``recv``/``_recv_one`` before any socket read. ``origin`` is the
+        handshake ``Origin`` header (empty if absent), surfaced for
+        same-origin enforcement by the handler.
         """
         self._stream = stream^
         self._peer = peer
+        self.origin = origin^
         self._prebuf = prebuf^
 
     def __del__(deinit self):

@@ -1328,9 +1328,12 @@ struct ConnHandle(Movable):
         raw.set_nonblocking(False)
         var stream = TcpStream(raw^, peer)
 
-        # Handshake (blocking), then hand off to the WS handler.
+        # Handshake (blocking), then hand off to the WS handler. Carry the
+        # Origin header through so the handler can reject cross-site connects
+        # (browsers don't apply same-origin policy to ws:// upgrades).
+        var ws_origin = req.headers.get("origin")
         _send_upgrade_response(stream, accept)
-        var conn = WsConnection(stream^, peer, prebuf^)
+        var conn = WsConnection(stream^, peer, prebuf^, ws_origin)
         if config.ws_offload:
             # Off-reactor: run the connection on its own detached pthread so
             # this worker's reactor returns immediately and keeps servicing
