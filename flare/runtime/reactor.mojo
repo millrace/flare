@@ -401,8 +401,23 @@ struct Reactor(Movable):
             var ev = stack_allocation[EPOLL_EVENT_SIZE, UInt8]()
             for i in range(EPOLL_EVENT_SIZE):
                 (ev + i).init_pointee_copy(UInt8(0))
-            if _epoll_ctl(self._fd, EPOLL_CTL_DEL, fd, ev) < c_int(0):
-                raise _os_error("epoll_ctl DEL")
+            # EPOLL_CTL_DEL can legitimately fail here: if the fd was
+            # already closed by whoever took ownership of it (e.g. a
+            # WebSocket upgrade hands the socket to a WsConnection that
+            # closes it when the ws_handler returns), the kernel has
+            # already auto-removed it from the epoll set and the DEL
+            # returns EBADF; if it was never armed the DEL returns
+            # ENOENT. Both mean "this fd is no longer watched" — exactly
+            # the post-state unregister() wants — so we must NOT raise:
+            # raising here would skip the ``_registered.pop(fd)`` below,
+            # leaving a stale bookkeeping entry. Because the kernel
+            # assigns the lowest free fd, the very next accept(2) reuses
+            # that number, and ``register`` then rejects it as "already
+            # registered", silently dropping the connection. This is the
+            # epoll-vs-kqueue divergence behind the Linux-only
+            # test_server_ws_upgrade failure (the kqueue branch below
+            # already ignores its EV_DELETE result for the same reason).
+            _ = _epoll_ctl(self._fd, EPOLL_CTL_DEL, fd, ev)
         else:
             # Delete both possible filters. EV_DELETE on a non-registered
             # filter returns ENOENT, which we ignore.
