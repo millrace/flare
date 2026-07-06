@@ -1,8 +1,11 @@
 name: Fuzz
 
 on:
-  schedule:
-    - cron: '0 2 * * *'   # nightly at 02:00 UTC
+  # Nightly schedule paused: fuzz targets need 'mozz', disabled in
+  # pixi.toml during the mojo nightly bump (pins mojo ==1.0.0b1).
+  # Re-enable this schedule when mozz has a nightly-compatible tag.
+  # schedule:
+  #   - cron: '0 2 * * *'   # nightly at 02:00 UTC
   workflow_dispatch:        # manual trigger from GitHub UI
 
 concurrency:

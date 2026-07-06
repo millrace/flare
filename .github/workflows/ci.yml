@@ -23,6 +23,12 @@ jobs:
   test:
     name: Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Every ``run:`` step executes inside the ``flare`` checkout subdir so
+    # the ``json = { path = "../json" }`` sibling dep (see the checkout +
+    # setup step below) resolves to ``$GITHUB_WORKSPACE/json``.
+    defaults:
+      run:
+        working-directory: flare
     strategy:
       fail-fast: false
       matrix:
@@ -60,11 +66,31 @@ jobs:
         os: [ubuntu-latest, macos-15]
 
     steps:
+      # flare's ``pixi.toml`` declares the millfolio ``json`` sibling lib as
+      # a path dependency (``json = { path = "../json" }``) in the base
+      # ``[dependencies]``, so even the lean ``default`` environment can
+      # only solve when ``json`` is checked out alongside flare.
+      # ``actions/checkout``'s ``path`` must stay inside
+      # ``$GITHUB_WORKSPACE``, so — mirroring the sibling layout in
+      # ``millfolio/vault``'s ``test.yml`` — flare goes into ``flare/`` and
+      # ``json`` into ``json/`` (both under the workspace root). ``../json``
+      # then resolves from ``$GITHUB_WORKSPACE/flare`` to
+      # ``$GITHUB_WORKSPACE/json``. ``millfolio/json`` is public, so no
+      # token is needed.
       - uses: actions/checkout@v4
+        with:
+          path: flare
+
+      - uses: actions/checkout@v4
+        with:
+          repository: millfolio/json
+          ref: main
+          path: json
 
       - name: Setup Pixi
         uses: prefix-dev/setup-pixi@v0.9.4
         with:
+          manifest-path: flare/pixi.toml
           # Only solve + install the lean runtime env. Without this,
           # setup-pixi installs every environment declared in pixi.toml
           # (dev, fuzz, bench), which would pull in mojodoc, mozz, go,
