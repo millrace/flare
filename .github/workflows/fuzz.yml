@@ -13,6 +13,12 @@ jobs:
   fuzz:
     name: Fuzz (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Every ``run:`` step executes inside the ``flare`` checkout subdir so
+    # the ``json = { path = "../json" }`` sibling dep (see the checkout +
+    # setup step below) resolves to ``$GITHUB_WORKSPACE/json``.
+    defaults:
+      run:
+        working-directory: flare
     strategy:
       fail-fast: false
       matrix:
@@ -35,11 +41,31 @@ jobs:
         os: [ubuntu-22.04, macos-14]
 
     steps:
+      # flare's ``pixi.toml`` declares the millfolio ``json`` sibling lib as
+      # a path dependency (``json = { path = "../json" }``), which the
+      # ``fuzz`` environment (``features = ["dev", "fuzz"]``) inherits from
+      # the base ``[dependencies]``. So the fuzz env can only solve when
+      # ``json`` is checked out alongside flare. ``actions/checkout``'s
+      # ``path`` must stay inside ``$GITHUB_WORKSPACE``, so — mirroring the
+      # sibling layout in ``millfolio/vault``'s ``test.yml`` — flare goes
+      # into ``flare/`` and ``json`` into ``json/`` (both under the
+      # workspace root). ``../json`` then resolves from
+      # ``$GITHUB_WORKSPACE/flare`` to ``$GITHUB_WORKSPACE/json``.
+      # ``millfolio/json`` is a public repo, so no token is needed.
       - uses: actions/checkout@v4
+        with:
+          path: flare
+
+      - uses: actions/checkout@v4
+        with:
+          repository: millfolio/json
+          ref: main
+          path: json
 
       - name: Setup Pixi
         uses: prefix-dev/setup-pixi@v0.9.4
         with:
+          manifest-path: flare/pixi.toml
           environments: fuzz
           cache: false
           post-cleanup: false
@@ -79,5 +105,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fuzz-crashes-${{ matrix.os }}-${{ github.run_id }}
-          path: .mozz_crashes/
+          path: flare/.mozz_crashes/
           if-no-files-found: ignore
