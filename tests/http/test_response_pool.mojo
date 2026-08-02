@@ -36,13 +36,13 @@ def test_reset_preserves_body_capacity_for_keepalive_reuse() raises:
     """
     var r = Response(status=200)
     r.body.reserve(8192)
-    var cap_before = r.body.capacity
+    var cap_before = r.body.capacity()
     assert_true(cap_before >= 8192)
     for i in range(100):
         r.body.append(UInt8(i % 256))
     r.reset()
     assert_equal(len(r.body), 0)
-    assert_true(r.body.capacity >= 8192)
+    assert_true(r.body.capacity() >= 8192)
 
 
 def test_reset_preserves_header_capacity_for_keepalive_reuse() raises:
@@ -51,12 +51,12 @@ def test_reset_preserves_header_capacity_for_keepalive_reuse() raises:
     r.headers.set(String("X-One"), String("1"))
     r.headers.set(String("X-Two"), String("2"))
     r.headers.set(String("X-Three"), String("3"))
-    var keys_cap = r.headers._keys.capacity
-    var vals_cap = r.headers._values.capacity
+    var keys_cap = r.headers._keys.capacity()
+    var vals_cap = r.headers._values.capacity()
     r.reset()
     assert_equal(r.headers.len(), 0)
-    assert_true(r.headers._keys.capacity >= keys_cap)
-    assert_true(r.headers._values.capacity >= vals_cap)
+    assert_true(r.headers._keys.capacity() >= keys_cap)
+    assert_true(r.headers._values.capacity() >= vals_cap)
 
 
 def test_pool_default_capacity_is_eight() raises:
@@ -100,7 +100,7 @@ def test_pool_release_then_acquire_recycles() raises:
     var p = ResponsePool()
     var r = Response(status=200)
     r.body.reserve(4096)
-    var marker_cap = r.body.capacity
+    var marker_cap = r.body.capacity()
     r.body.append(UInt8(7))
     p.release(r^)
     assert_equal(p.size(), 1)
@@ -109,7 +109,7 @@ def test_pool_release_then_acquire_recycles() raises:
     assert_equal(r2.status, 302)
     assert_equal(r2.reason, String("Found"))
     assert_equal(len(r2.body), 0)
-    assert_true(r2.body.capacity >= marker_cap)
+    assert_true(r2.body.capacity() >= marker_cap)
     assert_equal(p.size(), 0)
 
 

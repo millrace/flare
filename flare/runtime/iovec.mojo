@@ -138,16 +138,16 @@ struct IoVecBuf(Movable):
         # Zero-init so an unset cell behaves as { NULL, 0 } —
         # writev(2) treats { ptr, 0 } as "skip this cell".
         for i in range(bytes):
-            (raw + i).init_pointee_copy(UInt8(0))
+            (raw.unsafe_offset(i)).unsafe_write(UInt8(0))
         self._buf = UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=Int(raw)
         )
         self._n = n
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free the underlying buffer."""
         if Int(self._buf) != 0:
-            self._buf.free()
+            self._buf.unsafe_free()
 
     @staticmethod
     @always_inline
@@ -205,16 +205,16 @@ struct IoVecBuf(Movable):
         # Write the 8-byte iov_base pointer as a little-endian
         # Int. Mojo's UnsafePointer assignment + init_pointee_copy
         # writes one byte at a time, so we manually pack.
-        var p = self._buf + off
+        var p = self._buf.unsafe_offset(off)
         var ptr_u64 = UInt64(ptr)
         for k in range(8):
-            (p + k).init_pointee_copy(
+            (p.unsafe_offset(k)).unsafe_write(
                 UInt8(Int((ptr_u64 >> UInt64(k * 8)) & UInt64(0xFF)))
             )
         var len_u64 = UInt64(n)
-        var q = self._buf + off + 8
+        var q = self._buf.unsafe_offset(off).unsafe_offset(8)
         for k in range(8):
-            (q + k).init_pointee_copy(
+            (q.unsafe_offset(k)).unsafe_write(
                 UInt8(Int((len_u64 >> UInt64(k * 8)) & UInt64(0xFF)))
             )
 
@@ -231,10 +231,10 @@ struct IoVecBuf(Movable):
             i,
         )
         var off = i * _IOVEC_BYTES
-        var p = self._buf + off
+        var p = self._buf.unsafe_offset(off)
         var v = UInt64(0)
         for k in range(8):
-            v = v | (UInt64(Int(p[k])) << UInt64(k * 8))
+            v = v | (UInt64(Int(p[unsafe_offset=k])) << UInt64(k * 8))
         return Int(v)
 
     def cell_len(self, i: Int) -> Int:
@@ -248,10 +248,10 @@ struct IoVecBuf(Movable):
             i,
         )
         var off = i * _IOVEC_BYTES
-        var q = self._buf + off + 8
+        var q = self._buf.unsafe_offset(off).unsafe_offset(8)
         var v = UInt64(0)
         for k in range(8):
-            v = v | (UInt64(Int(q[k])) << UInt64(k * 8))
+            v = v | (UInt64(Int(q[unsafe_offset=k])) << UInt64(k * 8))
         return Int(v)
 
 
@@ -336,7 +336,9 @@ def writev_buf_all(mut iov: IoVecBuf, fd: Int, total_bytes: Int) raises:
     var n = iov.count()
     var first = 0
     while remaining > 0:
-        var sent = writev_buf(fd, iov.base() + first * _IOVEC_BYTES, n - first)
+        var sent = writev_buf(
+            fd, iov.base().unsafe_offset(first * _IOVEC_BYTES), n - first
+        )
         if sent <= 0:
             return
         remaining -= sent

@@ -28,7 +28,7 @@ References:
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections import Span
 
 from .varint import decode_varint
 

@@ -65,7 +65,7 @@ struct _CountingHandler(Copyable, Defaultable, Handler, Movable):
 
     def __init__(out self):
         var p = alloc[Int](1)
-        p[0] = 0
+        p[unsafe_offset=0] = 0
         self.counter_addr = Int(p)
         self.status = 200
         self.cache_control = String("max-age=60")
@@ -77,7 +77,7 @@ struct _CountingHandler(Copyable, Defaultable, Handler, Movable):
         var p = UnsafePointer[Int, MutUntrackedOrigin](
             unsafe_from_address=self.counter_addr
         )
-        p[0] = p[0] + 1
+        p[unsafe_offset=0] = p[unsafe_offset=0] + 1
         var resp = Response(self.status)
         var body_bytes = List[UInt8]()
         for b in self.body.as_bytes():
@@ -95,7 +95,7 @@ struct _CountingHandler(Copyable, Defaultable, Handler, Movable):
         var p = UnsafePointer[Int, MutUntrackedOrigin](
             unsafe_from_address=self.counter_addr
         )
-        return p[0]
+        return p[unsafe_offset=0]
 
 
 def _req(method: String, url: String) -> Request:

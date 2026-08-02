@@ -7,7 +7,7 @@ under aioquic's ``pull_uint_var`` and confirming byte parity.
 """
 
 from std.testing import assert_equal, assert_true, assert_false
-from std.memory import Span
+from std.collections import Span
 
 from flare.quic import (
     VARINT_MAX,

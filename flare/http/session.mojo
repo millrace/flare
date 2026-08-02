@@ -92,7 +92,7 @@ def signed_cookie_decode(
     var src = cookie.unsafe_ptr()
     var n = cookie.byte_length()
     for i in range(n):
-        if src[i] == 46:  # '.'
+        if src[unsafe_offset=i] == 46:  # '.'
             dot = i
             break
     if dot < 0:

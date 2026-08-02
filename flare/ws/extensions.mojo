@@ -66,7 +66,7 @@ struct ExtensionOffer(Copyable, Defaultable, Movable):
         self.name = name
         self.params = List[ExtensionParameter]()
 
-    def get(read self, name: String) raises -> Optional[String]:
+    def get(imm self, name: String) raises -> Optional[String]:
         """Return the value for parameter ``name`` (case-folded)
         if present; ``None`` otherwise. Flag-shaped parameters
         return ``Some("")``."""
@@ -75,7 +75,7 @@ struct ExtensionOffer(Copyable, Defaultable, Movable):
                 return Optional[String](self.params[i].value.copy())
         return None
 
-    def has(read self, name: String) raises -> Bool:
+    def has(imm self, name: String) raises -> Bool:
         """Return ``True`` if parameter ``name`` is present."""
         return Bool(self.get(name))
 
@@ -153,11 +153,12 @@ def _parse_one_offer(piece: String) raises -> ExtensionOffer:
                 var first = pvalue.as_bytes()[0]
                 var last = pvalue.as_bytes()[pvalue.byte_length() - 1]
                 if first == UInt8(0x22) and last == UInt8(0x22):
-                    pvalue = String(
+                    var unquoted = String(
                         unsafe_from_utf8=pvalue.as_bytes()[
                             1 : pvalue.byte_length() - 1
                         ]
                     )
+                    pvalue = unquoted^
         offer.params.append(ExtensionParameter(pname, pvalue))
     return offer^
 

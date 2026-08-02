@@ -83,7 +83,7 @@ def _json_escape(s: String) -> String:
     var hex_chars = String("0123456789abcdef")
     var hp = hex_chars.unsafe_ptr()
     for i in range(n):
-        var b = Int(p[i])
+        var b = Int(p[unsafe_offset=i])
         if b == ord('"'):
             out += '\\"'
         elif b == ord("\\"):
@@ -100,8 +100,8 @@ def _json_escape(s: String) -> String:
             out += "\\r"
         elif b < 0x20:
             out += "\\u00"
-            out += chr(Int(hp[(b >> 4) & 0xF]))
-            out += chr(Int(hp[b & 0xF]))
+            out += chr(Int(hp[unsafe_offset=(b >> 4) & 0xF]))
+            out += chr(Int(hp[unsafe_offset=b & 0xF]))
         else:
             out += chr(b)
     return out^

@@ -173,7 +173,7 @@ def parse_proxy_v1(
     var prefix = _V1_PREFIX
     var pp = prefix.unsafe_ptr()
     for i in range(6):
-        if buf[i] != pp[i]:
+        if buf[i] != pp[unsafe_offset=i]:
             raise ProxyParseError(
                 version=1, position=i, what=String("missing 'PROXY ' prefix")
             )
@@ -292,7 +292,7 @@ def _parse_addr_port(
     var pn: Int = 0
     var pp = port.unsafe_ptr()
     for i in range(port.byte_length()):
-        var c = Int(pp[i])
+        var c = Int(pp[unsafe_offset=i])
         if c < ord("0") or c > ord("9"):
             raise ProxyParseError(
                 version=1,
@@ -304,7 +304,7 @@ def _parse_addr_port(
             raise ProxyParseError(
                 version=1, position=-1, what=String("port > 65535")
             )
-    if port.byte_length() > 1 and Int(pp[0]) == ord("0"):
+    if port.byte_length() > 1 and Int(pp[unsafe_offset=0]) == ord("0"):
         raise ProxyParseError(
             version=1,
             position=-1,
@@ -527,14 +527,14 @@ def _v6_to_ipaddr(
             var nibble0 = word & 0xF
             var started = False
             if nibble3 != 0:
-                s += chr(Int(hp[nibble3]))
+                s += chr(Int(hp[unsafe_offset=nibble3]))
                 started = True
             if started or nibble2 != 0:
-                s += chr(Int(hp[nibble2]))
+                s += chr(Int(hp[unsafe_offset=nibble2]))
                 started = True
             if started or nibble1 != 0:
-                s += chr(Int(hp[nibble1]))
-            s += chr(Int(hp[nibble0]))
+                s += chr(Int(hp[unsafe_offset=nibble1]))
+            s += chr(Int(hp[unsafe_offset=nibble0]))
     try:
         return IpAddr.parse(s)
     except _e:
@@ -576,7 +576,7 @@ def parse_proxy_protocol(
     var pp = prefix.unsafe_ptr()
     var matches_v1 = True
     for i in range(6):
-        if buf[i] != pp[i]:
+        if buf[i] != pp[unsafe_offset=i]:
             matches_v1 = False
             break
     if matches_v1:

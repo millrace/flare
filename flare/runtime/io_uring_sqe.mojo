@@ -460,7 +460,7 @@ def _store_u8(
         "_store_u8 offset out of SQE range; got ",
         offset,
     )
-    (buf + offset).init_pointee_copy(value)
+    (buf.unsafe_offset(offset)).unsafe_write(value)
 
 
 @always_inline
@@ -477,8 +477,10 @@ def _store_u16_le(
         offset,
     )
     var v = Int(value)
-    (buf + offset).init_pointee_copy(UInt8(v & 0xFF))
-    (buf + offset + 1).init_pointee_copy(UInt8((v >> 8) & 0xFF))
+    (buf.unsafe_offset(offset)).unsafe_write(UInt8(v & 0xFF))
+    (buf.unsafe_offset(offset).unsafe_offset(1)).unsafe_write(
+        UInt8((v >> 8) & 0xFF)
+    )
 
 
 @always_inline
@@ -495,10 +497,16 @@ def _store_u32_le(
         offset,
     )
     var v = Int(value)
-    (buf + offset).init_pointee_copy(UInt8(v & 0xFF))
-    (buf + offset + 1).init_pointee_copy(UInt8((v >> 8) & 0xFF))
-    (buf + offset + 2).init_pointee_copy(UInt8((v >> 16) & 0xFF))
-    (buf + offset + 3).init_pointee_copy(UInt8((v >> 24) & 0xFF))
+    (buf.unsafe_offset(offset)).unsafe_write(UInt8(v & 0xFF))
+    (buf.unsafe_offset(offset).unsafe_offset(1)).unsafe_write(
+        UInt8((v >> 8) & 0xFF)
+    )
+    (buf.unsafe_offset(offset).unsafe_offset(2)).unsafe_write(
+        UInt8((v >> 16) & 0xFF)
+    )
+    (buf.unsafe_offset(offset).unsafe_offset(3)).unsafe_write(
+        UInt8((v >> 24) & 0xFF)
+    )
 
 
 @always_inline
@@ -516,7 +524,9 @@ def _store_u64_le(
     )
     var v = Int(value)
     for k in range(8):
-        (buf + offset + k).init_pointee_copy(UInt8((v >> (k * 8)) & 0xFF))
+        (buf.unsafe_offset(offset).unsafe_offset(k)).unsafe_write(
+            UInt8((v >> (k * 8)) & 0xFF)
+        )
 
 
 @always_inline
@@ -532,7 +542,7 @@ def _load_u32_le(buf: UnsafePointer[UInt8, _], offset: Int) -> UInt32:
     )
     var v: UInt32 = 0
     for k in range(4):
-        v = v | (UInt32(Int(buf[offset + k])) << UInt32(k * 8))
+        v = v | (UInt32(Int(buf[unsafe_offset=offset + k])) << UInt32(k * 8))
     return v
 
 
@@ -547,8 +557,8 @@ def _load_u16_le(buf: UnsafePointer[UInt8, _], offset: Int) -> UInt16:
         "_load_u16_le offset out of range; got ",
         offset,
     )
-    var lo = UInt16(Int(buf[offset]))
-    var hi = UInt16(Int(buf[offset + 1]))
+    var lo = UInt16(Int(buf[unsafe_offset=offset]))
+    var hi = UInt16(Int(buf[unsafe_offset=offset + 1]))
     return lo | (hi << UInt16(8))
 
 
@@ -565,7 +575,7 @@ def _load_u64_le(buf: UnsafePointer[UInt8, _], offset: Int) -> UInt64:
     )
     var v: UInt64 = 0
     for k in range(8):
-        v = v | (UInt64(Int(buf[offset + k])) << UInt64(k * 8))
+        v = v | (UInt64(Int(buf[unsafe_offset=offset + k])) << UInt64(k * 8))
     return v
 
 
@@ -598,15 +608,15 @@ struct IoUringSqe(Movable):
         """Allocate a 64-byte SQE buffer, zero-initialised."""
         var raw = alloc[UInt8](IO_URING_SQE_BYTES)
         for i in range(IO_URING_SQE_BYTES):
-            (raw + i).init_pointee_copy(UInt8(0))
+            (raw.unsafe_offset(i)).unsafe_write(UInt8(0))
         self._buf = UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=Int(raw)
         )
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free the 64-byte buffer."""
         if Int(self._buf) != 0:
-            self._buf.free()
+            self._buf.unsafe_free()
 
     @always_inline
     def as_bytes(self) -> UnsafePointer[UInt8, MutUntrackedOrigin]:
@@ -621,12 +631,12 @@ struct IoUringSqe(Movable):
     @always_inline
     def opcode(self) -> Int:
         """Read the opcode byte."""
-        return Int(self._buf[_SQE_OFF_OPCODE])
+        return Int(self._buf[unsafe_offset=_SQE_OFF_OPCODE])
 
     @always_inline
     def flags(self) -> Int:
         """Read the SQE-level flags byte."""
-        return Int(self._buf[_SQE_OFF_FLAGS])
+        return Int(self._buf[unsafe_offset=_SQE_OFF_FLAGS])
 
     @always_inline
     def fd(self) -> Int:
@@ -707,7 +717,7 @@ def encode_sqe_zero(buf: UnsafePointer[UInt8, MutUntrackedOrigin]) -> None:
         Int(buf) != 0, "encode_sqe_zero: buf must be non-NULL"
     )
     for i in range(IO_URING_SQE_BYTES):
-        (buf + i).init_pointee_copy(UInt8(0))
+        (buf.unsafe_offset(i)).unsafe_write(UInt8(0))
 
 
 @always_inline

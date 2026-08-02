@@ -127,7 +127,7 @@ def recv_raw(mut stream: TcpStream, n: Int) raises -> List[UInt8]:
     buf.resize(n, 0)
     var total = 0
     while total < n:
-        var got = stream.read(buf.unsafe_ptr() + total, n - total)
+        var got = stream.read(buf.unsafe_ptr().unsafe_offset(total), n - total)
         if got == 0:
             break
         total += got

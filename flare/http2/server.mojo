@@ -422,7 +422,7 @@ struct H2Connection(Defaultable, Movable):
             var k = req.headers._keys[j]
             var lk = String("")
             for c in range(k.byte_length()):
-                var ch = Int(k.unsafe_ptr()[c])
+                var ch = Int(k.unsafe_ptr()[unsafe_offset=c])
                 if ch >= 65 and ch <= 90:
                     lk += chr(ch + 32)
                 else:
@@ -464,7 +464,7 @@ struct H2Connection(Defaultable, Movable):
             var preface = String(H2_PREFACE)
             var pp = preface.unsafe_ptr()
             for i in range(24):
-                if self.inbox[i] != pp[i]:
+                if self.inbox[i] != pp[unsafe_offset=i]:
                     raise Error("h2: bad preface")
             # Drop the preface from the inbox.
             var rest = List[UInt8](capacity=len(self.inbox) - 24)
@@ -590,7 +590,7 @@ struct H2Connection(Defaultable, Movable):
             var lk = String(capacity=k.byte_length() + 1)
             var kp = k.unsafe_ptr()
             for j in range(k.byte_length()):
-                var c = Int(kp[j])
+                var c = Int(kp[unsafe_offset=j])
                 if c >= 65 and c <= 90:
                     lk += chr(c + 32)
                 else:

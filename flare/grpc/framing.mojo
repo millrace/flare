@@ -34,7 +34,7 @@ References:
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections import Span
 
 
 comptime GRPC_COMPRESSION_NONE: UInt8 = 0x00

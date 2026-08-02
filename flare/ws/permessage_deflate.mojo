@@ -166,7 +166,7 @@ struct PermessageDeflateConfig(Copyable, Defaultable, Movable):
 
 
 def _do_compress_raw_deflate(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     data: Span[UInt8, _],
     level: c_int,
 ) raises -> List[UInt8]:
@@ -185,9 +185,7 @@ def _do_compress_raw_deflate(
         level: zlib compression level passed through to
             ``deflateInit2``.
     """
-    var fn_compress = lib.get_function[
-        def(Int, c_int, Int, c_int, c_int) thin abi("C") -> c_int
-    ]("flare_compress_raw_deflate")
+    var fn_compress = lib.get_function[c_int]("flare_compress_raw_deflate")
 
     # zlib's worst-case bound: srclen + (srclen >> 12) + (srclen >> 14)
     # + (srclen >> 25) + 13. We add a constant slack for the empty
@@ -267,7 +265,7 @@ def compress_message(
 
 
 def _do_decompress_raw_inflate_capped(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     data: Span[UInt8, _],
     max_out: Int,
 ) raises -> List[UInt8]:
@@ -285,9 +283,7 @@ def _do_decompress_raw_inflate_capped(
             already re-appended).
         max_out: The decompressed-size cap.
     """
-    var fn_decomp = lib.get_function[
-        def(Int, c_int, Int, c_int, c_int) thin abi("C") -> c_int
-    ]("flare_decompress")
+    var fn_decomp = lib.get_function[c_int]("flare_decompress")
     var window_bits = c_int(-15)
     var cap = max(len(data) * 4, 4096)
     if cap > max_out:
@@ -370,18 +366,16 @@ def decompress_message(
 
 
 def _do_pmd_compressor_new(
-    read lib: OwnedDLHandle, level: c_int, window_bits: c_int
+    imm lib: OwnedDLHandle, level: c_int, window_bits: c_int
 ) raises -> Int:
     """Allocate a persistent deflate z_stream via FFI. Returns the
     opaque handle (an ``intptr_t``-encoded ``z_stream*``)."""
-    var fn_new = lib.get_function[def(c_int, c_int) thin abi("C") -> Int](
-        "flare_pmd_compressor_new"
-    )
+    var fn_new = lib.get_function[Int]("flare_pmd_compressor_new")
     return fn_new(level, window_bits)
 
 
 def _do_pmd_compress_chunk(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     handle: Int,
     in_buf: Int,
     in_len: c_int,
@@ -389,52 +383,40 @@ def _do_pmd_compress_chunk(
     out_cap: c_int,
 ) raises -> c_int:
     """Compress one chunk through a persistent deflate context."""
-    var fn_chunk = lib.get_function[
-        def(Int, Int, c_int, Int, c_int) thin abi("C") -> c_int
-    ]("flare_pmd_compress_chunk")
+    var fn_chunk = lib.get_function[c_int]("flare_pmd_compress_chunk")
     return fn_chunk(handle, in_buf, in_len, out_buf, out_cap)
 
 
-def _do_pmd_compressor_free(
-    read lib: OwnedDLHandle, handle: Int
-) raises -> None:
+def _do_pmd_compressor_free(imm lib: OwnedDLHandle, handle: Int) raises -> None:
     """Release a persistent deflate context."""
-    var fn_free = lib.get_function[def(Int) thin abi("C") -> None](
-        "flare_pmd_compressor_free"
-    )
+    var fn_free = lib.get_function[NoneType]("flare_pmd_compressor_free")
     fn_free(handle)
 
 
 def _do_pmd_decompressor_new(
-    read lib: OwnedDLHandle, window_bits: c_int
+    imm lib: OwnedDLHandle, window_bits: c_int
 ) raises -> Int:
     """Allocate a persistent inflate z_stream via FFI."""
-    var fn_new = lib.get_function[def(c_int) thin abi("C") -> Int](
-        "flare_pmd_decompressor_new"
-    )
+    var fn_new = lib.get_function[Int]("flare_pmd_decompressor_new")
     return fn_new(window_bits)
 
 
 def _do_pmd_decompress_chunk(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     handle: Int,
     in_buf: Int,
     in_len: c_int,
     out_buf: Int,
     out_cap: c_int,
 ) raises -> c_int:
-    var fn_chunk = lib.get_function[
-        def(Int, Int, c_int, Int, c_int) thin abi("C") -> c_int
-    ]("flare_pmd_decompress_chunk")
+    var fn_chunk = lib.get_function[c_int]("flare_pmd_decompress_chunk")
     return fn_chunk(handle, in_buf, in_len, out_buf, out_cap)
 
 
 def _do_pmd_decompressor_free(
-    read lib: OwnedDLHandle, handle: Int
+    imm lib: OwnedDLHandle, handle: Int
 ) raises -> None:
-    var fn_free = lib.get_function[def(Int) thin abi("C") -> None](
-        "flare_pmd_decompressor_free"
-    )
+    var fn_free = lib.get_function[NoneType]("flare_pmd_decompressor_free")
     fn_free(handle)
 
 
@@ -550,7 +532,7 @@ struct PermessageDeflateContext(Movable):
         self._level = take._level
         self._window_bits = take._window_bits
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Release both z_streams through the FFI; safe to call
         on a moved-from instance (handles are zero)."""
         if self._comp_handle == 0 and self._decomp_handle == 0:

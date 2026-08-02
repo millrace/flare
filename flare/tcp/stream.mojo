@@ -71,20 +71,18 @@ from ..net._libc import (
 
 
 def _do_flare_connect_timeout(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     fd: c_int,
     sa_addr: Int,
     sa_len: c_uint,
     timeout_ms: c_int,
-) -> c_int:
+) raises -> c_int:
     """Invoke ``flare_connect_timeout`` with ``lib`` borrowed across both
     ``get_function`` and the call. See the ASAP-destruction discussion in
     ``flare/tls/stream.mojo`` and ``flare/http/encoding.mojo`` for why this
     indirection is required.
     """
-    var fn_ct = lib.get_function[
-        def(c_int, Int, c_uint, c_int) thin abi("C") -> c_int
-    ]("flare_connect_timeout")
+    var fn_ct = lib.get_function[c_int]("flare_connect_timeout")
     return fn_ct(fd, sa_addr, sa_len, timeout_ms)
 
 
@@ -135,7 +133,7 @@ struct TcpStream(Movable):
         self._socket = socket^
         self._peer = peer
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._socket.close()
 
     # ── Factory ───────────────────────────────────────────────────────────────
@@ -167,7 +165,7 @@ struct TcpStream(Movable):
         var sock = RawSocket(family, SOCK_STREAM)
         var sa = _build_sockaddr_in(addr)
         var rc = _connect(sock.fd, sa[0], sa[1])
-        sa[0].free()
+        sa[0].unsafe_free()
         if rc < 0:
             var e = get_errno()
             var s = String(addr)
@@ -229,7 +227,7 @@ struct TcpStream(Movable):
             var rc = _do_flare_connect_timeout(
                 lib, sock.fd, Int(sa[0]), sa[1], c_int(timeout_ms)
             )
-            sa[0].free()
+            sa[0].unsafe_free()
 
             if rc == c_int(-2):
                 raise ConnectionTimeout(String(addr), timeout_ms)
@@ -257,7 +255,7 @@ struct TcpStream(Movable):
             # 1. Save current socket flags and enable non-blocking mode.
             var flags = _fcntl2(sock.fd, F_GETFL, c_int(0))
             if flags < c_int(0):
-                sa[0].free()
+                sa[0].unsafe_free()
                 var e = get_errno()
                 raise NetworkError(
                     _strerror(e.value) + " (fcntl F_GETFL)", Int(e.value)
@@ -269,7 +267,7 @@ struct TcpStream(Movable):
             var connect_errno = (
                 get_errno()
             )  # capture before free() touches errno
-            sa[0].free()
+            sa[0].unsafe_free()
 
             if rc == c_int(0):
                 # Immediate success (common on loopback).
@@ -289,9 +287,11 @@ struct TcpStream(Movable):
                 # 3. EINPROGRESS: wait for the socket to become writable.
                 var pfd = stack_allocation[Int(POLLFD_SIZE), UInt8]()
                 for i in range(Int(POLLFD_SIZE)):
-                    (pfd + i).init_pointee_copy(0)
-                pfd.bitcast[c_int]().init_pointee_copy(sock.fd)
-                (pfd + 4).bitcast[Int16]().init_pointee_copy(Int16(POLLOUT))
+                    (pfd.unsafe_offset(i)).unsafe_write(0)
+                pfd.unsafe_bitcast[c_int]().unsafe_write(sock.fd)
+                (pfd.unsafe_offset(4)).unsafe_bitcast[Int16]().unsafe_write(
+                    Int16(POLLOUT)
+                )
 
                 var nready = _poll(pfd, c_uint(1), c_int(timeout_ms))
                 if nready == c_int(0):
@@ -306,18 +306,18 @@ struct TcpStream(Movable):
 
                 # 4. Check SO_ERROR for deferred connection errors.
                 var so_err = stack_allocation[1, c_int]()
-                so_err.init_pointee_copy(c_int(0))
+                so_err.unsafe_write(c_int(0))
                 var so_len = stack_allocation[1, c_uint]()
-                so_len.init_pointee_copy(c_uint(4))
+                so_len.unsafe_write(c_uint(4))
                 _ = _getsockopt(
                     sock.fd,
                     SOL_SOCKET,
                     SO_ERROR,
-                    so_err.bitcast[UInt8](),
+                    so_err.unsafe_bitcast[UInt8](),
                     so_len,
                 )
                 _ = _fcntl2(sock.fd, F_SETFL, flags)
-                var err_val = Int(so_err.load())
+                var err_val = Int(so_err.unsafe_load())
                 if err_val != 0:
                     if err_val == Int(ErrNo.ECONNREFUSED.value):
                         raise ConnectionRefused(s, err_val)
@@ -462,7 +462,7 @@ struct TcpStream(Movable):
         """
         var received = 0
         while received < size:
-            var n = self.read(buf + received, size - received)
+            var n = self.read(buf.unsafe_offset(received), size - received)
             if n == 0:
                 raise NetworkError(
                     "read_exact: EOF after "
@@ -536,7 +536,9 @@ struct TcpStream(Movable):
         var ptr = data.unsafe_ptr()
         var sent = 0
         while sent < total:
-            var chunk = Span[UInt8, _](ptr=ptr + sent, length=total - sent)
+            var chunk = Span[UInt8, _](
+                unsafe_ptr=ptr.unsafe_offset(sent), length=total - sent
+            )
             var n = self.write(chunk)
             sent += n
 

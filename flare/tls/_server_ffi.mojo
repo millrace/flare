@@ -69,82 +69,68 @@ def _c_str(s: String) -> Int:
 
 
 def _do_ssl_ctx_new_server(
-    read lib: OwnedDLHandle, cert_path: String, key_path: String
+    imm lib: OwnedDLHandle, cert_path: String, key_path: String
 ) raises -> Int:
-    var f = lib.get_function[def(Int, Int) thin abi("C") -> Int](
-        "flare_ssl_ctx_new_server"
-    )
+    var f = lib.get_function[Int]("flare_ssl_ctx_new_server")
     var addr = f(_c_str(cert_path), _c_str(key_path))
     if addr == 0:
         raise Error("flare_ssl_ctx_new_server failed (see TLS error log)")
     return addr
 
 
-def _do_ssl_ctx_free(read lib: OwnedDLHandle, addr: Int):
-    var f = lib.get_function[def(Int) thin abi("C") -> None](
-        "flare_ssl_ctx_free"
-    )
+def _do_ssl_ctx_free(imm lib: OwnedDLHandle, addr: Int) raises:
+    var f = lib.get_function[NoneType]("flare_ssl_ctx_free")
     f(addr)
 
 
 def _do_ssl_ctx_reload(
-    read lib: OwnedDLHandle, addr: Int, cert_path: String, key_path: String
+    imm lib: OwnedDLHandle, addr: Int, cert_path: String, key_path: String
 ) raises:
-    var f = lib.get_function[def(Int, Int, Int) thin abi("C") -> c_int](
-        "flare_ssl_ctx_reload"
-    )
+    var f = lib.get_function[c_int]("flare_ssl_ctx_reload")
     if Int(f(addr, _c_str(cert_path), _c_str(key_path))) != 0:
         raise Error("flare_ssl_ctx_reload failed")
 
 
 def _do_ssl_ctx_set_alpn(
-    read lib: OwnedDLHandle, addr: Int, protos: List[UInt8]
+    imm lib: OwnedDLHandle, addr: Int, protos: List[UInt8]
 ) raises:
-    var f = lib.get_function[def(Int, Int, c_int) thin abi("C") -> c_int](
-        "flare_ssl_ctx_set_alpn_server"
-    )
+    var f = lib.get_function[c_int]("flare_ssl_ctx_set_alpn_server")
     if Int(f(addr, Int(protos.unsafe_ptr()), c_int(len(protos)))) != 0:
         raise Error("flare_ssl_ctx_set_alpn_server failed")
 
 
 def _do_ssl_ctx_set_verify_client_cert(
-    read lib: OwnedDLHandle, addr: Int, ca_path: String
+    imm lib: OwnedDLHandle, addr: Int, ca_path: String
 ) raises:
-    var f = lib.get_function[def(Int, Int) thin abi("C") -> c_int](
-        "flare_ssl_ctx_set_verify_client_cert"
-    )
+    var f = lib.get_function[c_int]("flare_ssl_ctx_set_verify_client_cert")
     if Int(f(addr, _c_str(ca_path))) != 0:
         raise Error("flare_ssl_ctx_set_verify_client_cert failed")
 
 
 def _do_ssl_ctx_enable_session_tickets(
-    read lib: OwnedDLHandle, addr: Int, lifetime_s: Int
+    imm lib: OwnedDLHandle, addr: Int, lifetime_s: Int
 ) raises:
-    var f = lib.get_function[def(Int, c_int) thin abi("C") -> c_int](
-        "flare_ssl_ctx_enable_session_tickets"
-    )
+    var f = lib.get_function[c_int]("flare_ssl_ctx_enable_session_tickets")
     if Int(f(addr, c_int(lifetime_s))) != 0:
         raise Error("flare_ssl_ctx_enable_session_tickets failed")
 
 
-def _do_ssl_new_accept(read lib: OwnedDLHandle, ctx_addr: Int, fd: Int) -> Int:
-    var f = lib.get_function[def(Int, c_int) thin abi("C") -> Int](
-        "flare_ssl_new_accept"
-    )
+def _do_ssl_new_accept(
+    read lib: OwnedDLHandle, ctx_addr: Int, fd: Int
+) raises -> Int:
+    var f = lib.get_function[Int]("flare_ssl_new_accept")
     return f(ctx_addr, c_int(fd))
 
 
-def _do_ssl_do_handshake(read lib: OwnedDLHandle, ssl_addr: Int) -> Int:
-    var f = lib.get_function[def(Int) thin abi("C") -> c_int](
-        "flare_ssl_do_handshake"
-    )
+def _do_ssl_do_handshake(read lib: OwnedDLHandle, ssl_addr: Int) raises -> Int:
+    var f = lib.get_function[c_int]("flare_ssl_do_handshake")
     return Int(f(ssl_addr))
 
 
-def _do_ssl_get_alpn_selected(read lib: OwnedDLHandle, ssl_addr: Int) -> String:
-    var f = lib.get_function[def(Int, Int, c_int) thin abi("C") -> c_int](
-        "flare_ssl_get_alpn_selected"
-    )
+def _do_ssl_get_alpn_selected(
+    read lib: OwnedDLHandle, ssl_addr: Int
+) raises -> String:
+    var f = lib.get_function[c_int]("flare_ssl_get_alpn_selected")
     var buf = List[UInt8](capacity=64)
     buf.resize(64, UInt8(0))
     var n = Int(f(ssl_addr, Int(buf.unsafe_ptr()), c_int(64)))
@@ -153,10 +139,10 @@ def _do_ssl_get_alpn_selected(read lib: OwnedDLHandle, ssl_addr: Int) -> String:
     return String(unsafe_from_utf8=Span[UInt8, _](buf[:n]))
 
 
-def _do_ssl_get_sni_host(read lib: OwnedDLHandle, ssl_addr: Int) -> String:
-    var f = lib.get_function[def(Int, Int, c_int) thin abi("C") -> c_int](
-        "flare_ssl_get_sni_host"
-    )
+def _do_ssl_get_sni_host(
+    read lib: OwnedDLHandle, ssl_addr: Int
+) raises -> String:
+    var f = lib.get_function[c_int]("flare_ssl_get_sni_host")
     var buf = List[UInt8](capacity=256)
     buf.resize(256, UInt8(0))
     var n = Int(f(ssl_addr, Int(buf.unsafe_ptr()), c_int(256)))
@@ -165,8 +151,8 @@ def _do_ssl_get_sni_host(read lib: OwnedDLHandle, ssl_addr: Int) -> String:
     return String(unsafe_from_utf8=Span[UInt8, _](buf[:n]))
 
 
-def _do_ssl_free(read lib: OwnedDLHandle, ssl_addr: Int):
-    var f = lib.get_function[def(Int) thin abi("C") -> None]("flare_ssl_free")
+def _do_ssl_free(read lib: OwnedDLHandle, ssl_addr: Int) raises:
+    var f = lib.get_function[NoneType]("flare_ssl_free")
     f(ssl_addr)
 
 
@@ -193,9 +179,14 @@ struct ServerCtx(Movable):
         self._lib = lib^
         self._addr = addr
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
+        # _do_ssl_ctx_free raises if the symbol is missing (get_function);
+        # a destructor can't propagate that, so treat it as a no-op.
         if self._addr != 0:
-            _do_ssl_ctx_free(self._lib, self._addr)
+            try:
+                _do_ssl_ctx_free(self._lib, self._addr)
+            except:
+                pass
 
     @staticmethod
     def new(cert_path: String, key_path: String) raises -> ServerCtx:

@@ -92,11 +92,11 @@ def _split_path(path: String) -> List[String]:
         return out^
     var p = path.unsafe_ptr()
     var start = 0
-    if p[0] == _SLASH:
+    if p[unsafe_offset=0] == _SLASH:
         start = 1
     var i = start
     while i < n:
-        if p[i] == _SLASH:
+        if p[unsafe_offset=i] == _SLASH:
             if i > start:
                 out.append(ascii_unchecked_string(path.as_bytes()[start:i]))
             start = i + 1
@@ -118,11 +118,11 @@ def _compile_segments(path: String) raises -> List[_Segment]:
         if sn == 0:
             continue
         var sp = s.unsafe_ptr()
-        if sn == 1 and sp[0] == _STAR:
+        if sn == 1 and sp[unsafe_offset=0] == _STAR:
             if i != len(raw) - 1:
                 raise Error("wildcard '*' must be the last segment in a route")
             segs.append(_Segment(2, "*"))
-        elif sn >= 2 and sp[0] == _COLON:
+        elif sn >= 2 and sp[unsafe_offset=0] == _COLON:
             segs.append(_Segment(1, ascii_unchecked_string(s.as_bytes()[1:sn])))
         else:
             segs.append(_Segment(0, s))
@@ -276,7 +276,7 @@ struct _StructHandlerRegistry(Movable):
         self.serve_thunks = List[def(Int, Request) raises thin -> Response]()
         self.destroy_thunks = List[def(Int) thin -> None]()
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Run every destroy thunk and free the boxed handlers.
 
         Called once -- by the last ``ArcPointer`` drop -- so the
@@ -639,7 +639,7 @@ def _path_only(url: String) -> String:
     var n = url.byte_length()
     var p = url.unsafe_ptr()
     for i in range(n):
-        if p[i] == _QMARK:
+        if p[unsafe_offset=i] == _QMARK:
             return ascii_unchecked_string(url.as_bytes()[0:i])
     return url
 

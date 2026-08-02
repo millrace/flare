@@ -88,7 +88,7 @@ struct UnixStream(Movable):
         self._socket = socket^
         self._peer_path = peer_path
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._socket.close()
 
     # ── Factory ───────────────────────────────────────────────────────────
@@ -104,7 +104,7 @@ struct UnixStream(Movable):
         var sock = RawSocket(AF_UNIX, SOCK_STREAM)
         var sa = stack_allocation[Int(SOCKADDR_UN_SIZE), UInt8]()
         for i in range(Int(SOCKADDR_UN_SIZE)):
-            (sa + i).init_pointee_copy(0)
+            (sa.unsafe_offset(i)).unsafe_write(0)
         var used = fill_sockaddr_un(sa, path)
         var rc = _connect(sock.fd, sa, used)
         if rc < 0:
@@ -159,7 +159,7 @@ struct UnixStream(Movable):
         var remaining = len(data)
         while remaining > 0:
             var got = self.write(p, remaining)
-            p = p + got
+            p = p.unsafe_offset(got)
             remaining -= got
 
     def shutdown_read(self) raises:

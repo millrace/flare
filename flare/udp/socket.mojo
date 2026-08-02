@@ -133,7 +133,7 @@ struct UdpSocket(Movable):
         self._socket = socket^
         self._local = local
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._socket.close()
 
     # ── Factory ───────────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ struct UdpSocket(Movable):
 
         var sa = _build_sockaddr_in(addr)
         var rc = _bind(sock.fd, sa[0], sa[1])
-        sa[0].free()
+        sa[0].unsafe_free()
 
         if rc < 0:
             var e = get_errno()
@@ -248,7 +248,7 @@ struct UdpSocket(Movable):
             sa[0],
             sa[1],
         )
-        sa[0].free()
+        sa[0].unsafe_free()
 
         if sent < 0:
             var e = get_errno()
@@ -286,9 +286,9 @@ struct UdpSocket(Movable):
         """
         var peer_buf = stack_allocation[Int(SOCKADDR_IN_SIZE), UInt8]()
         for i in range(Int(SOCKADDR_IN_SIZE)):
-            (peer_buf + i).init_pointee_copy(0)
+            (peer_buf.unsafe_offset(i)).unsafe_write(0)
         var peer_len = stack_allocation[1, c_uint]()
-        peer_len.init_pointee_copy(SOCKADDR_IN_SIZE)
+        peer_len.unsafe_write(SOCKADDR_IN_SIZE)
 
         var got = _recvfrom(
             self._socket.fd,

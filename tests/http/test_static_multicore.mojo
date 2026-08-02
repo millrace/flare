@@ -77,12 +77,12 @@ def _connect_loopback(port: UInt16) raises -> c_int:
         raise Error("client socket() failed: " + _strerror(get_errno().value))
     var sa = stack_allocation[16, UInt8]()
     for i in range(16):
-        (sa + i).init_pointee_copy(UInt8(0))
+        (sa.unsafe_offset(i)).unsafe_write(UInt8(0))
     var ip = stack_allocation[4, UInt8]()
-    (ip + 0).init_pointee_copy(UInt8(127))
-    (ip + 1).init_pointee_copy(UInt8(0))
-    (ip + 2).init_pointee_copy(UInt8(0))
-    (ip + 3).init_pointee_copy(UInt8(1))
+    (ip.unsafe_offset(0)).unsafe_write(UInt8(127))
+    (ip.unsafe_offset(1)).unsafe_write(UInt8(0))
+    (ip.unsafe_offset(2)).unsafe_write(UInt8(0))
+    (ip.unsafe_offset(3)).unsafe_write(UInt8(1))
     _fill_sockaddr_in(sa, port, ip)
     if _connect(c, sa, c_uint(16)) < c_int(0):
         var msg = _strerror(get_errno().value)
@@ -112,7 +112,7 @@ def _send_request_and_recv_response(
         if Int(rc_recv) <= 0:
             raise Error("recv() returned " + String(Int(rc_recv)))
         for i in range(Int(rc_recv)):
-            got += chr(Int(buf[i]))
+            got += chr(Int(buf[unsafe_offset=i]))
     if body not in got:
         raise Error("response missing body; got prefix: " + got)
 

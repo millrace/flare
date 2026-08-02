@@ -109,21 +109,21 @@ def resolve(host: String) raises -> List[IpAddr]:
     # hints: 48-byte zeroed addrinfo — ai_socktype = SOCK_STREAM(1)
     var hints = stack_allocation[48, UInt8]()
     for i in range(48):
-        (hints + i).init_pointee_copy(0)
-    (hints + _ADDRINFO_AI_SOCKTYPE_OFF).bitcast[Int32]().init_pointee_copy(
-        Int32(1)
-    )
+        (hints.unsafe_offset(i)).unsafe_write(0)
+    (hints.unsafe_offset(_ADDRINFO_AI_SOCKTYPE_OFF)).unsafe_bitcast[
+        Int32
+    ]().unsafe_write(Int32(1))
 
     # result slot: 8-byte buffer that receives the addrinfo* pointer
     var res_slot = stack_allocation[8, UInt8]()
     for i in range(8):
-        (res_slot + i).init_pointee_copy(0)
+        (res_slot.unsafe_offset(i)).unsafe_write(0)
 
     var rc = _getaddrinfo(host, hints, res_slot)
     if rc != 0:
         raise DnsError(host, Int(rc), _gai_strerror(rc))
 
-    var head = Int(res_slot.bitcast[UInt64]().load())
+    var head = Int(res_slot.unsafe_bitcast[UInt64]().unsafe_load())
     var results = List[IpAddr]()
 
     var cur = head
@@ -137,9 +137,15 @@ def resolve(host: String) raises -> List[IpAddr]:
             unsafe_from_address=cur
         )
         var family = Int(
-            (node + ADDRINFO_AI_FAMILY_OFF).bitcast[Int32]().load()
+            (node.unsafe_offset(ADDRINFO_AI_FAMILY_OFF))
+            .unsafe_bitcast[Int32]()
+            .unsafe_load()
         )
-        var sa_ptr = Int((node + ADDRINFO_AI_ADDR_OFF).bitcast[UInt64]().load())
+        var sa_ptr = Int(
+            (node.unsafe_offset(ADDRINFO_AI_ADDR_OFF))
+            .unsafe_bitcast[UInt64]()
+            .unsafe_load()
+        )
 
         if sa_ptr != 0:
             if family == Int(AF_INET):
@@ -155,7 +161,11 @@ def resolve(host: String) raises -> List[IpAddr]:
                 except:
                     pass
 
-        cur = Int((node + ADDRINFO_AI_NEXT_OFF).bitcast[UInt64]().load())
+        cur = Int(
+            (node.unsafe_offset(ADDRINFO_AI_NEXT_OFF))
+            .unsafe_bitcast[UInt64]()
+            .unsafe_load()
+        )
 
     _freeaddrinfo(head)
 
@@ -235,21 +245,23 @@ def _ipv4_from_sockaddr(sa_ptr: Int) -> String:
     )
     var ntop = stack_allocation[64, UInt8]()
     for i in range(64):
-        (ntop + i).init_pointee_copy(0)
+        (ntop.unsafe_offset(i)).unsafe_write(0)
 
     # sockaddr_in: [sin_len/family(2), sin_port(2), sin_addr(4), ...]
     # sin_addr is at byte offset 4 on both macOS and Linux
     _ = external_call["inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]](
         c_int(2),
-        (sa + 4).bitcast[NoneType](),
-        ntop.bitcast[c_char](),
+        (sa.unsafe_offset(4)).unsafe_bitcast[NoneType](),
+        ntop.unsafe_bitcast[c_char](),
         c_uint(64),
     )
-    if ntop[0] == 0:
+    if ntop[unsafe_offset=0] == 0:
         return ""
     return String(
         StringSlice(
-            unsafe_from_utf8=CStringSlice(unsafe_from_ptr=ntop.bitcast[Int8]())
+            unsafe_from_utf8=CStringSlice(
+                unsafe_from_ptr=ntop.unsafe_bitcast[Int8]()
+            )
         )
     )
 
@@ -271,20 +283,22 @@ def _ipv6_from_sockaddr(sa_ptr: Int) -> String:
     )
     var ntop = stack_allocation[64, UInt8]()
     for i in range(64):
-        (ntop + i).init_pointee_copy(0)
+        (ntop.unsafe_offset(i)).unsafe_write(0)
 
     # sockaddr_in6: [family(2), port(2), flowinfo(4), addr(16), ...]
     # sin6_addr starts at byte offset 8
     _ = external_call["inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]](
         AF_INET6_VAL,
-        (sa + 8).bitcast[NoneType](),
-        ntop.bitcast[c_char](),
+        (sa.unsafe_offset(8)).unsafe_bitcast[NoneType](),
+        ntop.unsafe_bitcast[c_char](),
         c_uint(64),
     )
-    if ntop[0] == 0:
+    if ntop[unsafe_offset=0] == 0:
         return ""
     return String(
         StringSlice(
-            unsafe_from_utf8=CStringSlice(unsafe_from_ptr=ntop.bitcast[Int8]())
+            unsafe_from_utf8=CStringSlice(
+                unsafe_from_ptr=ntop.unsafe_bitcast[Int8]()
+            )
         )
     )

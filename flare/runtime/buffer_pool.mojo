@@ -246,7 +246,7 @@ struct BufferPool(Movable):
             self._buckets.append(List[Int]())
         self._class_capacity = 8
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free every retained cell across every bucket."""
         for ci in range(_NUM_SIZE_CLASSES):
             for j in range(len(self._buckets[ci])):
@@ -315,8 +315,8 @@ struct BufferPool(Movable):
         if len(self._buckets[idx]) > 0:
             var addr = self._buckets[idx].pop()
             var ptr = Pool[BufferHandle].get_ptr(addr)
-            var h = ptr.take_pointee()
-            ptr.free()
+            var h = ptr.unsafe_take_pointee()
+            ptr.unsafe_free()
             h.reset()
             return h^
         return BufferHandle.for_class(idx)

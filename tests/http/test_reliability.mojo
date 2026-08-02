@@ -93,7 +93,7 @@ def _read_counter(addr: Int) -> Int:
 
 def _free_counter(addr: Int):
     var p = UnsafePointer[Int, MutUntrackedOrigin](unsafe_from_address=addr)
-    p.free()
+    p.unsafe_free()
 
 
 def test_retry_succeeds_on_first_attempt() raises:
@@ -275,7 +275,7 @@ def test_retry_backoff_sleeps_between_attempts() raises:
     # No assertion on a strict lower bound -- jitter can be 0 --
     # but the upper bound must be sane: 3 attempts * 10 ms cap +
     # generous noise.
-    assert_true(elapsed_ms < UInt(2_000))
+    assert_true(elapsed_ms < 2_000)
     _free_counter(addr)
 
 

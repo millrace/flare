@@ -447,7 +447,7 @@ struct Http2ClientConnection(Defaultable, Movable):
         var preface = String(H2_PREFACE)
         var pp = preface.unsafe_ptr()
         for i in range(24):
-            self.outbox.append(pp[i])
+            self.outbox.append(pp[unsafe_offset=i])
         # Client SETTINGS frame: emit each (id, value) pair that
         # differs from the RFC 9113 / RFC 7541 protocol default.
         # The high-level facade then waits for the server's
@@ -904,7 +904,7 @@ struct Http2ClientConnection(Defaultable, Movable):
                 self.conn.streams[sid] = sl2^
             pos += chunk
 
-    def peer_supports_extended_connect(read self) -> Bool:
+    def peer_supports_extended_connect(imm self) -> Bool:
         """Return ``True`` once the peer has advertised
         ``SETTINGS_ENABLE_CONNECT_PROTOCOL = 1`` (RFC 8441 §3).
 

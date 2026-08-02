@@ -293,7 +293,7 @@ struct H2ConnHandle(Movable):
                     got_int,
                 )
                 for i in range(got_int):
-                    inbound.append(chunk[i])
+                    inbound.append(chunk[unsafe_offset=i])
             elif got == 0:
                 # Peer FIN observed mid-connection. Mark closed
                 # so the reactor unregisters the fd after any
@@ -363,7 +363,7 @@ struct H2ConnHandle(Movable):
 
     # ── Per-stream Cancel propagation ────────────────────────────────────────
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free any per-stream cell heap addresses that outlived
         their dispatch (e.g. because the connection was torn down
         before the handler returned).
@@ -374,8 +374,8 @@ struct H2ConnHandle(Movable):
                 var p = UnsafePointer[Int, MutUntrackedOrigin](
                     unsafe_from_address=addr
                 )
-                p.destroy_pointee()
-                p.free()
+                p.unsafe_deinit_pointee()
+                p.unsafe_free()
 
     def _alloc_stream_cell(mut self, sid: Int) raises -> Int:
         """Allocate a fresh cancel cell for ``sid`` (initialised to
@@ -387,7 +387,7 @@ struct H2ConnHandle(Movable):
         if sid in self.stream_cells:
             return self.stream_cells[sid]
         var p = alloc[Int](1)
-        p.init_pointee_copy(CancelReason.NONE)
+        p.unsafe_write(CancelReason.NONE)
         var addr = Int(p)
         self.stream_cells[sid] = addr
         return addr
@@ -402,8 +402,8 @@ struct H2ConnHandle(Movable):
             var p = UnsafePointer[Int, MutUntrackedOrigin](
                 unsafe_from_address=addr
             )
-            p.destroy_pointee()
-            p.free()
+            p.unsafe_deinit_pointee()
+            p.unsafe_free()
 
     def _flip_all_stream_cells(mut self, reason: Int) raises -> None:
         """Flip every live per-stream cell + the connection-level cell.
@@ -441,7 +441,7 @@ struct H2ConnHandle(Movable):
             )
             p[] = reason
 
-    def _stream_cell_cancelled(read self, sid: Int) raises -> Bool:
+    def _stream_cell_cancelled(imm self, sid: Int) raises -> Bool:
         """Return ``True`` if the cell bound to ``sid`` has been
         flipped to a non-zero reason. False (and stream not
         cancelled) if no cell is allocated for ``sid``.
@@ -495,7 +495,7 @@ struct H2ConnHandle(Movable):
             if got > 0:
                 var got_int = Int(got)
                 for i in range(got_int):
-                    inbound.append(chunk[i])
+                    inbound.append(chunk[unsafe_offset=i])
             elif got == 0:
                 # Peer FIN -- flip every live cell so in-flight
                 # handlers short-circuit cooperatively.
@@ -609,7 +609,7 @@ struct H2ConnHandle(Movable):
         )
         while self.write_pos < len(self.write_buf):
             var remaining = len(self.write_buf) - self.write_pos
-            var ptr = self.write_buf.unsafe_ptr() + self.write_pos
+            var ptr = self.write_buf.unsafe_ptr().unsafe_offset(self.write_pos)
             debug_assert[assert_mode="safe"](
                 remaining > 0 and Int(ptr) != 0,
                 "H2ConnHandle._send: buf must be non-NULL when remaining > 0",
@@ -709,7 +709,7 @@ def _h2_conn_ptr_from_int(
     )
     return UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=addr
-    ).bitcast[H2ConnHandle]()
+    ).unsafe_bitcast[H2ConnHandle]()
 
 
 # ── Protocol-detection (preface peek) ──────────────────────────────────────
@@ -738,7 +738,7 @@ def _h2_preface_byte(i: Int) -> UInt8:
     """Return the i-th byte of the H2 client connection preface
     (``"PRI * HTTP/2.0\\r\\n\\r\\nSM\\r\\n\\r\\n"``)."""
     var s = String("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
-    return s.unsafe_ptr()[i]
+    return s.unsafe_ptr()[unsafe_offset=i]
 
 
 struct PendingConnHandle(Movable):
@@ -841,7 +841,7 @@ struct PendingConnHandle(Movable):
                     got_int,
                 )
                 for i in range(got_int):
-                    var b = chunk[i]
+                    var b = chunk[unsafe_offset=i]
                     var pos = len(self.preface_buf)
                     debug_assert[assert_mode="safe"](
                         pos >= 0 and pos < _H2_PREFACE_BYTES_LEN,
@@ -920,4 +920,4 @@ def _pending_conn_ptr_from_int(
     )
     return UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=addr
-    ).bitcast[PendingConnHandle]()
+    ).unsafe_bitcast[PendingConnHandle]()

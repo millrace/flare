@@ -146,7 +146,7 @@ struct ClientPool(Copyable, Movable):
                 0 disables timeout eviction.
         """
         var p = alloc[_ClientPoolState](1)
-        p.init_pointee_move(
+        p.unsafe_write(
             _ClientPoolState(
                 Dict[String, List[Int]](),
                 Dict[Int, Int](),
@@ -162,12 +162,12 @@ struct ClientPool(Copyable, Movable):
         self._addr = addr
 
     @always_inline
-    def enabled(read self) -> Bool:
+    def enabled(imm self) -> Bool:
         """Return ``True`` when ``_addr != 0`` (pooling is on)."""
         return self._addr != 0
 
     def _state(
-        read self,
+        imm self,
     ) -> UnsafePointer[_ClientPoolState, MutUntrackedOrigin]:
         """Re-materialise a typed pointer from :attr:`_addr`.
 
@@ -177,7 +177,7 @@ struct ClientPool(Copyable, Movable):
         """
         return UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=self._addr
-        ).bitcast[_ClientPoolState]()
+        ).unsafe_bitcast[_ClientPoolState]()
 
     @staticmethod
     def build_key(scheme: String, host: String, port: Int) -> String:
@@ -192,7 +192,7 @@ struct ClientPool(Copyable, Movable):
         var key = scheme + "://" + host + ":" + String(port)
         return key^
 
-    def acquire(read self, key: String) raises -> Int:
+    def acquire(imm self, key: String) raises -> Int:
         """Pop the most-recently-inserted idle fd for ``key``.
 
         Evicts every fd whose age exceeds
@@ -233,7 +233,7 @@ struct ClientPool(Copyable, Movable):
         _ = sp[].entries.pop(key)
         return -1
 
-    def release(read self, key: String, fd: Int) raises -> None:
+    def release(imm self, key: String, fd: Int) raises -> None:
         """Hand ``fd`` back to the pool for ``key``, or close it
         if the cap is reached.
 
@@ -268,7 +268,7 @@ struct ClientPool(Copyable, Movable):
         sp[].entries[key] = deque^
         sp[].insertion_ts_ms[fd] = _monotonic_ms()
 
-    def _total_idle(read self) -> Int:
+    def _total_idle(imm self) -> Int:
         """Return the sum of every per-origin deque length.
 
         Linear in the number of origins -- the pool size is
@@ -284,7 +284,7 @@ struct ClientPool(Copyable, Movable):
             total += len(entry.value)
         return total
 
-    def total_idle(read self) -> Int:
+    def total_idle(imm self) -> Int:
         """Public mirror of :meth:`_total_idle` for tests + the
         :meth:`HttpClient.idle_count` accessor."""
         return self._total_idle()
@@ -303,8 +303,8 @@ struct ClientPool(Copyable, Movable):
         for entry in sp[].entries.items():
             for i in range(len(entry.value)):
                 _ = _close(c_int(entry.value[i]))
-        sp.destroy_pointee()
-        sp.free()
+        sp.unsafe_deinit_pointee()
+        sp.unsafe_free()
         self._addr = 0
 
 
@@ -322,14 +322,14 @@ def _monotonic_ms() -> Int:
     conservative.
     """
     var ts_buf = alloc[Int](2)
-    ts_buf[0] = 0
-    ts_buf[1] = 0
+    ts_buf[unsafe_offset=0] = 0
+    ts_buf[unsafe_offset=1] = 0
     # CLOCK_MONOTONIC = 1 on linux + macos.
     var rc = external_call["clock_gettime", c_int](c_int(1), ts_buf)
     if Int(rc) != 0:
-        ts_buf.free()
+        ts_buf.unsafe_free()
         return 0
-    var sec = ts_buf[0]
-    var nsec = ts_buf[1]
-    ts_buf.free()
+    var sec = ts_buf[unsafe_offset=0]
+    var nsec = ts_buf[unsafe_offset=1]
+    ts_buf.unsafe_free()
     return sec * 1000 + nsec // 1_000_000

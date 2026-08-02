@@ -129,16 +129,16 @@ struct CancelCell(Movable):
     def __init__(out self) raises:
         """Allocate a fresh cell initialised to ``NONE``."""
         var p = alloc[Int](1)
-        p.init_pointee_copy(CancelReason.NONE)
+        p.unsafe_write(CancelReason.NONE)
         self._addr = Int(p)
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if self._addr != 0:
             var p = UnsafePointer[Int, MutUntrackedOrigin](
                 unsafe_from_address=self._addr
             )
-            p.destroy_pointee()
-            p.free()
+            p.unsafe_deinit_pointee()
+            p.unsafe_free()
 
     def flip(mut self, reason: Int) -> None:
         """Set the cell's reason."""
@@ -211,7 +211,7 @@ struct Cancel(Copyable, ImplicitlyCopyable, Movable):
         """
         return Cancel(0)
 
-    def cancelled(read self) -> Bool:
+    def cancelled(imm self) -> Bool:
         """Return True once the cell is non-zero."""
         if self._addr == 0:
             return False
@@ -220,7 +220,7 @@ struct Cancel(Copyable, ImplicitlyCopyable, Movable):
         )
         return p[] != CancelReason.NONE
 
-    def reason(read self) -> Int:
+    def reason(imm self) -> Int:
         """Return the reason code currently in the cell."""
         if self._addr == 0:
             return CancelReason.NONE

@@ -55,7 +55,7 @@ def test_tampered_mac_rejected() raises:
     var cookie = signed_cookie_encode(_bytes("hello"), key)
     var dot = -1
     for i in range(cookie.byte_length()):
-        if cookie.unsafe_ptr()[i] == 46:
+        if cookie.unsafe_ptr()[unsafe_offset=i] == 46:
             dot = i
             break
     assert_true(dot > 0)

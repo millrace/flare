@@ -14,7 +14,7 @@ hash the key into a fixed-width identifier.
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections import Span
 
 
 @fieldwise_init

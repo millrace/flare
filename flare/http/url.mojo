@@ -94,9 +94,10 @@ struct Url(Movable):
             raise UrlParseError(
                 "unsupported scheme '" + scheme + "' in URL: " + raw
             )
-        s = String(
+        var s_rest = String(
             String(unsafe_from_utf8=s.as_bytes()[scheme_end + 3 :])
         )  # skip "://"
+        s = s_rest^
 
         # ── 2. Strip fragment ─────────────────────────────────────────────────
         var fragment = String("")
@@ -105,7 +106,10 @@ struct Url(Movable):
             fragment = String(
                 String(unsafe_from_utf8=s.as_bytes()[frag_pos + 1 :])
             )
-            s = String(String(unsafe_from_utf8=s.as_bytes()[:frag_pos]))
+            var s_head = String(
+                String(unsafe_from_utf8=s.as_bytes()[:frag_pos])
+            )
+            s = s_head^
 
         # ── 3. Authority and path split ────────────────────────────────────────
         var path_start = _find(s, "/")
@@ -143,9 +147,10 @@ struct Url(Movable):
         # Strip optional userinfo (user:pass@) — we don't support auth.
         var at_pos = _find(authority, "@")
         if at_pos >= 0:
-            authority = String(
+            var authority_rest = String(
                 String(unsafe_from_utf8=authority.as_bytes()[at_pos + 1 :])
             )
+            authority = authority_rest^
 
         var host: String
         var port: UInt16
@@ -227,7 +232,10 @@ def _find(s: String, sub: String) -> Int:
     for i in range(n - m + 1):
         var ok = True
         for j in range(m):
-            if s.unsafe_ptr()[i + j] != sub.unsafe_ptr()[j]:
+            if (
+                s.unsafe_ptr()[unsafe_offset=i + j]
+                != sub.unsafe_ptr()[unsafe_offset=j]
+            ):
                 ok = False
                 break
         if ok:
@@ -247,7 +255,10 @@ def _rfind(s: String, sub: String) -> Int:
     for i in range(n - m, -1, -1):
         var ok = True
         for j in range(m):
-            if s.unsafe_ptr()[i + j] != sub.unsafe_ptr()[j]:
+            if (
+                s.unsafe_ptr()[unsafe_offset=i + j]
+                != sub.unsafe_ptr()[unsafe_offset=j]
+            ):
                 ok = False
                 break
         if ok:
@@ -284,7 +295,7 @@ def _parse_port(s: String, raw: String) raises -> Int:
         raise UrlParseError("port too long in URL: " + raw)
     var result = 0
     for i in range(s.byte_length()):
-        var c = Int(s.unsafe_ptr()[i])
+        var c = Int(s.unsafe_ptr()[unsafe_offset=i])
         if c < 48 or c > 57:  # '0'..'9'
             raise UrlParseError("invalid port '" + s + "' in URL: " + raw)
         result = result * 10 + (c - 48)

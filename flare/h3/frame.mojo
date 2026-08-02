@@ -27,7 +27,7 @@ References:
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections import Span
 
 from flare.quic.varint import decode_varint, encode_varint
 

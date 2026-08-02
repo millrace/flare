@@ -8,7 +8,7 @@ the spin bit + key phase, and rejection of malformed inputs
 """
 
 from std.testing import assert_equal, assert_true, assert_false
-from std.memory import Span
+from std.collections import Span
 
 from flare.quic import (
     QUIC_VERSION_1,

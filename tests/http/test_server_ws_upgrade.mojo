@@ -70,12 +70,12 @@ def _connect_loopback(port: UInt16) raises -> c_int:
         raise Error("socket() failed: " + _strerror(get_errno().value))
     var sa = stack_allocation[16, UInt8]()
     for i in range(16):
-        (sa + i).init_pointee_copy(UInt8(0))
+        (sa.unsafe_offset(i)).unsafe_write(UInt8(0))
     var ip = stack_allocation[4, UInt8]()
-    (ip + 0).init_pointee_copy(UInt8(127))
-    (ip + 1).init_pointee_copy(UInt8(0))
-    (ip + 2).init_pointee_copy(UInt8(0))
-    (ip + 3).init_pointee_copy(UInt8(1))
+    (ip.unsafe_offset(0)).unsafe_write(UInt8(127))
+    (ip.unsafe_offset(1)).unsafe_write(UInt8(0))
+    (ip.unsafe_offset(2)).unsafe_write(UInt8(0))
+    (ip.unsafe_offset(3)).unsafe_write(UInt8(1))
     _fill_sockaddr_in(sa, port, ip)
     if _connect(c, sa, c_int(16).cast[DType.uint32]()) < c_int(0):
         var msg = _strerror(get_errno().value)
@@ -123,7 +123,7 @@ def test_http_and_ws_on_one_port() raises:
             if Int(n) <= 0:
                 break
             for i in range(Int(n)):
-                http_body += chr(Int(buf[i]))
+                http_body += chr(Int(buf[unsafe_offset=i]))
         _ = _close(fd)
     except:
         http_raised = True
@@ -163,7 +163,7 @@ def test_http_and_ws_on_one_port() raises:
             if Int(n2) <= 0:
                 break
             for i in range(Int(n2)):
-                http_body2 += chr(Int(buf2[i]))
+                http_body2 += chr(Int(buf2[unsafe_offset=i]))
         _ = _close(fd2)
     except:
         pass

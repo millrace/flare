@@ -214,22 +214,30 @@ def _fill_sockaddr_in(
 
     comptime if CompilationTarget.is_macos():
         # BSD-style: first byte is struct length, second is family
-        (buf + 0).init_pointee_copy(UInt8(16))  # sin_len
-        (buf + 1).init_pointee_copy(UInt8(2))  # AF_INET
+        (buf.unsafe_offset(0)).unsafe_write(UInt8(16))  # sin_len
+        (buf.unsafe_offset(1)).unsafe_write(UInt8(2))  # AF_INET
     else:
         # Linux: sin_family as little-endian UInt16 → [2, 0]
-        (buf + 0).init_pointee_copy(UInt8(2))  # family low byte
-        (buf + 1).init_pointee_copy(UInt8(0))  # family high byte
+        (buf.unsafe_offset(0)).unsafe_write(UInt8(2))  # family low byte
+        (buf.unsafe_offset(1)).unsafe_write(UInt8(0))  # family high byte
 
     # Port in network byte order (big-endian)
-    (buf + 2).init_pointee_copy(UInt8(port >> 8))
-    (buf + 3).init_pointee_copy(UInt8(port & 0xFF))
+    (buf.unsafe_offset(2)).unsafe_write(UInt8(port >> 8))
+    (buf.unsafe_offset(3)).unsafe_write(UInt8(port & 0xFF))
 
     # IPv4 address (already in network byte order from inet_pton)
-    (buf + 4).init_pointee_copy((ip_bytes + 0).load())
-    (buf + 5).init_pointee_copy((ip_bytes + 1).load())
-    (buf + 6).init_pointee_copy((ip_bytes + 2).load())
-    (buf + 7).init_pointee_copy((ip_bytes + 3).load())
+    (buf.unsafe_offset(4)).unsafe_write(
+        (ip_bytes.unsafe_offset(0)).unsafe_load()
+    )
+    (buf.unsafe_offset(5)).unsafe_write(
+        (ip_bytes.unsafe_offset(1)).unsafe_load()
+    )
+    (buf.unsafe_offset(6)).unsafe_write(
+        (ip_bytes.unsafe_offset(2)).unsafe_load()
+    )
+    (buf.unsafe_offset(7)).unsafe_write(
+        (ip_bytes.unsafe_offset(3)).unsafe_load()
+    )
     # bytes 8-15 remain zero-initialised by caller (sin_zero padding)
 
 
@@ -260,27 +268,29 @@ def _fill_sockaddr_in6(
     var af6 = Int(AF_INET6)
 
     comptime if CompilationTarget.is_macos():
-        (buf + 0).init_pointee_copy(UInt8(28))  # sin6_len
-        (buf + 1).init_pointee_copy(UInt8(af6))  # AF_INET6
+        (buf.unsafe_offset(0)).unsafe_write(UInt8(28))  # sin6_len
+        (buf.unsafe_offset(1)).unsafe_write(UInt8(af6))  # AF_INET6
     else:
-        (buf + 0).init_pointee_copy(UInt8(af6 & 0xFF))
-        (buf + 1).init_pointee_copy(UInt8((af6 >> 8) & 0xFF))
+        (buf.unsafe_offset(0)).unsafe_write(UInt8(af6 & 0xFF))
+        (buf.unsafe_offset(1)).unsafe_write(UInt8((af6 >> 8) & 0xFF))
 
     # Port in network byte order
-    (buf + 2).init_pointee_copy(UInt8(port >> 8))
-    (buf + 3).init_pointee_copy(UInt8(port & 0xFF))
+    (buf.unsafe_offset(2)).unsafe_write(UInt8(port >> 8))
+    (buf.unsafe_offset(3)).unsafe_write(UInt8(port & 0xFF))
 
     # sin6_flowinfo (4 bytes zeroed)
     for i in range(4, 8):
-        (buf + i).init_pointee_copy(UInt8(0))
+        (buf.unsafe_offset(i)).unsafe_write(UInt8(0))
 
     # sin6_addr (16 bytes)
     for i in range(16):
-        (buf + 8 + i).init_pointee_copy((ip_bytes + i).load())
+        (buf.unsafe_offset(8).unsafe_offset(i)).unsafe_write(
+            (ip_bytes.unsafe_offset(i)).unsafe_load()
+        )
 
     # sin6_scope_id (4 bytes zeroed)
     for i in range(24, 28):
-        (buf + i).init_pointee_copy(UInt8(0))
+        (buf.unsafe_offset(i)).unsafe_write(UInt8(0))
 
 
 @always_inline
@@ -299,7 +309,7 @@ def _read_port_from_sockaddr(buf: UnsafePointer[UInt8, _]) -> UInt16:
     # as (high << 8 | low) already yields the host-byte-order value on
     # little-endian platforms (x86-64, ARM64). Applying _ntohs here would
     # byte-swap a second time and produce a wrong result.
-    return UInt16(buf[2]) << 8 | UInt16(buf[3])
+    return UInt16(buf[unsafe_offset=2]) << 8 | UInt16(buf[unsafe_offset=3])
 
 
 @always_inline
@@ -320,21 +330,21 @@ def _read_ip_from_sockaddr(buf: UnsafePointer[UInt8, _]) raises -> String:
     """
     var ntop_buf = stack_allocation[64, UInt8]()
     for i in range(64):
-        (ntop_buf + i).init_pointee_copy(0)
+        (ntop_buf.unsafe_offset(i)).unsafe_write(0)
 
     # inet_ntop(AF_INET, &sin_addr, dst, dst_len) — sin_addr is at offset 4
     _ = external_call["inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]](
         AF_INET,
-        (buf + 4).bitcast[NoneType](),
-        ntop_buf.bitcast[c_char](),
+        (buf.unsafe_offset(4)).unsafe_bitcast[NoneType](),
+        ntop_buf.unsafe_bitcast[c_char](),
         c_uint(64),
     )
-    if ntop_buf[0] == 0:
+    if ntop_buf[unsafe_offset=0] == 0:
         raise Error("inet_ntop failed: errno " + String(get_errno()))
     return String(
         StringSlice(
             unsafe_from_utf8=CStringSlice(
-                unsafe_from_ptr=ntop_buf.bitcast[Int8]()
+                unsafe_from_ptr=ntop_buf.unsafe_bitcast[Int8]()
             )
         )
     )
@@ -355,21 +365,21 @@ def _read_ipv6_from_sockaddr(buf: UnsafePointer[UInt8, _]) raises -> String:
     """
     var ntop_buf = stack_allocation[64, UInt8]()
     for i in range(64):
-        (ntop_buf + i).init_pointee_copy(0)
+        (ntop_buf.unsafe_offset(i)).unsafe_write(0)
 
     # inet_ntop(AF_INET6, &sin6_addr, dst, dst_len) — sin6_addr at offset 8
     _ = external_call["inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]](
         AF_INET6,
-        (buf + 8).bitcast[NoneType](),
-        ntop_buf.bitcast[c_char](),
+        (buf.unsafe_offset(8)).unsafe_bitcast[NoneType](),
+        ntop_buf.unsafe_bitcast[c_char](),
         c_uint(64),
     )
-    if ntop_buf[0] == 0:
+    if ntop_buf[unsafe_offset=0] == 0:
         raise Error("inet_ntop (IPv6) failed: errno " + String(get_errno()))
     return String(
         StringSlice(
             unsafe_from_utf8=CStringSlice(
-                unsafe_from_ptr=ntop_buf.bitcast[Int8]()
+                unsafe_from_ptr=ntop_buf.unsafe_bitcast[Int8]()
             )
         )
     )
@@ -386,9 +396,11 @@ def _get_family_from_sockaddr(buf: UnsafePointer[UInt8, _]) -> c_int:
         ``AF_INET`` or ``AF_INET6``.
     """
     comptime if CompilationTarget.is_macos():
-        return c_int(Int(buf[1]))
+        return c_int(Int(buf[unsafe_offset=1]))
     else:
-        return c_int(Int(buf[0]) | (Int(buf[1]) << 8))
+        return c_int(
+            Int(buf[unsafe_offset=0]) | (Int(buf[unsafe_offset=1]) << 8)
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -409,11 +421,13 @@ def _strerror(code: c_int) -> String:
     var ptr = external_call[
         "strerror", UnsafePointer[UInt8, MutUntrackedOrigin]
     ](code)
-    if ptr[0] == 0:
+    if ptr[unsafe_offset=0] == 0:
         return "unknown error " + String(code)
     return String(
         StringSlice(
-            unsafe_from_utf8=CStringSlice(unsafe_from_ptr=ptr.bitcast[Int8]())
+            unsafe_from_utf8=CStringSlice(
+                unsafe_from_ptr=ptr.unsafe_bitcast[Int8]()
+            )
         )
     )
 
@@ -456,7 +470,9 @@ def _close(fd: c_int) -> c_int:
 @always_inline
 def _bind(fd: c_int, addr: UnsafePointer[UInt8, _], addrlen: c_uint) -> c_int:
     """Wrapper around ``bind(2)``."""
-    return external_call["bind", c_int](fd, addr.bitcast[NoneType](), addrlen)
+    return external_call["bind", c_int](
+        fd, addr.unsafe_bitcast[NoneType](), addrlen
+    )
 
 
 @always_inline
@@ -472,7 +488,9 @@ def _accept(
     addrlen: UnsafePointer[c_uint, _],
 ) -> c_int:
     """Wrapper around ``accept(2)``."""
-    return external_call["accept", c_int](fd, addr.bitcast[NoneType](), addrlen)
+    return external_call["accept", c_int](
+        fd, addr.unsafe_bitcast[NoneType](), addrlen
+    )
 
 
 @always_inline
@@ -481,7 +499,7 @@ def _connect(
 ) -> c_int:
     """Wrapper around ``connect(2)``."""
     return external_call["connect", c_int](
-        fd, addr.bitcast[NoneType](), addrlen
+        fd, addr.unsafe_bitcast[NoneType](), addrlen
     )
 
 
@@ -493,7 +511,7 @@ def _getsockname(
 ) -> c_int:
     """Wrapper around ``getsockname(2)``."""
     return external_call["getsockname", c_int](
-        fd, addr.bitcast[NoneType](), addrlen
+        fd, addr.unsafe_bitcast[NoneType](), addrlen
     )
 
 
@@ -515,7 +533,7 @@ def _send(
 ) -> c_ssize_t:
     """Wrapper around ``send(2)``."""
     return external_call["send", c_ssize_t](
-        fd, buf.bitcast[NoneType](), n, flags
+        fd, buf.unsafe_bitcast[NoneType](), n, flags
     )
 
 
@@ -538,7 +556,7 @@ def _writev(
     libc convention).
     """
     return external_call["writev", c_ssize_t](
-        fd, iov.bitcast[NoneType](), iovcnt
+        fd, iov.unsafe_bitcast[NoneType](), iovcnt
     )
 
 
@@ -548,7 +566,7 @@ def _recv(
 ) -> c_ssize_t:
     """Wrapper around ``recv(2)``."""
     return external_call["recv", c_ssize_t](
-        fd, buf.bitcast[NoneType](), n, flags
+        fd, buf.unsafe_bitcast[NoneType](), n, flags
     )
 
 
@@ -564,10 +582,10 @@ def _sendto(
     """Wrapper around ``sendto(2)``."""
     return external_call["sendto", c_ssize_t](
         fd,
-        buf.bitcast[NoneType](),
+        buf.unsafe_bitcast[NoneType](),
         n,
         flags,
-        addr.bitcast[NoneType](),
+        addr.unsafe_bitcast[NoneType](),
         addrlen,
     )
 
@@ -584,10 +602,10 @@ def _recvfrom(
     """Wrapper around ``recvfrom(2)``."""
     return external_call["recvfrom", c_ssize_t](
         fd,
-        buf.bitcast[NoneType](),
+        buf.unsafe_bitcast[NoneType](),
         n,
         flags,
-        addr.bitcast[NoneType](),
+        addr.unsafe_bitcast[NoneType](),
         addrlen,
     )
 
@@ -602,7 +620,7 @@ def _setsockopt(
 ) -> c_int:
     """Wrapper around ``setsockopt(2)``."""
     return external_call["setsockopt", c_int](
-        fd, level, optname, optval.bitcast[NoneType](), optlen
+        fd, level, optname, optval.unsafe_bitcast[NoneType](), optlen
     )
 
 
@@ -628,7 +646,7 @@ def _getsockopt(
 ) -> c_int:
     """Wrapper around ``getsockopt(2)``."""
     return external_call["getsockopt", c_int](
-        fd, level, optname, optval.bitcast[NoneType](), optlen
+        fd, level, optname, optval.unsafe_bitcast[NoneType](), optlen
     )
 
 
@@ -647,7 +665,7 @@ def _poll(
         Number of fds with events, 0 on timeout, -1 on error.
     """
     return external_call["poll", c_int](
-        fds.bitcast[NoneType](), nfds, timeout_ms
+        fds.unsafe_bitcast[NoneType](), nfds, timeout_ms
     )
 
 
@@ -677,8 +695,8 @@ def _getaddrinfo(
     return external_call["getaddrinfo", c_int](
         host_copy.as_c_string_slice(),
         UnsafePointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(0)),
-        hints.bitcast[NoneType](),
-        res_slot.bitcast[NoneType](),
+        hints.unsafe_bitcast[NoneType](),
+        res_slot.unsafe_bitcast[NoneType](),
     )
 
 
@@ -710,11 +728,13 @@ def _gai_strerror(code: c_int) -> String:
     var ptr = external_call[
         "gai_strerror", UnsafePointer[UInt8, MutUntrackedOrigin]
     ](code)
-    if ptr[0] == 0:
+    if ptr[unsafe_offset=0] == 0:
         return "unknown getaddrinfo error " + String(code)
     return String(
         StringSlice(
-            unsafe_from_utf8=CStringSlice(unsafe_from_ptr=ptr.bitcast[Int8]())
+            unsafe_from_utf8=CStringSlice(
+                unsafe_from_ptr=ptr.unsafe_bitcast[Int8]()
+            )
         )
     )
 
@@ -736,7 +756,7 @@ def _inet_pton(
     # as_c_string_slice() is mutating; copy into a local var first.
     var src_copy = src
     return external_call["inet_pton", c_int](
-        family, src_copy.as_c_string_slice(), dst.bitcast[NoneType]()
+        family, src_copy.as_c_string_slice(), dst.unsafe_bitcast[NoneType]()
     )
 
 
@@ -843,23 +863,23 @@ def _epoll_event_set(
                   per-fd opaque handle).
     """
     # events field is always at offset 0, little-endian UInt32.
-    (buf + 0).init_pointee_copy(UInt8(events & 0xFF))
-    (buf + 1).init_pointee_copy(UInt8((events >> 8) & 0xFF))
-    (buf + 2).init_pointee_copy(UInt8((events >> 16) & 0xFF))
-    (buf + 3).init_pointee_copy(UInt8((events >> 24) & 0xFF))
+    (buf.unsafe_offset(0)).unsafe_write(UInt8(events & 0xFF))
+    (buf.unsafe_offset(1)).unsafe_write(UInt8((events >> 8) & 0xFF))
+    (buf.unsafe_offset(2)).unsafe_write(UInt8((events >> 16) & 0xFF))
+    (buf.unsafe_offset(3)).unsafe_write(UInt8((events >> 24) & 0xFF))
 
     # x86_64 packs the struct: data starts at offset 4. aarch64 keeps natural
     # alignment: 4 bytes of padding then data at offset 8.
     comptime if not CompilationTarget.is_x86():
-        (buf + 4).init_pointee_copy(UInt8(0))
-        (buf + 5).init_pointee_copy(UInt8(0))
-        (buf + 6).init_pointee_copy(UInt8(0))
-        (buf + 7).init_pointee_copy(UInt8(0))
+        (buf.unsafe_offset(4)).unsafe_write(UInt8(0))
+        (buf.unsafe_offset(5)).unsafe_write(UInt8(0))
+        (buf.unsafe_offset(6)).unsafe_write(UInt8(0))
+        (buf.unsafe_offset(7)).unsafe_write(UInt8(0))
 
     # data.u64 is 8 bytes, little-endian.
     var off = EPOLL_EVENT_DATA_OFF
     for i in range(8):
-        (buf + off + i).init_pointee_copy(
+        (buf.unsafe_offset(off).unsafe_offset(i)).unsafe_write(
             UInt8((data_u64 >> UInt64(8 * i)) & 0xFF)
         )
 
@@ -868,10 +888,10 @@ def _epoll_event_set(
 def _epoll_event_read_events(buf: UnsafePointer[UInt8, _]) -> UInt32:
     """Read the ``events`` field from an ``epoll_event`` buffer."""
     return (
-        UInt32((buf + 0).load())
-        | (UInt32((buf + 1).load()) << 8)
-        | (UInt32((buf + 2).load()) << 16)
-        | (UInt32((buf + 3).load()) << 24)
+        UInt32((buf.unsafe_offset(0)).unsafe_load())
+        | (UInt32((buf.unsafe_offset(1)).unsafe_load()) << 8)
+        | (UInt32((buf.unsafe_offset(2)).unsafe_load()) << 16)
+        | (UInt32((buf.unsafe_offset(3)).unsafe_load()) << 24)
     )
 
 
@@ -881,7 +901,9 @@ def _epoll_event_read_data(buf: UnsafePointer[UInt8, _]) -> UInt64:
     var off = EPOLL_EVENT_DATA_OFF
     var v: UInt64 = 0
     for i in range(8):
-        v |= UInt64((buf + off + i).load()) << UInt64(8 * i)
+        v |= UInt64(
+            (buf.unsafe_offset(off).unsafe_offset(i)).unsafe_load()
+        ) << UInt64(8 * i)
     return v
 
 
@@ -914,33 +936,41 @@ def _kevent_set(
     """
     # ident: 8 bytes LE
     for i in range(8):
-        (buf + KEVENT_IDENT_OFF + i).init_pointee_copy(
+        (buf.unsafe_offset(KEVENT_IDENT_OFF).unsafe_offset(i)).unsafe_write(
             UInt8((ident >> UInt64(8 * i)) & 0xFF)
         )
     # filter: 2 bytes LE (Int16 -> two's complement via UInt16 bit-cast)
     var f16 = UInt16(filter & 0xFFFF) if filter >= 0 else UInt16(
         (UInt32(Int32(filter)) & 0xFFFF)
     )
-    (buf + KEVENT_FILTER_OFF + 0).init_pointee_copy(UInt8(f16 & 0xFF))
-    (buf + KEVENT_FILTER_OFF + 1).init_pointee_copy(UInt8((f16 >> 8) & 0xFF))
+    (buf.unsafe_offset(KEVENT_FILTER_OFF).unsafe_offset(0)).unsafe_write(
+        UInt8(f16 & 0xFF)
+    )
+    (buf.unsafe_offset(KEVENT_FILTER_OFF).unsafe_offset(1)).unsafe_write(
+        UInt8((f16 >> 8) & 0xFF)
+    )
     # flags: 2 bytes LE
-    (buf + KEVENT_FLAGS_OFF + 0).init_pointee_copy(UInt8(flags & 0xFF))
-    (buf + KEVENT_FLAGS_OFF + 1).init_pointee_copy(UInt8((flags >> 8) & 0xFF))
+    (buf.unsafe_offset(KEVENT_FLAGS_OFF).unsafe_offset(0)).unsafe_write(
+        UInt8(flags & 0xFF)
+    )
+    (buf.unsafe_offset(KEVENT_FLAGS_OFF).unsafe_offset(1)).unsafe_write(
+        UInt8((flags >> 8) & 0xFF)
+    )
     # fflags: 4 bytes LE
     for i in range(4):
-        (buf + KEVENT_FFLAGS_OFF + i).init_pointee_copy(
+        (buf.unsafe_offset(KEVENT_FFLAGS_OFF).unsafe_offset(i)).unsafe_write(
             UInt8((fflags >> UInt32(8 * i)) & 0xFF)
         )
     # data: 8 bytes LE (treat as bit pattern; caller supplies non-negative
     # values for our use-cases)
     var d64 = UInt64(data) if data >= 0 else UInt64(Int(data))
     for i in range(8):
-        (buf + KEVENT_DATA_OFF + i).init_pointee_copy(
+        (buf.unsafe_offset(KEVENT_DATA_OFF).unsafe_offset(i)).unsafe_write(
             UInt8((d64 >> UInt64(8 * i)) & 0xFF)
         )
     # udata: 8 bytes LE
     for i in range(8):
-        (buf + KEVENT_UDATA_OFF + i).init_pointee_copy(
+        (buf.unsafe_offset(KEVENT_UDATA_OFF).unsafe_offset(i)).unsafe_write(
             UInt8((udata >> UInt64(8 * i)) & 0xFF)
         )
 
@@ -950,15 +980,21 @@ def _kevent_read_ident(buf: UnsafePointer[UInt8, _]) -> UInt64:
     """Read the ``ident`` field from a ``kevent`` buffer."""
     var v: UInt64 = 0
     for i in range(8):
-        v |= UInt64((buf + KEVENT_IDENT_OFF + i).load()) << UInt64(8 * i)
+        v |= UInt64(
+            (buf.unsafe_offset(KEVENT_IDENT_OFF).unsafe_offset(i)).unsafe_load()
+        ) << UInt64(8 * i)
     return v
 
 
 @always_inline
 def _kevent_read_filter(buf: UnsafePointer[UInt8, _]) -> Int16:
     """Read the ``filter`` field from a ``kevent`` buffer."""
-    var lo = UInt16((buf + KEVENT_FILTER_OFF + 0).load())
-    var hi = UInt16((buf + KEVENT_FILTER_OFF + 1).load())
+    var lo = UInt16(
+        (buf.unsafe_offset(KEVENT_FILTER_OFF).unsafe_offset(0)).unsafe_load()
+    )
+    var hi = UInt16(
+        (buf.unsafe_offset(KEVENT_FILTER_OFF).unsafe_offset(1)).unsafe_load()
+    )
     var v = lo | (hi << 8)
     return Int16(v) if v < 0x8000 else Int16(Int(v) - 0x10000)
 
@@ -966,8 +1002,13 @@ def _kevent_read_filter(buf: UnsafePointer[UInt8, _]) -> Int16:
 @always_inline
 def _kevent_read_flags(buf: UnsafePointer[UInt8, _]) -> UInt16:
     """Read the ``flags`` field from a ``kevent`` buffer."""
-    return UInt16((buf + KEVENT_FLAGS_OFF + 0).load()) | (
-        UInt16((buf + KEVENT_FLAGS_OFF + 1).load()) << 8
+    return UInt16(
+        (buf.unsafe_offset(KEVENT_FLAGS_OFF).unsafe_offset(0)).unsafe_load()
+    ) | (
+        UInt16(
+            (buf.unsafe_offset(KEVENT_FLAGS_OFF).unsafe_offset(1)).unsafe_load()
+        )
+        << 8
     )
 
 
@@ -976,7 +1017,11 @@ def _kevent_read_fflags(buf: UnsafePointer[UInt8, _]) -> UInt32:
     """Read the ``fflags`` field from a ``kevent`` buffer."""
     var v: UInt32 = 0
     for i in range(4):
-        v |= UInt32((buf + KEVENT_FFLAGS_OFF + i).load()) << UInt32(8 * i)
+        v |= UInt32(
+            (
+                buf.unsafe_offset(KEVENT_FFLAGS_OFF).unsafe_offset(i)
+            ).unsafe_load()
+        ) << UInt32(8 * i)
     return v
 
 
@@ -985,7 +1030,9 @@ def _kevent_read_udata(buf: UnsafePointer[UInt8, _]) -> UInt64:
     """Read the ``udata`` field from a ``kevent`` buffer."""
     var v: UInt64 = 0
     for i in range(8):
-        v |= UInt64((buf + KEVENT_UDATA_OFF + i).load()) << UInt64(8 * i)
+        v |= UInt64(
+            (buf.unsafe_offset(KEVENT_UDATA_OFF).unsafe_offset(i)).unsafe_load()
+        ) << UInt64(8 * i)
     return v
 
 
@@ -1025,7 +1072,7 @@ def _epoll_ctl(
         0 on success, -1 on error.
     """
     return external_call["epoll_ctl", c_int](
-        epfd, op, fd, event.bitcast[NoneType]()
+        epfd, op, fd, event.unsafe_bitcast[NoneType]()
     )
 
 
@@ -1050,7 +1097,7 @@ def _epoll_wait(
         -1 on error (errno set; EINTR is normal).
     """
     return external_call["epoll_wait", c_int](
-        epfd, events.bitcast[NoneType](), maxevents, timeout_ms
+        epfd, events.unsafe_bitcast[NoneType](), maxevents, timeout_ms
     )
 
 
@@ -1116,11 +1163,11 @@ def _kevent(
     comptime if CompilationTarget.is_macos():
         return external_call["kevent", c_int](
             kq,
-            changelist.bitcast[NoneType](),
+            changelist.unsafe_bitcast[NoneType](),
             nchanges,
-            eventlist.bitcast[NoneType](),
+            eventlist.unsafe_bitcast[NoneType](),
             nevents,
-            timeout.bitcast[NoneType](),
+            timeout.unsafe_bitcast[NoneType](),
         )
     else:
         return c_int(-1)
@@ -1166,7 +1213,7 @@ def _pipe(fds: UnsafePointer[c_int, _]) -> c_int:
     Returns:
         0 on success, -1 on error.
     """
-    return external_call["pipe", c_int](fds.bitcast[NoneType]())
+    return external_call["pipe", c_int](fds.unsafe_bitcast[NoneType]())
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1243,52 +1290,46 @@ struct FlareRawIO(Movable):
 
     var _lib: OwnedDLHandle
     """Owned dlopen handle. Keeps the library mapped for the lifetime of
-    the struct so the cached function pointers stay valid."""
-
-    var _read: def(c_int, Int, c_size_t) thin abi("C") -> c_ssize_t
-    """Cached pointer to ``flare_read`` in ``libflare_tls.so``."""
-
-    var _write: def(c_int, Int, c_size_t) thin abi("C") -> c_ssize_t
-    """Cached pointer to ``flare_write`` in ``libflare_tls.so``."""
+    the struct. ``get_function`` is re-resolved per call (its returned
+    callable borrows ``self._lib`` for the duration of that call, per the
+    new dlsym-caching API), rather than cached in a field: a stored
+    ``_DLCallable`` would need a self-referential origin back to this
+    struct's own ``_lib`` field, which Mojo doesn't support."""
 
     def __init__(out self) raises:
-        """Open ``libflare_tls.so`` and resolve the raw I/O entry points.
+        """Open ``libflare_tls.so`` for the raw I/O entry points.
 
         Raises:
             Error: If the library can't be located (via
-                ``_find_flare_lib_for_io``) or any symbol is missing.
+                ``_find_flare_lib_for_io``).
         """
         self._lib = OwnedDLHandle(_find_flare_lib_for_io())
-        self._read = self._lib.get_function[
-            def(c_int, Int, c_size_t) thin abi("C") -> c_ssize_t
-        ]("flare_read")
-        self._write = self._lib.get_function[
-            def(c_int, Int, c_size_t) thin abi("C") -> c_ssize_t
-        ]("flare_write")
 
     @always_inline
     def read(
         self, fd: c_int, buf: UnsafePointer[UInt8, _], n: c_size_t
-    ) -> c_ssize_t:
-        """Read up to ``n`` bytes from ``fd`` into ``buf`` via the cached
-        ``flare_read`` pointer.
+    ) raises -> c_ssize_t:
+        """Read up to ``n`` bytes from ``fd`` into ``buf`` via
+        ``flare_read``.
 
         Mirrors ``read(2)`` semantics: returns the byte count on success
         (0 on EOF), or -1 on error with ``errno`` set.
         """
-        return self._read(fd, Int(buf), n)
+        var read_fn = self._lib.get_function[c_ssize_t]("flare_read")
+        return read_fn(fd, Int(buf), n)
 
     @always_inline
     def write(
         self, fd: c_int, buf: UnsafePointer[UInt8, _], n: c_size_t
-    ) -> c_ssize_t:
-        """Write up to ``n`` bytes from ``buf`` to ``fd`` via the cached
-        ``flare_write`` pointer.
+    ) raises -> c_ssize_t:
+        """Write up to ``n`` bytes from ``buf`` to ``fd`` via
+        ``flare_write``.
 
         Mirrors ``write(2)`` semantics: returns the byte count actually
         written, or -1 on error with ``errno`` set.
         """
-        return self._write(fd, Int(buf), n)
+        var write_fn = self._lib.get_function[c_ssize_t]("flare_write")
+        return write_fn(fd, Int(buf), n)
 
 
 # ── Per-call wrappers (convenience; prefer FlareRawIO on hot paths) ──────────
@@ -1313,7 +1354,7 @@ struct FlareRawIO(Movable):
 
 
 def _do_read_fd(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     fd: c_int,
     buf: UnsafePointer[UInt8, _],
     n: c_size_t,
@@ -1322,14 +1363,12 @@ def _do_read_fd(
     call it. The ``read`` parameter keeps ``lib`` alive across the
     ``fn_r(...)`` call so ASAP doesn't ``dlclose`` it mid-helper.
     """
-    var fn_r = lib.get_function[
-        def(c_int, Int, c_size_t) thin abi("C") -> c_ssize_t
-    ]("flare_read")
+    var fn_r = lib.get_function[c_ssize_t]("flare_read")
     return fn_r(fd, Int(buf), n)
 
 
 def _do_write_fd(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     fd: c_int,
     buf: UnsafePointer[UInt8, _],
     n: c_size_t,
@@ -1337,9 +1376,7 @@ def _do_write_fd(
     """Inner helper: resolve ``flare_write`` on the borrowed ``lib``
     and call it. See ``_do_read_fd`` for the borrow rationale.
     """
-    var fn_w = lib.get_function[
-        def(c_int, Int, c_size_t) thin abi("C") -> c_ssize_t
-    ]("flare_write")
+    var fn_w = lib.get_function[c_ssize_t]("flare_write")
     return fn_w(fd, Int(buf), n)
 
 

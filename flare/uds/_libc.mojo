@@ -82,25 +82,31 @@ def fill_sockaddr_un(
     # bind to a shorter prefix path silently).
     var pp = path.unsafe_ptr()
     for i in range(path_bytes):
-        if pp[i] == 0:
+        if pp[unsafe_offset=i] == 0:
             raise Error("sockaddr_un: embedded NUL in path")
 
     var path_offset: Int
     comptime if CompilationTarget.is_macos():
         # BSD: [0]=sun_len, [1]=sun_family, [2..]=sun_path
-        (buf + 0).init_pointee_copy(UInt8(Int(SOCKADDR_UN_SIZE)))  # sun_len
-        (buf + 1).init_pointee_copy(UInt8(Int(AF_UNIX)))  # sun_family
+        (buf.unsafe_offset(0)).unsafe_write(
+            UInt8(Int(SOCKADDR_UN_SIZE))
+        )  # sun_len
+        (buf.unsafe_offset(1)).unsafe_write(UInt8(Int(AF_UNIX)))  # sun_family
         path_offset = 2
     else:
         # Linux: sa_family_t is uint16 little-endian (AF_UNIX=1)
-        (buf + 0).init_pointee_copy(UInt8(1))
-        (buf + 1).init_pointee_copy(UInt8(0))
+        (buf.unsafe_offset(0)).unsafe_write(UInt8(1))
+        (buf.unsafe_offset(1)).unsafe_write(UInt8(0))
         path_offset = 2
 
     for i in range(path_bytes):
-        (buf + path_offset + i).init_pointee_copy(pp[i])
+        (buf.unsafe_offset(path_offset).unsafe_offset(i)).unsafe_write(
+            pp[unsafe_offset=i]
+        )
     # NUL terminator
-    (buf + path_offset + path_bytes).init_pointee_copy(UInt8(0))
+    (buf.unsafe_offset(path_offset).unsafe_offset(path_bytes)).unsafe_write(
+        UInt8(0)
+    )
 
     return c_uint(path_offset + path_bytes + 1)
 
@@ -125,7 +131,7 @@ def read_path_from_sockaddr_un(
         max_len = SUN_PATH_MAX
     var out = String(capacity=max_len + 1)
     for i in range(max_len):
-        var b = (buf + path_offset + i).load()
+        var b = (buf.unsafe_offset(path_offset).unsafe_offset(i)).unsafe_load()
         if b == 0:
             break
         out += chr(Int(b))

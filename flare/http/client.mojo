@@ -250,7 +250,7 @@ struct HttpClient(Movable):
         self._pool = ClientPool.disabled()
         self._recv_timeout_ms = 0
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free any pooled fds owned by this client.
 
         Idempotent on a moved-from client (``_pool._addr == 0``).
@@ -307,7 +307,7 @@ struct HttpClient(Movable):
         )
         return self^
 
-    def idle_count(read self) -> Int:
+    def idle_count(imm self) -> Int:
         """Return the total number of fds currently sitting idle in
         the pool. Returns 0 when pooling is disabled.
         """
@@ -1066,14 +1066,14 @@ def _split_lines(s: String) -> List[String]:
     var n = s.byte_length()
     while i < n:
         if (
-            s.unsafe_ptr()[i] == 13
+            s.unsafe_ptr()[unsafe_offset=i] == 13
             and i + 1 < n
-            and s.unsafe_ptr()[i + 1] == 10
+            and s.unsafe_ptr()[unsafe_offset=i + 1] == 10
         ):
             lines.append(String(String(unsafe_from_utf8=s.as_bytes()[start:i])))
             start = i + 2
             i += 2
-        elif s.unsafe_ptr()[i] == 10:
+        elif s.unsafe_ptr()[unsafe_offset=i] == 10:
             lines.append(String(String(unsafe_from_utf8=s.as_bytes()[start:i])))
             start = i + 1
             i += 1
@@ -1120,7 +1120,7 @@ def _parse_status_line(line: String) raises -> _StatusLine:
     # Parse 3-digit code
     var code = 0
     for i in range(3):
-        var c = Int(rest.unsafe_ptr()[i])
+        var c = Int(rest.unsafe_ptr()[unsafe_offset=i])
         if c < 48 or c > 57:
             raise NetworkError("non-numeric HTTP status code in: " + line)
         code = code * 10 + (c - 48)
@@ -1139,7 +1139,10 @@ def _str_find(s: String, sub: String) -> Int:
     for i in range(n - m + 1):
         var ok = True
         for j in range(m):
-            if s.unsafe_ptr()[i + j] != sub.unsafe_ptr()[j]:
+            if (
+                s.unsafe_ptr()[unsafe_offset=i + j]
+                != sub.unsafe_ptr()[unsafe_offset=j]
+            ):
                 ok = False
                 break
         if ok:
@@ -1151,7 +1154,7 @@ def _lower_str(s: String) -> String:
     """Return ASCII-lowercase copy of ``s``."""
     var out = String(capacity=s.byte_length())
     for i in range(s.byte_length()):
-        var c = s.unsafe_ptr()[i]
+        var c = s.unsafe_ptr()[unsafe_offset=i]
         if c >= 65 and c <= 90:
             out += chr(Int(c) + 32)
         else:
@@ -1304,9 +1307,10 @@ def _decode_chunked(
         # Strip extensions (;...)
         var semi = _str_find(size_hex, ";")
         if semi >= 0:
-            size_hex = String(
+            var size_hex_trimmed = String(
                 String(unsafe_from_utf8=size_hex.as_bytes()[:semi])
             )
+            size_hex = size_hex_trimmed^
         var chunk_size = _parse_hex(String(size_hex.strip()))
         pos = line_end + 2  # skip \r\n
         if chunk_size == 0:
@@ -1374,7 +1378,7 @@ def _parse_int(s: String) -> Int:
         return 0  # overflow guard
     var result = 0
     for i in range(trimmed.byte_length()):
-        var c = Int(trimmed.unsafe_ptr()[i])
+        var c = Int(trimmed.unsafe_ptr()[unsafe_offset=i])
         if c < 48 or c > 57:
             break
         result = result * 10 + (c - 48)
@@ -1401,7 +1405,7 @@ def _parse_hex(s: String) raises -> Int:
         raise NetworkError("chunk-size too large in chunked encoding: " + s)
     var result = 0
     for i in range(s.byte_length()):
-        var c = Int(s.unsafe_ptr()[i])
+        var c = Int(s.unsafe_ptr()[unsafe_offset=i])
         var digit: Int
         if c >= 48 and c <= 57:
             digit = c - 48
@@ -1620,7 +1624,7 @@ def _build_h2_request_headers(
         var lk = String(capacity=k.byte_length() + 1)
         var kp = k.unsafe_ptr()
         for j in range(k.byte_length()):
-            var c = Int(kp[j])
+            var c = Int(kp[unsafe_offset=j])
             if c >= 65 and c <= 90:
                 lk += chr(c + 32)
             else:
@@ -1710,7 +1714,7 @@ def _send_h2_over_tls(
         # Mojo 1.0.0b1: name the slice's lifetime via ``buf``
         # itself; ``buf[:n]`` was an anonymous temporary whose
         # storage could be freed before ``feed`` returned.
-        conn.feed(Span[UInt8, _](ptr=buf.unsafe_ptr(), length=n))
+        conn.feed(Span[UInt8, _](unsafe_ptr=buf.unsafe_ptr(), length=n))
         var ack_bytes = conn.drain()
         if len(ack_bytes) > 0:
             stream.write_all(Span[UInt8, _](ack_bytes))
@@ -1790,7 +1794,7 @@ def _send_h2_over_tcp(
         # Mojo 1.0.0b1 Span lifetime: same fix as the h2-over-tls
         # path -- bind to the named ``buf`` rather than the
         # slice temporary.
-        conn.feed(Span[UInt8, _](ptr=buf.unsafe_ptr(), length=n))
+        conn.feed(Span[UInt8, _](unsafe_ptr=buf.unsafe_ptr(), length=n))
         var ack_bytes = conn.drain()
         if len(ack_bytes) > 0:
             stream.write_all(Span[UInt8, _](ack_bytes))
@@ -1966,7 +1970,7 @@ def _send_h2c_via_upgrade(
         # over ``buf``'s backing storage so the lifetime is the
         # named ``buf`` (which lives across the whole loop), not
         # the slice's anonymous temporary.
-        h2_conn.feed(Span[UInt8, _](ptr=buf.unsafe_ptr(), length=n))
+        h2_conn.feed(Span[UInt8, _](unsafe_ptr=buf.unsafe_ptr(), length=n))
         var ack_bytes = h2_conn.drain()
         if len(ack_bytes) > 0:
             stream.write_all(Span[UInt8, _](ack_bytes))
@@ -2020,7 +2024,7 @@ def _parse_status_line(raw: List[UInt8]) raises -> Int:
     var code_str = String("")
     var slp = sl.unsafe_ptr()
     for i in range(sp1 + 1, code_end):
-        code_str += chr(Int(slp[i]))
+        code_str += chr(Int(slp[unsafe_offset=i]))
     try:
         return Int(code_str)
     except:

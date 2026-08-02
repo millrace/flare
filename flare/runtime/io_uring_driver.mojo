@@ -223,7 +223,7 @@ def _atomic_load_u32_acquire(
     debug_assert[assert_mode="safe"](
         Int(ptr) != 0, "_atomic_load_u32_acquire: ptr must be non-NULL"
     )
-    var typed = ptr.bitcast[Scalar[DType.uint32]]()
+    var typed = ptr.unsafe_bitcast[Scalar[DType.uint32]]()
     return Atomic[DType.uint32].load[ordering=Ordering.ACQUIRE](typed)
 
 
@@ -237,7 +237,7 @@ def _atomic_load_u32_relaxed(
     debug_assert[assert_mode="safe"](
         Int(ptr) != 0, "_atomic_load_u32_relaxed: ptr must be non-NULL"
     )
-    var typed = ptr.bitcast[Scalar[DType.uint32]]()
+    var typed = ptr.unsafe_bitcast[Scalar[DType.uint32]]()
     return Atomic[DType.uint32].load[ordering=Ordering.RELAXED](typed)
 
 
@@ -251,7 +251,7 @@ def _atomic_store_u32_release(
     debug_assert[assert_mode="safe"](
         Int(ptr) != 0, "_atomic_store_u32_release: ptr must be non-NULL"
     )
-    var typed = ptr.bitcast[Scalar[DType.uint32]]()
+    var typed = ptr.unsafe_bitcast[Scalar[DType.uint32]]()
     Atomic[DType.uint32].store[ordering=Ordering.RELEASE](typed, value)
 
 
@@ -266,7 +266,7 @@ def _atomic_store_u32_relaxed(
     debug_assert[assert_mode="safe"](
         Int(ptr) != 0, "_atomic_store_u32_relaxed: ptr must be non-NULL"
     )
-    var typed = ptr.bitcast[Scalar[DType.uint32]]()
+    var typed = ptr.unsafe_bitcast[Scalar[DType.uint32]]()
     Atomic[DType.uint32].store[ordering=Ordering.RELAXED](typed, value)
 
 
@@ -457,25 +457,25 @@ struct IoUringDriver(Movable):
         self._sqes_ptr = sqes_ptr
         self._sqes_len = sqes_len
 
-        self._sq_head_ptr = sq_ring_ptr + sq_head_off
-        self._sq_tail_ptr = sq_ring_ptr + sq_tail_off
-        self._sq_array_ptr = sq_ring_ptr + sq_array_off
+        self._sq_head_ptr = sq_ring_ptr.unsafe_offset(sq_head_off)
+        self._sq_tail_ptr = sq_ring_ptr.unsafe_offset(sq_tail_off)
+        self._sq_array_ptr = sq_ring_ptr.unsafe_offset(sq_array_off)
         # Read the ring mask once (kernel sets it on setup; never
         # changes for the lifetime of the ring).
-        var mask_ptr = sq_ring_ptr + sq_ring_mask_off
+        var mask_ptr = sq_ring_ptr.unsafe_offset(sq_ring_mask_off)
         self._sq_ring_mask = _atomic_load_u32_relaxed(mask_ptr)
 
-        self._cq_head_ptr = cq_ring_ptr + cq_head_off
-        self._cq_tail_ptr = cq_ring_ptr + cq_tail_off
-        self._cq_cqes_ptr = cq_ring_ptr + cq_cqes_off
-        var cq_mask_ptr = cq_ring_ptr + cq_ring_mask_off
+        self._cq_head_ptr = cq_ring_ptr.unsafe_offset(cq_head_off)
+        self._cq_tail_ptr = cq_ring_ptr.unsafe_offset(cq_tail_off)
+        self._cq_cqes_ptr = cq_ring_ptr.unsafe_offset(cq_cqes_off)
+        var cq_mask_ptr = cq_ring_ptr.unsafe_offset(cq_ring_mask_off)
         self._cq_ring_mask = _atomic_load_u32_relaxed(cq_mask_ptr)
 
         # Cached SQ tail: starts at the kernel-visible value
         # (typically 0 on a fresh ring).
         self._sq_local_tail = _atomic_load_u32_relaxed(self._sq_tail_ptr)
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Unmap the three ring regions; the embedded
         ``IoUringRing.__del__`` then closes the ring fd."""
         if Int(self._sqes_ptr) != 0:
@@ -531,7 +531,7 @@ struct IoUringDriver(Movable):
                 unsafe_from_address=Int(0)
             )
         var idx = Int(self._sq_local_tail & self._sq_ring_mask)
-        return self._sqes_ptr + idx * IO_URING_SQE_BYTES
+        return self._sqes_ptr.unsafe_offset(idx * IO_URING_SQE_BYTES)
 
     def commit_sqe(mut self) -> None:
         """Advance the cached SQ tail by one. The kernel-visible
@@ -547,7 +547,9 @@ struct IoUringDriver(Movable):
         # the SQE at slot i. (Indirection lets you reuse the
         # SQE array for different ordering schemes; flare's
         # in-order submission uses identity.)
-        _atomic_store_u32_relaxed(self._sq_array_ptr + idx * 4, UInt32(idx))
+        _atomic_store_u32_relaxed(
+            self._sq_array_ptr.unsafe_offset(idx * 4), UInt32(idx)
+        )
         self._sq_local_tail = self._sq_local_tail + UInt32(1)
 
     def submit_and_wait(mut self, min_complete: Int) -> Int:
@@ -606,7 +608,7 @@ struct IoUringDriver(Movable):
         if u_head == k_tail:
             return None
         var idx = Int(u_head & self._cq_ring_mask)
-        var slot = self._cq_cqes_ptr + idx * IO_URING_CQE_BYTES
+        var slot = self._cq_cqes_ptr.unsafe_offset(idx * IO_URING_CQE_BYTES)
         var cqe = decode_cqe_at(slot)
         _atomic_store_u32_release(self._cq_head_ptr, u_head + UInt32(1))
         return cqe^

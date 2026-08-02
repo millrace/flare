@@ -9,7 +9,7 @@ Key performance characteristics:
 - Respects HTTP/1.0 close-by-default semantics.
 """
 
-from std.memory import memcpy, stack_allocation
+from std.memory import unsafe_memcpy, stack_allocation
 from std.ffi import c_int, c_uint, external_call
 from std.collections import Optional
 
@@ -349,7 +349,7 @@ struct HttpServer(Movable):
         self.h2_config = h2_config^
         self._stopping = False
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._listener.close()
         self._close_extras()
 
@@ -1387,7 +1387,7 @@ def _parse_http_request_bytes(
 
     var sp1 = -1
     for i in range(req_line.byte_length()):
-        if req_line.unsafe_ptr()[i] == 32:
+        if req_line.unsafe_ptr()[unsafe_offset=i] == 32:
             sp1 = i
             break
     if sp1 < 0:
@@ -1406,7 +1406,7 @@ def _parse_http_request_bytes(
 
     var sp2 = -1
     for i in range(sp1 + 1, req_line.byte_length()):
-        if req_line.unsafe_ptr()[i] == 32:
+        if req_line.unsafe_ptr()[unsafe_offset=i] == 32:
             sp2 = i
             break
     var path: String
@@ -1440,14 +1440,14 @@ def _parse_http_request_bytes(
             break
         var colon = -1
         for i in range(line.byte_length()):
-            if line.unsafe_ptr()[i] == 58:  # ':'
+            if line.unsafe_ptr()[unsafe_offset=i] == 58:  # ':'
                 colon = i
                 break
         if colon >= 0:
             # Validate header name (token chars only)
             var name_valid = True
             for i in range(colon):
-                if not _is_token_char(line.unsafe_ptr()[i]):
+                if not _is_token_char(line.unsafe_ptr()[unsafe_offset=i]):
                     name_valid = False
                     break
             if not name_valid:
@@ -1458,7 +1458,7 @@ def _parse_http_request_bytes(
 
             # Validate header value (no bare CR/LF/NUL)
             for i in range(v.byte_length()):
-                var vc = v.unsafe_ptr()[i]
+                var vc = v.unsafe_ptr()[unsafe_offset=i]
                 if vc == 0 or vc == 10 or vc == 13:
                     raise Error("invalid control character in header value")
             headers.set(k, v)
@@ -1483,9 +1483,9 @@ def _parse_http_request_bytes(
             var n = end - pos
             if n > 0:
                 body.resize(n, UInt8(0))
-                memcpy(
+                unsafe_memcpy(
                     dest=body.unsafe_ptr(),
-                    src=data.unsafe_ptr() + pos,
+                    src=data.unsafe_ptr().unsafe_offset(pos),
                     count=n,
                 )
 
@@ -1557,7 +1557,7 @@ def _parse_http_request_bytes_minimal(
 
     var sp1 = -1
     for i in range(req_line.byte_length()):
-        if req_line.unsafe_ptr()[i] == 32:
+        if req_line.unsafe_ptr()[unsafe_offset=i] == 32:
             sp1 = i
             break
     if sp1 < 0:
@@ -1571,7 +1571,7 @@ def _parse_http_request_bytes_minimal(
 
     var sp2 = -1
     for i in range(sp1 + 1, req_line.byte_length()):
-        if req_line.unsafe_ptr()[i] == 32:
+        if req_line.unsafe_ptr()[unsafe_offset=i] == 32:
             sp2 = i
             break
     var path: String
@@ -1608,9 +1608,9 @@ def _parse_http_request_bytes_minimal(
         var n = body_end - body_start
         if n > 0:
             body.resize(n, UInt8(0))
-            memcpy(
+            unsafe_memcpy(
                 dest=body.unsafe_ptr(),
-                src=data.unsafe_ptr() + body_start,
+                src=data.unsafe_ptr().unsafe_offset(body_start),
                 count=n,
             )
 
@@ -1691,7 +1691,7 @@ def _parse_int_str(s: String) -> Int:
     var result = 0
     var trimmed = s.strip()
     for i in range(trimmed.byte_length()):
-        var c = Int(trimmed.unsafe_ptr()[i])
+        var c = Int(trimmed.unsafe_ptr()[unsafe_offset=i])
         if c < 48 or c > 57:
             break
         result = result * 10 + (c - 48)
@@ -1716,7 +1716,7 @@ def _string_to_bytes(s: String) -> List[UInt8]:
         return body_bytes^
     body_bytes.resize(n, UInt8(0))
     var src = s.as_bytes()
-    memcpy(dest=body_bytes.unsafe_ptr(), src=src.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=body_bytes.unsafe_ptr(), src=src.unsafe_ptr(), count=n)
     return body_bytes^
 
 
@@ -1937,7 +1937,11 @@ def _append_str(mut buf: List[UInt8], s: String):
         return
     var old_len = len(buf)
     buf.resize(old_len + n, UInt8(0))
-    memcpy(dest=buf.unsafe_ptr() + old_len, src=s.unsafe_ptr(), count=n)
+    unsafe_memcpy(
+        dest=buf.unsafe_ptr().unsafe_offset(old_len),
+        src=s.unsafe_ptr(),
+        count=n,
+    )
 
 
 @always_inline
@@ -1959,19 +1963,19 @@ def _append_int(mut buf: List[UInt8], var n: Int):
     var tmp = stack_allocation[20, UInt8]()
     var i = 0
     while n > 0:
-        tmp[i] = UInt8(48 + (n % 10))
+        tmp[unsafe_offset=i] = UInt8(48 + (n % 10))
         n = n // 10
         i += 1
     var old_len = len(buf)
     var sign = 1 if negative else 0
     buf.resize(old_len + sign + i, UInt8(0))
-    var p = buf.unsafe_ptr() + old_len
+    var p = buf.unsafe_ptr().unsafe_offset(old_len)
     if negative:
-        p[0] = UInt8(45)  # '-'
-        p += 1
+        p[unsafe_offset=0] = UInt8(45)  # '-'
+        p = p.unsafe_offset(1)
     # ``tmp`` holds the digits in reverse order; flip them on the way out.
     for k in range(i):
-        p[k] = tmp[i - 1 - k]
+        p[unsafe_offset=k] = tmp[unsafe_offset=i - 1 - k]
 
 
 @always_inline
@@ -2039,7 +2043,7 @@ def _ascii_lower(s: String) -> String:
     var src = s.unsafe_ptr()
     var has_upper = False
     for i in range(n):
-        var c = src[i]
+        var c = src[unsafe_offset=i]
         if c >= 65 and c <= 90:
             has_upper = True
             break
@@ -2048,11 +2052,11 @@ def _ascii_lower(s: String) -> String:
     var out = String(unsafe_uninit_length=n)
     var dst = out.unsafe_ptr_mut()
     for i in range(n):
-        var c = src[i]
+        var c = src[unsafe_offset=i]
         if c >= 65 and c <= 90:
-            dst[i] = c + 32
+            dst[unsafe_offset=i] = c + 32
         else:
-            dst[i] = c
+            dst[unsafe_offset=i] = c
     return out^
 
 

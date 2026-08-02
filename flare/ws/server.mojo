@@ -33,8 +33,8 @@ comptime _SHA1_LEN: Int = 20
 
 
 def _do_sha1_srv(
-    read lib: OwnedDLHandle, data_bytes: Span[UInt8, _]
-) -> List[UInt8]:
+    imm lib: OwnedDLHandle, data_bytes: Span[UInt8, _]
+) raises -> List[UInt8]:
     """Invoke the SHA-1 C function with ``lib`` borrowed.
 
     Doing both ``get_function`` and the call inside the borrow keeps
@@ -51,9 +51,7 @@ def _do_sha1_srv(
     Returns:
         20-byte SHA-1 digest as ``List[UInt8]``.
     """
-    var fn_sha1 = lib.get_function[def(Int, Int, Int) thin abi("C") -> Int](
-        "SHA1"
-    )
+    var fn_sha1 = lib.get_function[Int]("SHA1")
     var digest = List[UInt8](capacity=_SHA1_LEN)
     digest.resize(_SHA1_LEN, 0)
     _ = fn_sha1(
@@ -135,7 +133,7 @@ def _lower_srv(s: String) -> String:
     """Return ASCII-lowercase of ``s``."""
     var out = String(capacity=s.byte_length())
     for i in range(s.byte_length()):
-        var c = s.unsafe_ptr()[i]
+        var c = s.unsafe_ptr()[unsafe_offset=i]
         if c >= 65 and c <= 90:
             out += chr(Int(c) + 32)
         else:
@@ -152,7 +150,10 @@ def _str_find_srv(s: String, sub: String) -> Int:
     for i in range(n - m + 1):
         var ok = True
         for j in range(m):
-            if s.unsafe_ptr()[i + j] != sub.unsafe_ptr()[j]:
+            if (
+                s.unsafe_ptr()[unsafe_offset=i + j]
+                != sub.unsafe_ptr()[unsafe_offset=j]
+            ):
                 ok = False
                 break
         if ok:
@@ -386,7 +387,7 @@ struct WsConnection(Movable):
         self.origin = origin^
         self._prebuf = prebuf^
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._stream.close()
 
     def send_text(self, msg: String) raises:
@@ -554,7 +555,7 @@ struct WsServer(Movable):
     def __init__(out self, var listener: TcpListener):
         self._listener = listener^
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._listener.close()
 
     @staticmethod
@@ -725,9 +726,9 @@ def _ws_offload_entry(arg: _OpaquePtr) -> _OpaquePtr:
     var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=ctx_addr
     )
-    var ctx_ptr = raw.bitcast[_WsOffloadCtx]()
-    var ctx = ctx_ptr.take_pointee()
-    ctx_ptr.free()
+    var ctx_ptr = raw.unsafe_bitcast[_WsOffloadCtx]()
+    var ctx = ctx_ptr.unsafe_take_pointee()
+    ctx_ptr.unsafe_free()
     try:
         ctx.handler(ctx.conn)
     except e:
@@ -753,7 +754,7 @@ def spawn_ws_offload(
         Int(ctx_ptr) != 0,
         "spawn_ws_offload: alloc[_WsOffloadCtx] returned NULL",
     )
-    ctx_ptr.init_pointee_move(_WsOffloadCtx(conn^, handler))
+    ctx_ptr.unsafe_write(_WsOffloadCtx(conn^, handler))
     var arg = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=Int(ctx_ptr)
     )
@@ -800,7 +801,7 @@ def _ws_worker_entry(arg: _OpaquePtr) -> _OpaquePtr:
     var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=ctx_addr
     )
-    var ctx_ptr = raw.bitcast[_WsWorkerCtx]()
+    var ctx_ptr = raw.unsafe_bitcast[_WsWorkerCtx]()
     try:
         while True:
             var stream = ctx_ptr[].listener.accept()
@@ -863,8 +864,8 @@ def _ws_serve_multicore(
             "_ws_serve_multicore: alloc[_WsWorkerCtx] returned NULL on worker ",
             i,
         )
-        ctx_ptr.init_pointee_move(ctx^)
-        var arg = ctx_ptr.bitcast[UInt8]()
+        ctx_ptr.unsafe_write(ctx^)
+        var arg = ctx_ptr.unsafe_bitcast[UInt8]()
         var addr_int = Int(arg)
         ctx_addrs.append(addr_int)
         var th = ThreadHandle.spawn[_ws_worker_entry](
@@ -872,7 +873,7 @@ def _ws_serve_multicore(
                 unsafe_from_address=addr_int
             )
         )
-        (threads_ptr + i).init_pointee_move(th^)
+        (threads_ptr.unsafe_offset(i)).unsafe_write(th^)
 
     # Workers run forever; this join blocks until each pthread
     # exits (normally never, since the per-worker listener
@@ -880,7 +881,7 @@ def _ws_serve_multicore(
     # would unblock the worker's accept call -- the intended
     # graceful-shutdown handle once WsServer grows a drain API.
     for i in range(num_workers):
-        (threads_ptr + i)[].join()
+        (threads_ptr.unsafe_offset(i))[].join()
     # Free per-worker contexts now the threads are joined.
     for i in range(len(ctx_addrs)):
         debug_assert[assert_mode="safe"](
@@ -891,6 +892,6 @@ def _ws_serve_multicore(
         var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=ctx_addrs[i]
         )
-        raw.bitcast[_WsWorkerCtx]().destroy_pointee()
-        raw.free()
-    threads_ptr.free()
+        raw.unsafe_bitcast[_WsWorkerCtx]().unsafe_deinit_pointee()
+        raw.unsafe_free()
+    threads_ptr.unsafe_free()

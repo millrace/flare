@@ -90,7 +90,7 @@ struct ResponsePool(Movable):
         self._slots = List[Int]()
         self._capacity = 8
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free every retained cell when the pool is dropped.
 
         Without this, dropping a non-empty pool would leak every
@@ -144,8 +144,8 @@ struct ResponsePool(Movable):
         if len(self._slots) > 0:
             var addr = self._slots.pop()
             var ptr = Pool[Response].get_ptr(addr)
-            var resp = ptr.take_pointee()
-            ptr.free()
+            var resp = ptr.unsafe_take_pointee()
+            ptr.unsafe_free()
             resp.reset(status=status, reason=reason^)
             return resp^
         return Response(status=status, reason=reason^)

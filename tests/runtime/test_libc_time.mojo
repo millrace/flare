@@ -30,7 +30,7 @@ from flare.runtime import libc_usleep, libc_nanosleep_ms
 
 
 @always_inline
-def _elapsed_ms_since(t0: UInt) -> Int:
+def _elapsed_ms_since(t0: Int) -> Int:
     """Monotonic ms since ``t0`` (a previous ``monotonic()`` value)."""
     return Int((monotonic() - t0) // 1_000_000)
 

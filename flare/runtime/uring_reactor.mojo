@@ -197,17 +197,17 @@ def _pbuf_ring_add(
     )
     # addr (offset 0, u64 LE)
     for i in range(8):
-        (entry + i).init_pointee_copy(
+        (entry.unsafe_offset(i)).unsafe_write(
             UInt8(Int((buf_addr >> UInt64(8 * i)) & 0xFF))
         )
     # len (offset 8, u32 LE)
     for i in range(4):
-        (entry + 8 + i).init_pointee_copy(
+        (entry.unsafe_offset(8).unsafe_offset(i)).unsafe_write(
             UInt8(Int((buf_len >> UInt32(8 * i)) & 0xFF))
         )
     # bid (offset 12, u16 LE)
-    (entry + 12).init_pointee_copy(UInt8(Int(bid) & 0xFF))
-    (entry + 13).init_pointee_copy(UInt8((Int(bid) >> 8) & 0xFF))
+    (entry.unsafe_offset(12)).unsafe_write(UInt8(Int(bid) & 0xFF))
+    (entry.unsafe_offset(13)).unsafe_write(UInt8((Int(bid) >> 8) & 0xFF))
     # resv left as-is (overwritten by tail-advance for slot 0;
     # ignored by kernel for other slots).
 
@@ -221,8 +221,8 @@ def _pbuf_ring_get_tail(ring_addr: Int) -> UInt16:
     var tail_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=ring_addr + 14
     )
-    var lo = Int(tail_ptr.load())
-    var hi = Int((tail_ptr + 1).load())
+    var lo = Int(tail_ptr.unsafe_load())
+    var hi = Int((tail_ptr.unsafe_offset(1)).unsafe_load())
     return UInt16((hi << 8) | lo)
 
 
@@ -237,7 +237,7 @@ def _pbuf_ring_set_tail(ring_addr: Int, new_tail: UInt16) -> None:
     # Use Atomic[u16] release store for cross-platform memory
     # ordering. On x86 this compiles to a regular mov + compiler
     # barrier; on ARM it emits the proper release-store instruction.
-    var typed = tail_ptr.bitcast[Scalar[DType.uint16]]()
+    var typed = tail_ptr.unsafe_bitcast[Scalar[DType.uint16]]()
     Atomic[DType.uint16].store[ordering=Ordering.RELEASE](typed, new_tail)
 
 
@@ -503,7 +503,7 @@ struct UringReactor(Movable):
             # arming SQE keeps a stable pointer.
             var raw = alloc[UInt8](8)
             for i in range(8):
-                (raw + i).init_pointee_copy(UInt8(0))
+                (raw.unsafe_offset(i)).unsafe_write(UInt8(0))
             self._wake_buf = UnsafePointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=Int(raw)
             )
@@ -519,11 +519,11 @@ struct UringReactor(Movable):
             )
         self._wake_armed = False
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free the wakeup buffer + close the wakeup fd; the
         ``IoUringDriver`` destructor handles ring teardown."""
         if Int(self._wake_buf) != 0:
-            self._wake_buf.free()
+            self._wake_buf.unsafe_free()
         if self._wake_fd != INVALID_FD:
             _ = _close(self._wake_fd)
 
@@ -721,22 +721,22 @@ struct UringReactor(Movable):
         # u64 resv[3];  --> 40 bytes total.
         var reg = stack_allocation[40, UInt8]()
         for i in range(40):
-            (reg + i).init_pointee_copy(UInt8(0))
+            (reg.unsafe_offset(i)).unsafe_write(UInt8(0))
         # ring_addr (offset 0, u64 LE)
         var ra = UInt64(ring_addr)
         for i in range(8):
-            (reg + i).init_pointee_copy(
+            (reg.unsafe_offset(i)).unsafe_write(
                 UInt8(Int((ra >> UInt64(8 * i)) & 0xFF))
             )
         # ring_entries (offset 8, u32 LE)
         var re = UInt32(ring_entries)
         for i in range(4):
-            (reg + 8 + i).init_pointee_copy(
+            (reg.unsafe_offset(8).unsafe_offset(i)).unsafe_write(
                 UInt8(Int((re >> UInt32(8 * i)) & 0xFF))
             )
         # bgid (offset 12, u16 LE)
-        (reg + 12).init_pointee_copy(UInt8(Int(bgid) & 0xFF))
-        (reg + 13).init_pointee_copy(UInt8((Int(bgid) >> 8) & 0xFF))
+        (reg.unsafe_offset(12)).unsafe_write(UInt8(Int(bgid) & 0xFF))
+        (reg.unsafe_offset(13)).unsafe_write(UInt8((Int(bgid) >> 8) & 0xFF))
         # pad (offset 14-15) and resv[3] (offset 16-39) all zero.
         var rc = io_uring_register(
             Int(self._driver.fd()),
@@ -762,10 +762,10 @@ struct UringReactor(Movable):
         reference; userspace side ``munmap``s the ring memory."""
         var reg = stack_allocation[40, UInt8]()
         for i in range(40):
-            (reg + i).init_pointee_copy(UInt8(0))
+            (reg.unsafe_offset(i)).unsafe_write(UInt8(0))
         # Just bgid is needed for unregister.
-        (reg + 12).init_pointee_copy(UInt8(Int(bgid) & 0xFF))
-        (reg + 13).init_pointee_copy(UInt8((Int(bgid) >> 8) & 0xFF))
+        (reg.unsafe_offset(12)).unsafe_write(UInt8(Int(bgid) & 0xFF))
+        (reg.unsafe_offset(13)).unsafe_write(UInt8((Int(bgid) >> 8) & 0xFF))
         _ = io_uring_register(
             Int(self._driver.fd()),
             IORING_UNREGISTER_PBUF_RING,
@@ -1126,9 +1126,9 @@ struct UringReactor(Movable):
         if not self._cross_thread_wakeup:
             return
         var one = stack_allocation[8, UInt8]()
-        (one + 0).init_pointee_copy(UInt8(1))
+        (one.unsafe_offset(0)).unsafe_write(UInt8(1))
         for k in range(1, 8):
-            (one + k).init_pointee_copy(UInt8(0))
+            (one.unsafe_offset(k)).unsafe_write(UInt8(0))
         _ = self._io.write(self._wake_fd, one, c_size_t(8))
 
     # ── Private helpers ──────────────────────────────────────────────────────

@@ -96,7 +96,7 @@ def _extract_boundary(content_type: String) raises -> String:
     var lower = String(capacity=n)
     var src = content_type.unsafe_ptr()
     for i in range(n):
-        var c = src[i]
+        var c = src[unsafe_offset=i]
         if c >= 65 and c <= 90:
             lower += chr(Int(c) + 32)
         else:
@@ -111,7 +111,7 @@ def _extract_boundary(content_type: String) raises -> String:
     while i <= limit:
         var matched = True
         for j in range(key_len):
-            if lower_p[i + j] != key_p[j]:
+            if lower_p[unsafe_offset=i + j] != key_p[unsafe_offset=j]:
                 matched = False
                 break
         if matched:
@@ -123,17 +123,18 @@ def _extract_boundary(content_type: String) raises -> String:
     var start = pos + key_len
     var end = n
     for j in range(start, n):
-        if src[j] == 59:  # ';'
+        if src[unsafe_offset=j] == 59:  # ';'
             end = j
             break
-    if start < end and src[start] == 34:  # '"'
-        if end - 1 > start and src[end - 1] == 34:
+    if start < end and src[unsafe_offset=start] == 34:  # '"'
+        if end - 1 > start and src[unsafe_offset=end - 1] == 34:
             return String(
                 unsafe_from_utf8=content_type.as_bytes()[start + 1 : end - 1]
             )
         return String(unsafe_from_utf8=content_type.as_bytes()[start + 1 : end])
     var boundary = String(unsafe_from_utf8=content_type.as_bytes()[start:end])
-    boundary = String(boundary.strip())
+    var stripped = String(boundary.strip())
+    boundary = stripped^
     if boundary.byte_length() == 0:
         raise Error("multipart: empty boundary parameter")
     return boundary^
@@ -156,8 +157,8 @@ def _parse_disposition_param(disp: String, name: String) -> String:
     while i + key_len <= n:
         var matched = True
         for j in range(key_len):
-            var c = src[i + j]
-            var k = key_p[j]
+            var c = src[unsafe_offset=i + j]
+            var k = key_p[unsafe_offset=j]
             if c >= 65 and c <= 90:
                 c = c + 32
             if k >= 65 and k <= 90:
@@ -168,21 +169,21 @@ def _parse_disposition_param(disp: String, name: String) -> String:
         if matched:
             if (
                 i == 0
-                or src[i - 1] == 32
-                or src[i - 1] == 59
-                or src[i - 1] == 9
+                or src[unsafe_offset=i - 1] == 32
+                or src[unsafe_offset=i - 1] == 59
+                or src[unsafe_offset=i - 1] == 9
             ):
                 var start = i + key_len
-                if start < n and src[start] == 34:
+                if start < n and src[unsafe_offset=start] == 34:
                     var end = start + 1
-                    while end < n and src[end] != 34:
+                    while end < n and src[unsafe_offset=end] != 34:
                         end += 1
                     return String(
                         unsafe_from_utf8=disp.as_bytes()[start + 1 : end]
                     )
                 else:
                     var end = start
-                    while end < n and src[end] != 59:
+                    while end < n and src[unsafe_offset=end] != 59:
                         end += 1
                     return String(
                         String(
@@ -249,8 +250,8 @@ struct MultipartPart(Copyable, Movable):
             var bp = key.unsafe_ptr()
             var matched = True
             for j in range(key.byte_length()):
-                var ac = ap[j]
-                var bc = bp[j]
+                var ac = ap[unsafe_offset=j]
+                var bc = bp[unsafe_offset=j]
                 if ac >= 65 and ac <= 90:
                     ac = ac + 32
                 if bc >= 65 and bc <= 90:
@@ -398,7 +399,7 @@ def parse_multipart_form_data(
         while line_start < hn:
             var line_end = hn
             for j in range(line_start, hn - 1):
-                if hp[j] == 13 and hp[j + 1] == 10:
+                if hp[unsafe_offset=j] == 13 and hp[unsafe_offset=j + 1] == 10:
                     line_end = j
                     break
             var line = String(
@@ -409,7 +410,7 @@ def parse_multipart_form_data(
                 continue
             var colon = -1
             for k in range(line.byte_length()):
-                if line.unsafe_ptr()[k] == 58:  # ':'
+                if line.unsafe_ptr()[unsafe_offset=k] == 58:  # ':'
                     colon = k
                     break
             if colon <= 0:
@@ -422,7 +423,7 @@ def parse_multipart_form_data(
             part.header_values.append(value)
             var key_lower = String(capacity=key.byte_length())
             for k in range(key.byte_length()):
-                var c = key.unsafe_ptr()[k]
+                var c = key.unsafe_ptr()[unsafe_offset=k]
                 if c >= 65 and c <= 90:
                     key_lower += chr(Int(c) + 32)
                 else:

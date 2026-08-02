@@ -66,8 +66,8 @@ struct WsHandshakeError(Copyable, Movable, Writable):
 
 
 def _do_sha1(
-    read lib: OwnedDLHandle, data_bytes: Span[UInt8, _]
-) -> List[UInt8]:
+    imm lib: OwnedDLHandle, data_bytes: Span[UInt8, _]
+) raises -> List[UInt8]:
     """Invoke SHA-1 with ``lib`` borrowed across both ``get_function``
     and the call.
 
@@ -79,9 +79,7 @@ def _do_sha1(
         20-byte SHA-1 digest.
     """
     # SHA1(const unsigned char *d, size_t n, unsigned char *md) -> unsigned char*
-    var fn_sha1 = lib.get_function[def(Int, Int, Int) thin abi("C") -> Int](
-        "SHA1"
-    )
+    var fn_sha1 = lib.get_function[Int]("SHA1")
     var digest_buf = List[UInt8](capacity=_SHA1_LEN)
     digest_buf.resize(_SHA1_LEN, 0)
     _ = fn_sha1(
@@ -243,7 +241,10 @@ def _str_find_local(s: String, sub: String) -> Int:
     for i in range(n - m + 1):
         var ok = True
         for j in range(m):
-            if s.unsafe_ptr()[i + j] != sub.unsafe_ptr()[j]:
+            if (
+                s.unsafe_ptr()[unsafe_offset=i + j]
+                != sub.unsafe_ptr()[unsafe_offset=j]
+            ):
                 ok = False
                 break
         if ok:
@@ -255,7 +256,7 @@ def _lower_local(s: String) -> String:
     """Return ASCII-lowercase copy of ``s``."""
     var out = String(capacity=s.byte_length())
     for i in range(s.byte_length()):
-        var c = s.unsafe_ptr()[i]
+        var c = s.unsafe_ptr()[unsafe_offset=i]
         if c >= 65 and c <= 90:
             out += chr(Int(c) + 32)
         else:
@@ -438,7 +439,7 @@ struct WsClient(Movable):
         self._stream = stream^
         self._key = key
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._stream.close()
 
     # ── Factory ───────────────────────────────────────────────────────────────

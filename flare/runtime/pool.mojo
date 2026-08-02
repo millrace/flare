@@ -95,7 +95,7 @@ struct Pool[T: ImplicitlyDeletable & Movable]:
 
         comptime if size_of[Self.T]() > 0:
             var p = alloc[Self.T](1)
-            p.init_pointee_move(value^)
+            p.unsafe_write(value^)
             return Int(p)
         else:
             # ZST path: alloc a single placeholder byte and
@@ -103,7 +103,7 @@ struct Pool[T: ImplicitlyDeletable & Movable]:
             # through the bitcast pointer; reads / dereferences
             # also touch 0 bytes.
             var raw = alloc[UInt8](1)
-            raw.bitcast[Self.T]().init_pointee_move(value^)
+            raw.unsafe_bitcast[Self.T]().unsafe_write(value^)
             return Int(raw)
 
     @staticmethod
@@ -127,9 +127,9 @@ struct Pool[T: ImplicitlyDeletable & Movable]:
         comptime if size_of[Self.T]() > 0:
             var ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=addr
-            ).bitcast[Self.T]()
-            ptr.destroy_pointee()
-            ptr.free()
+            ).unsafe_bitcast[Self.T]()
+            ptr.unsafe_deinit_pointee()
+            ptr.unsafe_free()
         else:
             # ZST path: free as UInt8 since that's what was
             # allocated. Still run T's destructor for symmetry —
@@ -138,8 +138,8 @@ struct Pool[T: ImplicitlyDeletable & Movable]:
             var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=addr
             )
-            raw.bitcast[Self.T]().destroy_pointee()
-            raw.free()
+            raw.unsafe_bitcast[Self.T]().unsafe_deinit_pointee()
+            raw.unsafe_free()
 
     @staticmethod
     @always_inline
@@ -157,4 +157,4 @@ struct Pool[T: ImplicitlyDeletable & Movable]:
         """
         return UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=addr
-        ).bitcast[Self.T]()
+        ).unsafe_bitcast[Self.T]()

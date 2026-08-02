@@ -107,15 +107,15 @@ def _scheduler_free_raw(raw: _OpaquePtr):
     ``fuzz-scheduler-shutdown`` harness from importing
     ``flare.runtime.scheduler`` at all.
     """
-    raw.free()
+    raw.unsafe_free()
 
 
 def _scheduler_free_ctxs[H: Handler & Copyable](addrs: List[Int]):
     """Destroy each WorkerCtx[H] at the given address then free it."""
     for i in range(len(addrs)):
         var raw = _OpaquePtr(unsafe_from_address=addrs[i])
-        var typed = raw.bitcast[_WorkerCtx[H]]()
-        typed.destroy_pointee()
+        var typed = raw.unsafe_bitcast[_WorkerCtx[H]]()
+        typed.unsafe_deinit_pointee()
         _scheduler_free_raw(raw)
 
 
@@ -205,7 +205,7 @@ def _worker_entry[H: Handler & Copyable](arg: _OpaquePtr) -> _OpaquePtr:
     var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=ctx_addr
     )
-    var ctx_ptr = raw.bitcast[_WorkerCtx[H]]()
+    var ctx_ptr = raw.unsafe_bitcast[_WorkerCtx[H]]()
 
     try:
         var stopping_ptr = UnsafePointer[Bool, MutUntrackedOrigin](
@@ -453,8 +453,8 @@ struct Scheduler[H: Handler & Copyable](Movable):
         # freed in ``shutdown()`` after every worker joins. Uses the
         # native Mojo allocator (see ``_scheduler_free_raw``).
         var stop_ptr = alloc[Bool](1)
-        stop_ptr.init_pointee_copy(False)
-        var stop_raw = stop_ptr.bitcast[UInt8]()
+        stop_ptr.unsafe_write(False)
+        var stop_raw = stop_ptr.unsafe_bitcast[UInt8]()
         var stopping_addr = Int(stop_ptr)
         s._stopping_addr = stopping_addr
 
@@ -544,7 +544,7 @@ struct Scheduler[H: Handler & Copyable](Movable):
             # of this function. ``shutdown()`` destroys+frees this
             # allocation *after* joining every worker.
             var lp = alloc[TcpListener](1)
-            lp.init_pointee_move(bound^)
+            lp.unsafe_write(bound^)
             listener_ptr = lp
             s._shared_listener_addr = Int(lp)
             s._shared_listener_fd = listener_fd
@@ -572,7 +572,7 @@ struct Scheduler[H: Handler & Copyable](Movable):
                     var pwl = bind_reuseport(addr)
                     pwl._socket.set_nonblocking(True)
                     var ptr = alloc[TcpListener](1)
-                    ptr.init_pointee_move(pwl^)
+                    ptr.unsafe_write(pwl^)
                     s._per_worker_listener_addrs.append(Int(ptr))
                 except:
                     pass
@@ -602,8 +602,8 @@ struct Scheduler[H: Handler & Copyable](Movable):
             )
             # Native Mojo allocator (see _scheduler_free_raw for why).
             var ctx_ptr = alloc[_WorkerCtx[Self.H]](1)
-            ctx_ptr.init_pointee_move(ctx^)
-            var arg = ctx_ptr.bitcast[UInt8]()
+            ctx_ptr.unsafe_write(ctx^)
+            var arg = ctx_ptr.unsafe_bitcast[UInt8]()
             var ctx_addr = Int(ctx_ptr)
 
             var spawned = False
@@ -611,7 +611,7 @@ struct Scheduler[H: Handler & Copyable](Movable):
                 var th = ThreadHandle.spawn[_worker_entry[Self.H]](arg)
                 # Move the (non-Copyable) handle into the next slot
                 # of the worker array; bump the live-slot counter.
-                (s._workers_ptr + s._workers_len).init_pointee_move(th^)
+                (s._workers_ptr.unsafe_offset(s._workers_len)).unsafe_write(th^)
                 s._workers_len += 1
                 s._ctx_addrs.append(ctx_addr)
                 spawned = True
@@ -623,11 +623,11 @@ struct Scheduler[H: Handler & Copyable](Movable):
                 stop_ptr[] = True
                 for j in range(s._workers_len):
                     try:
-                        (s._workers_ptr + j)[].join()
+                        (s._workers_ptr.unsafe_offset(j))[].join()
                     except:
                         pass
-                    (s._workers_ptr + j).destroy_pointee()
-                _scheduler_free_raw(s._workers_ptr.bitcast[UInt8]())
+                    (s._workers_ptr.unsafe_offset(j)).unsafe_deinit_pointee()
+                _scheduler_free_raw(s._workers_ptr.unsafe_bitcast[UInt8]())
                 s._workers_ptr = UnsafePointer[
                     ThreadHandle, MutUntrackedOrigin
                 ](unsafe_from_address=Int(0))
@@ -636,15 +636,15 @@ struct Scheduler[H: Handler & Copyable](Movable):
                 # + this one that never got claimed).
                 _scheduler_free_ctxs[Self.H](s._ctx_addrs)
                 s._ctx_addrs.clear()
-                ctx_ptr.destroy_pointee()
-                _scheduler_free_raw(ctx_ptr.bitcast[UInt8]())
+                ctx_ptr.unsafe_deinit_pointee()
+                _scheduler_free_raw(ctx_ptr.unsafe_bitcast[UInt8]())
                 # All workers joined, so no one is reading the
                 # shared listener anymore -- destroy + free it
                 # if we owned one (the io_uring handler path uses
                 # per-worker listeners and leaves listener_ptr null).
                 if Int(listener_ptr) != 0:
-                    listener_ptr.destroy_pointee()
-                    _scheduler_free_raw(listener_ptr.bitcast[UInt8]())
+                    listener_ptr.unsafe_deinit_pointee()
+                    _scheduler_free_raw(listener_ptr.unsafe_bitcast[UInt8]())
                 s._shared_listener_addr = 0
                 s._shared_listener_fd = -1
                 # All workers joined, so no one is reading the
@@ -690,14 +690,14 @@ struct Scheduler[H: Handler & Copyable](Movable):
 
         for i in range(self._workers_len):
             try:
-                (self._workers_ptr + i)[].join()
+                (self._workers_ptr.unsafe_offset(i))[].join()
             except:
                 pass
             # After the (successful or failing) join we still own the
             # slot, so destroy the pointee before releasing the array.
-            (self._workers_ptr + i).destroy_pointee()
+            (self._workers_ptr.unsafe_offset(i)).unsafe_deinit_pointee()
         if self._workers_len > 0:
-            _scheduler_free_raw(self._workers_ptr.bitcast[UInt8]())
+            _scheduler_free_raw(self._workers_ptr.unsafe_bitcast[UInt8]())
             self._workers_ptr = UnsafePointer[ThreadHandle, MutUntrackedOrigin](
                 unsafe_from_address=Int(0)
             )
@@ -717,8 +717,8 @@ struct Scheduler[H: Handler & Copyable](Movable):
         # gets ``EBADF`` which we ignore.
         if self._shared_listener_addr != 0:
             var raw = _OpaquePtr(unsafe_from_address=self._shared_listener_addr)
-            var typed = raw.bitcast[TcpListener]()
-            typed.destroy_pointee()
+            var typed = raw.unsafe_bitcast[TcpListener]()
+            typed.unsafe_deinit_pointee()
             _scheduler_free_raw(raw)
             self._shared_listener_addr = 0
 
@@ -730,8 +730,8 @@ struct Scheduler[H: Handler & Copyable](Movable):
             var pwl_raw = _OpaquePtr(
                 unsafe_from_address=self._per_worker_listener_addrs[i]
             )
-            var pwl_typed = pwl_raw.bitcast[TcpListener]()
-            pwl_typed.destroy_pointee()
+            var pwl_typed = pwl_raw.unsafe_bitcast[TcpListener]()
+            pwl_typed.unsafe_deinit_pointee()
             _scheduler_free_raw(pwl_raw)
         self._per_worker_listener_addrs.clear()
 
@@ -941,7 +941,7 @@ def _static_worker_entry(arg: _OpaquePtr) -> _OpaquePtr:
     var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=ctx_addr
     )
-    var ctx_ptr = raw.bitcast[_StaticWorkerCtx]()
+    var ctx_ptr = raw.unsafe_bitcast[_StaticWorkerCtx]()
 
     try:
         var stopping_ptr = UnsafePointer[Bool, MutUntrackedOrigin](
@@ -974,8 +974,8 @@ def _static_scheduler_free_ctxs(addrs: List[Int]):
     """Destroy each _StaticWorkerCtx at the given address then free it."""
     for i in range(len(addrs)):
         var raw = _OpaquePtr(unsafe_from_address=addrs[i])
-        var typed = raw.bitcast[_StaticWorkerCtx]()
-        typed.destroy_pointee()
+        var typed = raw.unsafe_bitcast[_StaticWorkerCtx]()
+        typed.unsafe_deinit_pointee()
         _scheduler_free_raw(raw)
 
 
@@ -1064,8 +1064,8 @@ struct StaticScheduler(Movable):
         var s = StaticScheduler()
 
         var stop_ptr = alloc[Bool](1)
-        stop_ptr.init_pointee_copy(False)
-        var stop_raw = stop_ptr.bitcast[UInt8]()
+        stop_ptr.unsafe_write(False)
+        var stop_raw = stop_ptr.unsafe_bitcast[UInt8]()
         var stopping_addr = Int(stop_ptr)
         s._stopping_addr = stopping_addr
 
@@ -1108,7 +1108,7 @@ struct StaticScheduler(Movable):
                 raise e^
             listener_fd = Int(bound.as_raw_fd())
             var lp = alloc[TcpListener](1)
-            lp.init_pointee_move(bound^)
+            lp.unsafe_write(bound^)
             s._shared_listener_addr = Int(lp)
             s._shared_listener_fd = listener_fd
 
@@ -1123,7 +1123,7 @@ struct StaticScheduler(Movable):
                     var pwl = bind_reuseport(addr)
                     pwl._socket.set_nonblocking(True)
                     var ptr = alloc[TcpListener](1)
-                    ptr.init_pointee_move(pwl^)
+                    ptr.unsafe_write(pwl^)
                     s._per_worker_listener_addrs.append(Int(ptr))
                 except:
                     pass
@@ -1150,14 +1150,14 @@ struct StaticScheduler(Movable):
                 pin_cores,
             )
             var ctx_ptr = alloc[_StaticWorkerCtx](1)
-            ctx_ptr.init_pointee_move(ctx^)
-            var arg = ctx_ptr.bitcast[UInt8]()
+            ctx_ptr.unsafe_write(ctx^)
+            var arg = ctx_ptr.unsafe_bitcast[UInt8]()
             var ctx_addr = Int(ctx_ptr)
 
             var spawned = False
             try:
                 var th = ThreadHandle.spawn[_static_worker_entry](arg)
-                (s._workers_ptr + s._workers_len).init_pointee_move(th^)
+                (s._workers_ptr.unsafe_offset(s._workers_len)).unsafe_write(th^)
                 s._workers_len += 1
                 s._ctx_addrs.append(ctx_addr)
                 spawned = True
@@ -1168,24 +1168,24 @@ struct StaticScheduler(Movable):
                 stop_ptr[] = True
                 for j in range(s._workers_len):
                     try:
-                        (s._workers_ptr + j)[].join()
+                        (s._workers_ptr.unsafe_offset(j))[].join()
                     except:
                         pass
-                    (s._workers_ptr + j).destroy_pointee()
-                _scheduler_free_raw(s._workers_ptr.bitcast[UInt8]())
+                    (s._workers_ptr.unsafe_offset(j)).unsafe_deinit_pointee()
+                _scheduler_free_raw(s._workers_ptr.unsafe_bitcast[UInt8]())
                 s._workers_ptr = UnsafePointer[
                     ThreadHandle, MutUntrackedOrigin
                 ](unsafe_from_address=Int(0))
                 s._workers_len = 0
                 _static_scheduler_free_ctxs(s._ctx_addrs)
                 s._ctx_addrs.clear()
-                ctx_ptr.destroy_pointee()
-                _scheduler_free_raw(ctx_ptr.bitcast[UInt8]())
+                ctx_ptr.unsafe_deinit_pointee()
+                _scheduler_free_raw(ctx_ptr.unsafe_bitcast[UInt8]())
                 var lpr = _OpaquePtr(
                     unsafe_from_address=s._shared_listener_addr
                 )
-                var lpt = lpr.bitcast[TcpListener]()
-                lpt.destroy_pointee()
+                var lpt = lpr.unsafe_bitcast[TcpListener]()
+                lpt.unsafe_deinit_pointee()
                 _scheduler_free_raw(lpr)
                 s._shared_listener_addr = 0
                 s._shared_listener_fd = -1
@@ -1211,12 +1211,12 @@ struct StaticScheduler(Movable):
 
         for i in range(self._workers_len):
             try:
-                (self._workers_ptr + i)[].join()
+                (self._workers_ptr.unsafe_offset(i))[].join()
             except:
                 pass
-            (self._workers_ptr + i).destroy_pointee()
+            (self._workers_ptr.unsafe_offset(i)).unsafe_deinit_pointee()
         if self._workers_len > 0:
-            _scheduler_free_raw(self._workers_ptr.bitcast[UInt8]())
+            _scheduler_free_raw(self._workers_ptr.unsafe_bitcast[UInt8]())
             self._workers_ptr = UnsafePointer[ThreadHandle, MutUntrackedOrigin](
                 unsafe_from_address=Int(0)
             )
@@ -1227,8 +1227,8 @@ struct StaticScheduler(Movable):
 
         if self._shared_listener_addr != 0:
             var raw = _OpaquePtr(unsafe_from_address=self._shared_listener_addr)
-            var typed = raw.bitcast[TcpListener]()
-            typed.destroy_pointee()
+            var typed = raw.unsafe_bitcast[TcpListener]()
+            typed.unsafe_deinit_pointee()
             _scheduler_free_raw(raw)
             self._shared_listener_addr = 0
 
@@ -1242,8 +1242,8 @@ struct StaticScheduler(Movable):
             var pwl_raw = _OpaquePtr(
                 unsafe_from_address=self._per_worker_listener_addrs[i]
             )
-            var pwl_typed = pwl_raw.bitcast[TcpListener]()
-            pwl_typed.destroy_pointee()
+            var pwl_typed = pwl_raw.unsafe_bitcast[TcpListener]()
+            pwl_typed.unsafe_deinit_pointee()
             _scheduler_free_raw(pwl_raw)
         self._per_worker_listener_addrs.clear()
 

@@ -37,7 +37,7 @@ from std.ffi import (
     OwnedDLHandle,
     get_errno,
 )
-from std.memory import UnsafePointer, alloc, memcpy, memset_zero
+from std.memory import UnsafePointer, alloc, unsafe_memset_zero
 from std.sys.info import CompilationTarget
 
 
@@ -219,13 +219,13 @@ struct ThreadHandle(Movable):
             # this module is pulled into a fuzz-environment compile
             # (mozz harness).
             var cpuset_ptr = alloc[UInt8](_CPUSET_SIZE)
-            memset_zero(cpuset_ptr, _CPUSET_SIZE)
+            unsafe_memset_zero(cpuset_ptr, _CPUSET_SIZE)
             var byte_idx = cpu // 8
             var bit_idx = cpu % 8
             if byte_idx < _CPUSET_SIZE:
-                cpuset_ptr[byte_idx] = cpuset_ptr[byte_idx] | UInt8(
-                    1 << bit_idx
-                )
+                cpuset_ptr[unsafe_offset=byte_idx] = cpuset_ptr[
+                    unsafe_offset=byte_idx
+                ] | UInt8(1 << bit_idx)
             var rc = external_call[
                 "pthread_setaffinity_np",
                 c_int,
@@ -233,7 +233,7 @@ struct ThreadHandle(Movable):
                 c_size_t,
                 _OpaquePtr,  # cpu_set_t *
             ](self._thread_id, c_size_t(_CPUSET_SIZE), cpuset_ptr)
-            cpuset_ptr.free()
+            cpuset_ptr.unsafe_free()
             if rc != c_int(0):
                 raise Error(
                     "pthread_setaffinity_np failed with rc=" + String(Int(rc))

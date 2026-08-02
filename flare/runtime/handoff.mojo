@@ -63,7 +63,7 @@ comptime _MUTEX_BYTES: Int = 64  # generous upper bound across libc flavours
 def _mutex_init(mu: UnsafePointer[UInt8, _]) -> Bool:
     """Initialise the mutex blob with default attributes (NULL attr)."""
     var rc = external_call["pthread_mutex_init", Int32](
-        mu.bitcast[Int8](), Int(0)
+        mu.unsafe_bitcast[Int8](), Int(0)
     )
     return rc == Int32(0)
 
@@ -73,11 +73,11 @@ def _mutex_destroy(mu: UnsafePointer[UInt8, _]):
 
 
 def _mutex_lock(mu: UnsafePointer[UInt8, _]):
-    _ = external_call["pthread_mutex_lock", Int32](mu.bitcast[Int8]())
+    _ = external_call["pthread_mutex_lock", Int32](mu.unsafe_bitcast[Int8]())
 
 
 def _mutex_unlock(mu: UnsafePointer[UInt8, _]):
-    _ = external_call["pthread_mutex_unlock", Int32](mu.bitcast[Int8]())
+    _ = external_call["pthread_mutex_unlock", Int32](mu.unsafe_bitcast[Int8]())
 
 
 # ── HandoffQueue ────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ struct HandoffQueue(Defaultable, Movable):
         self.pops = 0
         self.refused = 0
         for i in range(_MUTEX_BYTES):
-            self.mu[i] = UInt8(0)
+            self.mu[unsafe_offset=i] = UInt8(0)
         _ = _mutex_init(self.mu)
 
     def __init__(out self, capacity: Int):
@@ -133,7 +133,7 @@ struct HandoffQueue(Defaultable, Movable):
         self.pops = 0
         self.refused = 0
         for i in range(_MUTEX_BYTES):
-            self.mu[i] = UInt8(0)
+            self.mu[unsafe_offset=i] = UInt8(0)
         _ = _mutex_init(self.mu)
 
     def push(mut self, fd: Int) -> Bool:
@@ -270,7 +270,9 @@ struct WorkerHandoffPool(Movable):
         self.num = num_workers
         self.queues = alloc[HandoffQueue](num_workers)
         for i in range(num_workers):
-            (self.queues + i).init_pointee_move(HandoffQueue(policy.capacity))
+            (self.queues.unsafe_offset(i)).unsafe_write(
+                HandoffQueue(policy.capacity)
+            )
         self.policy = policy^
 
     def size(self) -> Int:
@@ -287,13 +289,13 @@ struct WorkerHandoffPool(Movable):
             return False
         if target < 0 or target >= self.num:
             return False
-        return (self.queues + target)[].push(fd)
+        return (self.queues.unsafe_offset(target))[].push(fd)
 
     def drain_local(mut self, worker_id: Int) -> List[Int]:
         """Drain the queue belonging to ``worker_id``."""
         if worker_id < 0 or worker_id >= self.num:
             return List[Int]()
-        return (self.queues + worker_id)[].drain()
+        return (self.queues.unsafe_offset(worker_id))[].drain()
 
     def peek_idle_worker(mut self, exclude: Int) -> Int:
         """Return the id of the peer with the shortest queue.
@@ -313,7 +315,7 @@ struct WorkerHandoffPool(Movable):
         for i in range(self.num):
             if i == exclude:
                 continue
-            var s = (self.queues + i)[].size()
+            var s = (self.queues.unsafe_offset(i))[].size()
             if s < best_size:
                 best = i
                 best_size = s

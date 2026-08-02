@@ -103,7 +103,7 @@ care about fast-cancel during long work can poll ``cancel``
 inside ``work()``.
 """
 
-from std.memory import UnsafePointer, alloc, memcpy
+from std.memory import UnsafePointer, alloc, unsafe_memcpy
 
 from ..http.cancel import Cancel, CancelReason
 from ._thread import ThreadHandle
@@ -183,42 +183,42 @@ def _block_thunk[
     var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=Int(arg)
     )
-    var task_ptr = raw.bitcast[_Task[T]]()
-    var task = task_ptr.take_pointee()
+    var task_ptr = raw.unsafe_bitcast[_Task[T]]()
+    var task = task_ptr.unsafe_take_pointee()
 
     var result_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=task.result_addr
-    ).bitcast[T]()
+    ).unsafe_bitcast[T]()
     var err_buf = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=task.err_buf_addr
     )
     var err_len_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=task.err_len_addr
-    ).bitcast[Int]()
+    ).unsafe_bitcast[Int]()
     var success_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=task.success_addr
     )
 
     try:
         var result = task.work()
-        result_ptr.init_pointee_move(result^)
-        success_ptr[0] = UInt8(1)
-        err_len_ptr[0] = 0
+        result_ptr.unsafe_write(result^)
+        success_ptr[unsafe_offset=0] = UInt8(1)
+        err_len_ptr[unsafe_offset=0] = 0
     except e:
         var msg = String(e)
         var msg_span = msg.as_bytes()
         var n = msg.byte_length()
         if n > _ERR_BUF_CAP - 1:
             n = _ERR_BUF_CAP - 1
-        memcpy(dest=err_buf, src=msg_span.unsafe_ptr(), count=n)
-        err_buf[n] = UInt8(0)  # NUL terminator
-        err_len_ptr[0] = n
-        success_ptr[0] = UInt8(0)
+        unsafe_memcpy(dest=err_buf, src=msg_span.unsafe_ptr(), count=n)
+        err_buf[unsafe_offset=n] = UInt8(0)  # NUL terminator
+        err_len_ptr[unsafe_offset=0] = n
+        success_ptr[unsafe_offset=0] = UInt8(0)
 
     # The submitter owns the result / err / success buffers; it
     # frees them after pthread_join returns. We only own the
     # _Task allocation itself.
-    task_ptr.free()
+    task_ptr.unsafe_free()
 
     return UnsafePointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(0))
 
@@ -294,11 +294,11 @@ def block_in_pool[
 
     # Initialise flags to 0. (T's slot is uninitialised; the worker
     # init_pointee_move's into it on success.)
-    err_len_ptr[0] = 0
-    success_ptr[0] = UInt8(0)
+    err_len_ptr[unsafe_offset=0] = 0
+    success_ptr[unsafe_offset=0] = UInt8(0)
 
     var task_ptr = alloc[_Task[T]](1)
-    task_ptr.init_pointee_move(
+    task_ptr.unsafe_write(
         _Task[T](
             work=work,
             result_addr=Int(result_ptr),
@@ -323,16 +323,16 @@ def block_in_pool[
     handle.join()
 
     # ── Worker finished. Read result + free buffers. ───────────────────────
-    var success = success_ptr[0] == UInt8(1)
+    var success = success_ptr[unsafe_offset=0] == UInt8(1)
     var post_cancelled = cancel.cancelled()
     var post_reason = cancel.reason() if post_cancelled else CancelReason.NONE
 
     if success:
-        var out = result_ptr.take_pointee()
-        result_ptr.free()
-        err_buf.free()
-        err_len_ptr.free()
-        success_ptr.free()
+        var out = result_ptr.unsafe_take_pointee()
+        result_ptr.unsafe_free()
+        err_buf.unsafe_free()
+        err_len_ptr.unsafe_free()
+        success_ptr.unsafe_free()
 
         # Post-flight cancel check: if the cell flipped while
         # work() ran, raise rather than return a now-stale result.
@@ -342,18 +342,18 @@ def block_in_pool[
         return out^
 
     # Failure path: copy the error message out and raise.
-    var n = err_len_ptr[0]
+    var n = err_len_ptr[unsafe_offset=0]
     var msg_bytes = List[UInt8]()
     msg_bytes.resize(n, UInt8(0))
     if n > 0:
-        memcpy(dest=msg_bytes.unsafe_ptr(), src=err_buf, count=n)
+        unsafe_memcpy(dest=msg_bytes.unsafe_ptr(), src=err_buf, count=n)
     var msg = String(
         unsafe_from_utf8=Span[UInt8, origin_of(msg_bytes)](msg_bytes)
     )
 
-    result_ptr.free()
-    err_buf.free()
-    err_len_ptr.free()
-    success_ptr.free()
+    result_ptr.unsafe_free()
+    err_buf.unsafe_free()
+    err_len_ptr.unsafe_free()
+    success_ptr.unsafe_free()
 
     raise Error(msg)

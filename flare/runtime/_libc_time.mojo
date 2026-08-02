@@ -75,8 +75,8 @@ def libc_nanosleep_ms(ms: Int) -> Int:
     if ms <= 0:
         return 0
     var ts = stack_allocation[2, Int64]()
-    ts[0] = Int64(ms // 1000)
-    ts[1] = Int64((ms % 1000) * 1_000_000)
+    ts[unsafe_offset=0] = Int64(ms // 1000)
+    ts[unsafe_offset=1] = Int64((ms % 1000) * 1_000_000)
     # ``rem`` argument is NULL — we discard interrupt remainders.
     # Use the same MutUntrackedOrigin we already use elsewhere for
     # libc-facing pointers; this keeps the optimiser from reordering

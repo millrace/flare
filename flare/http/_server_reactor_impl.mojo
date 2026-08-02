@@ -38,7 +38,7 @@ from std.builtin.debug_assert import debug_assert
 from std.collections import Dict, Optional
 from std.ffi import c_int, c_size_t, external_call, get_errno, ErrNo
 from std.os import getenv
-from std.memory import UnsafePointer, alloc, memcpy, stack_allocation
+from std.memory import UnsafePointer, alloc, unsafe_memcpy, stack_allocation
 from std.sys.info import CompilationTarget
 
 from flare.crypto.hmac import base64url_decode
@@ -358,11 +358,11 @@ struct ConnHandle(Movable):
                 var old_len = len(self.read_buf)
                 var got_int = Int(got)
                 self.read_buf.resize(old_len + got_int, UInt8(0))
-                var dst = self.read_buf.unsafe_ptr() + old_len
+                var dst = self.read_buf.unsafe_ptr().unsafe_offset(old_len)
                 # memcpy is substantially faster than a per-byte load/store
                 # loop here because ``chunk`` is stack-allocated and
                 # contiguous, and the copy is always <= 8KiB.
-                memcpy(dest=dst, src=chunk, count=got_int)
+                unsafe_memcpy(dest=dst, src=chunk, count=got_int)
                 if (
                     len(self.read_buf)
                     > config.max_header_size + config.max_body_size
@@ -585,8 +585,8 @@ struct ConnHandle(Movable):
             var old_len = len(self.read_buf)
             var add = len(bytes)
             self.read_buf.resize(old_len + add, UInt8(0))
-            var dst = self.read_buf.unsafe_ptr() + old_len
-            memcpy(dest=dst, src=bytes.unsafe_ptr(), count=add)
+            var dst = self.read_buf.unsafe_ptr().unsafe_offset(old_len)
+            unsafe_memcpy(dest=dst, src=bytes.unsafe_ptr(), count=add)
             if (
                 len(self.read_buf)
                 > config.max_header_size + config.max_body_size
@@ -711,7 +711,7 @@ struct ConnHandle(Movable):
                 var got_int = Int(got)
                 self.read_buf.resize(old_len + got_int, UInt8(0))
                 var dst = self.read_buf.unsafe_ptr() + old_len
-                memcpy(dest=dst, src=chunk, count=got_int)
+                unsafe_memcpy(dest=dst, src=chunk, count=got_int)
                 if (
                     len(self.read_buf)
                     > config.max_header_size + config.max_body_size
@@ -857,7 +857,7 @@ struct ConnHandle(Movable):
                 var got_int = Int(got)
                 self.read_buf.resize(old_len + got_int, UInt8(0))
                 var dst = self.read_buf.unsafe_ptr() + old_len
-                memcpy(dest=dst, src=chunk, count=got_int)
+                unsafe_memcpy(dest=dst, src=chunk, count=got_int)
                 if (
                     len(self.read_buf)
                     > config.max_header_size + config.max_body_size
@@ -990,8 +990,8 @@ struct ConnHandle(Movable):
                 var old_len = len(self.read_buf)
                 var got_int = Int(got)
                 self.read_buf.resize(old_len + got_int, UInt8(0))
-                var dst = self.read_buf.unsafe_ptr() + old_len
-                memcpy(dest=dst, src=chunk, count=got_int)
+                var dst = self.read_buf.unsafe_ptr().unsafe_offset(old_len)
+                unsafe_memcpy(dest=dst, src=chunk, count=got_int)
                 if (
                     len(self.read_buf)
                     > config.max_header_size + config.max_body_size
@@ -1082,7 +1082,7 @@ struct ConnHandle(Movable):
 
         while self.write_pos < len(self.write_buf):
             var remaining = len(self.write_buf) - self.write_pos
-            var ptr = self.write_buf.unsafe_ptr() + self.write_pos
+            var ptr = self.write_buf.unsafe_ptr().unsafe_offset(self.write_pos)
             var n = _send(
                 self.fd(), ptr, c_size_t(remaining), c_int(MSG_NOSIGNAL)
             )
@@ -1384,17 +1384,17 @@ struct ConnHandle(Movable):
             n = len(resp.keepalive_bytes)
         else:
             n = len(resp.close_bytes)
-        if self.write_buf.capacity < n:
+        if self.write_buf.capacity() < n:
             self.write_buf.reserve(n)
         self.write_buf.resize(n, UInt8(0))
         if keep_alive:
-            memcpy(
+            unsafe_memcpy(
                 dest=self.write_buf.unsafe_ptr(),
                 src=resp.keepalive_bytes.unsafe_ptr(),
                 count=n,
             )
         else:
-            memcpy(
+            unsafe_memcpy(
                 dest=self.write_buf.unsafe_ptr(),
                 src=resp.close_bytes.unsafe_ptr(),
                 count=n,
@@ -1420,7 +1420,7 @@ struct ConnHandle(Movable):
         # storage is idle. Avoids a per-request List allocation.
         self.write_buf.clear()
         self.write_pos = 0
-        if self.write_buf.capacity < estimated:
+        if self.write_buf.capacity() < estimated:
             self.write_buf.reserve(estimated)
         var wire = self.write_buf^
 
@@ -1458,8 +1458,8 @@ struct ConnHandle(Movable):
         _append_str(wire, "Date: ")
         var date_old_len = len(wire)
         wire.resize(date_old_len + len(date_bytes), UInt8(0))
-        memcpy(
-            dest=wire.unsafe_ptr() + date_old_len,
+        unsafe_memcpy(
+            dest=wire.unsafe_ptr().unsafe_offset(date_old_len),
             src=date_bytes.unsafe_ptr(),
             count=len(date_bytes),
         )
@@ -1477,8 +1477,8 @@ struct ConnHandle(Movable):
         if body_len > 0:
             var old = len(wire)
             wire.resize(old + body_len, UInt8(0))
-            memcpy(
-                dest=wire.unsafe_ptr() + old,
+            unsafe_memcpy(
+                dest=wire.unsafe_ptr().unsafe_offset(old),
                 src=resp.body.unsafe_ptr(),
                 count=body_len,
             )
@@ -1502,14 +1502,18 @@ def _monotonic_ms() -> Int:
     """
     var buf = stack_allocation[16, UInt8]()
     for i in range(16):
-        (buf + i).init_pointee_copy(UInt8(0))
-    _ = external_call["clock_gettime", c_int](c_int(1), buf.bitcast[NoneType]())
+        (buf.unsafe_offset(i)).unsafe_write(UInt8(0))
+    _ = external_call["clock_gettime", c_int](
+        c_int(1), buf.unsafe_bitcast[NoneType]()
+    )
     var sec: Int64 = 0
     var nsec: Int64 = 0
     for i in range(8):
-        sec |= Int64(Int((buf + i).load())) << Int64(8 * i)
+        sec |= Int64(Int((buf.unsafe_offset(i)).unsafe_load())) << Int64(8 * i)
     for i in range(8):
-        nsec |= Int64(Int((buf + 8 + i).load())) << Int64(8 * i)
+        nsec |= Int64(
+            Int((buf.unsafe_offset(8).unsafe_offset(i)).unsafe_load())
+        ) << Int64(8 * i)
     return Int(sec) * 1000 + Int(nsec) // 1_000_000
 
 
@@ -1527,10 +1531,10 @@ def _is_content_length(k: String) -> Bool:
     var target = "content-length"
     var t = target.unsafe_ptr()
     for i in range(14):
-        var c = p[i]
+        var c = p[unsafe_offset=i]
         if c >= 65 and c <= 90:
             c = c + 32
-        if c != t[i]:
+        if c != t[unsafe_offset=i]:
             return False
     return True
 
@@ -1552,10 +1556,10 @@ def _is_date(k: String) -> Bool:
     var target = "date"
     var t = target.unsafe_ptr()
     for i in range(4):
-        var c = p[i]
+        var c = p[unsafe_offset=i]
         if c >= 65 and c <= 90:
             c = c + 32
-        if c != t[i]:
+        if c != t[unsafe_offset=i]:
             return False
     return True
 
@@ -1581,16 +1585,16 @@ def _connection_is_keepalive(s: String) -> Bool:
         return False
     var p = s.unsafe_ptr()
     return (
-        p[0] == UInt8(ord("k"))
-        and p[1] == UInt8(ord("e"))
-        and p[2] == UInt8(ord("e"))
-        and p[3] == UInt8(ord("p"))
-        and p[4] == UInt8(ord("-"))
-        and p[5] == UInt8(ord("a"))
-        and p[6] == UInt8(ord("l"))
-        and p[7] == UInt8(ord("i"))
-        and p[8] == UInt8(ord("v"))
-        and p[9] == UInt8(ord("e"))
+        p[unsafe_offset=0] == UInt8(ord("k"))
+        and p[unsafe_offset=1] == UInt8(ord("e"))
+        and p[unsafe_offset=2] == UInt8(ord("e"))
+        and p[unsafe_offset=3] == UInt8(ord("p"))
+        and p[unsafe_offset=4] == UInt8(ord("-"))
+        and p[unsafe_offset=5] == UInt8(ord("a"))
+        and p[unsafe_offset=6] == UInt8(ord("l"))
+        and p[unsafe_offset=7] == UInt8(ord("i"))
+        and p[unsafe_offset=8] == UInt8(ord("v"))
+        and p[unsafe_offset=9] == UInt8(ord("e"))
     )
 
 
@@ -1607,14 +1611,14 @@ def _connection_is_close(s: String) -> Bool:
     if s.byte_length() != 5:
         return False
     var p = s.unsafe_ptr()
-    var c0 = p[0]
+    var c0 = p[unsafe_offset=0]
     if c0 != UInt8(ord("c")) and c0 != UInt8(ord("C")):
         return False
     return (
-        p[1] == UInt8(ord("l"))
-        and p[2] == UInt8(ord("o"))
-        and p[3] == UInt8(ord("s"))
-        and p[4] == UInt8(ord("e"))
+        p[unsafe_offset=1] == UInt8(ord("l"))
+        and p[unsafe_offset=2] == UInt8(ord("o"))
+        and p[unsafe_offset=3] == UInt8(ord("s"))
+        and p[unsafe_offset=4] == UInt8(ord("e"))
     )
 
 
@@ -1657,9 +1661,9 @@ def _compact_read_buf_drop_prefix(
     # replaces the O(N) per-byte append loop with a single memcpy.
     var leftover = List[UInt8](capacity=keep)
     leftover.resize(keep, UInt8(0))
-    memcpy(
+    unsafe_memcpy(
         dest=leftover.unsafe_ptr(),
-        src=read_buf.unsafe_ptr() + drop_n,
+        src=read_buf.unsafe_ptr().unsafe_offset(drop_n),
         count=keep,
     )
     read_buf = leftover^
@@ -1732,7 +1736,7 @@ def _wants_close(data: List[UInt8], header_end: Int) -> Bool:
             break
         var is_match = True
         for j in range(hn):
-            if data[i + j] != hp[j]:
+            if data[i + j] != hp[unsafe_offset=j]:
                 is_match = False
                 break
         if is_match:
@@ -1752,7 +1756,7 @@ def _wants_close(data: List[UInt8], header_end: Int) -> Bool:
             var c = data[i + j]
             if c >= 65 and c <= 90:
                 c = c + 32
-            if c != np[j]:
+            if c != np[unsafe_offset=j]:
                 found = False
                 break
         if found:
@@ -1771,7 +1775,7 @@ def _wants_close(data: List[UInt8], header_end: Int) -> Bool:
                     var c = data[pos + j]
                     if c >= 65 and c <= 90:
                         c = c + 32
-                    if c != UInt8(ord("close"[j])):
+                    if c != UInt8(ord("close"[byte=j])):
                         ck = False
                         break
                 if ck:
@@ -1782,7 +1786,7 @@ def _wants_close(data: List[UInt8], header_end: Int) -> Bool:
                     var c = data[pos + j]
                     if c >= 65 and c <= 90:
                         c = c + 32
-                    if c != UInt8(ord("keep-alive"[j])):
+                    if c != UInt8(ord("keep-alive"[byte=j])):
                         ck2 = False
                         break
                 if ck2:
@@ -1805,10 +1809,10 @@ def _is_connection(k: String) -> Bool:
     var target = "connection"
     var t = target.unsafe_ptr()
     for i in range(10):
-        var c = p[i]
+        var c = p[unsafe_offset=i]
         if c >= 65 and c <= 90:
             c = c + 32
-        if c != t[i]:
+        if c != t[unsafe_offset=i]:
             return False
     return True
 
@@ -1840,7 +1844,7 @@ def _conn_ptr_from_int(
     """Reverse of ``_conn_alloc_addr``: reconstruct a typed pointer."""
     return UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=addr
-    ).bitcast[ConnHandle]()
+    ).unsafe_bitcast[ConnHandle]()
 
 
 def _apply_step(
@@ -3193,7 +3197,7 @@ def _alloc_recv_buffer_pool() raises -> Int:
     # slot (e.g. dump-on-error) shouldn't trip on uninitialised
     # memory.
     for i in range(size):
-        (raw + i).init_pointee_copy(UInt8(0))
+        (raw.unsafe_offset(i)).unsafe_write(UInt8(0))
     return Int(raw)
 
 
@@ -3202,7 +3206,7 @@ def _free_recv_buffer_pool(addr: Int):
     if addr == 0:
         return
     var p = UnsafePointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)
-    p.free()
+    p.unsafe_free()
 
 
 def _cleanup_conn_uring_br(
@@ -3293,7 +3297,7 @@ def _drive_handler_with_submit_send[
                 # whole thing once.
                 var empty_buf = stack_allocation[1, UInt8]()
                 last_step = ch_ptr[].on_readable_from_buf(
-                    Span[UInt8, _](ptr=empty_buf, length=0),
+                    Span[UInt8, _](unsafe_ptr=empty_buf, length=0),
                     handler,
                     config,
                 )
@@ -3309,7 +3313,11 @@ def _drive_handler_with_submit_send[
             and ch_ptr[].state == STATE_WRITING
             and len(ch_ptr[].write_buf) > ch_ptr[].write_pos
         ):
-            var write_ptr = ch_ptr[].write_buf.unsafe_ptr() + ch_ptr[].write_pos
+            var write_ptr = (
+                ch_ptr[]
+                .write_buf.unsafe_ptr()
+                .unsafe_offset(ch_ptr[].write_pos)
+            )
             var write_len = len(ch_ptr[].write_buf) - ch_ptr[].write_pos
             try:
                 ureactor.submit_send(fd, write_ptr, write_len, conn_id)
@@ -3359,7 +3367,7 @@ def _on_send_cqe_complete[
         return _drive_handler_with_submit_send[H](
             fd,
             conn_id,
-            Span[UInt8, _](ptr=empty_buf, length=0),
+            Span[UInt8, _](unsafe_ptr=empty_buf, length=0),
             config,
             handler,
             ch_ptr,
@@ -3405,7 +3413,7 @@ def _drive_handler_after_buf_recv[
                 # be a use-after-free).
                 var empty_buf = stack_allocation[1, UInt8]()
                 last_step = ch_ptr[].on_readable_from_buf(
-                    Span[UInt8, _](ptr=empty_buf, length=0),
+                    Span[UInt8, _](unsafe_ptr=empty_buf, length=0),
                     handler,
                     config,
                 )
@@ -3595,7 +3603,7 @@ def run_uring_bufring_reactor_loop[
             var pool_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=pool_addr
             )
-            var buf = pool_ptr + (bid * _URING_BR_BUF_SIZE)
+            var buf = pool_ptr.unsafe_offset((bid * _URING_BR_BUF_SIZE))
             var ch_ptr = _conn_ptr_from_int(conns[conn_id])
 
             # Mojo 1.0.0b1 destructor-reorder fix: stage the kernel
@@ -3611,7 +3619,7 @@ def run_uring_bufring_reactor_loop[
             # us recycle the kernel slot immediately.
             ch_ptr[].read_buf.reserve(len(ch_ptr[].read_buf) + n)
             for i in range(n):
-                ch_ptr[].read_buf.append((buf + i).load())
+                ch_ptr[].read_buf.append((buf.unsafe_offset(i)).unsafe_load())
 
             # Recycle the buffer back into the ring (SQE-free).
             var cur_tail = _pbuf_ring_get_tail(ring_addr)
@@ -3633,7 +3641,7 @@ def run_uring_bufring_reactor_loop[
             # recycled) kernel pool slot.
             var step_done = False
             var empty_buf = stack_allocation[1, UInt8]()
-            var empty_span = Span[UInt8, _](ptr=empty_buf, length=0)
+            var empty_span = Span[UInt8, _](unsafe_ptr=empty_buf, length=0)
             if submit_send:
                 if not ch_ptr[].send_in_flight:
                     step_done = _drive_handler_with_submit_send[H](
@@ -3818,7 +3826,7 @@ def run_uring_bufring_reactor_loop_shared[
             var pool_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=pool_addr
             )
-            var buf = pool_ptr + (bid * _URING_BR_BUF_SIZE)
+            var buf = pool_ptr.unsafe_offset((bid * _URING_BR_BUF_SIZE))
             var ch_ptr = _conn_ptr_from_int(conns[conn_id])
 
             # Stage the kernel bytes into the conn's ``read_buf``
@@ -3827,7 +3835,7 @@ def run_uring_bufring_reactor_loop_shared[
             # single-worker variant for the full rationale).
             ch_ptr[].read_buf.reserve(len(ch_ptr[].read_buf) + n)
             for i in range(n):
-                ch_ptr[].read_buf.append((buf + i).load())
+                ch_ptr[].read_buf.append((buf.unsafe_offset(i)).unsafe_load())
 
             # Re-fill via shared-memory tail bump (PBUF_RING).
             var cur_tail = _pbuf_ring_get_tail(ring_addr)
@@ -3844,7 +3852,7 @@ def run_uring_bufring_reactor_loop_shared[
 
             var step_done = False
             var empty_buf = stack_allocation[1, UInt8]()
-            var empty_span = Span[UInt8, _](ptr=empty_buf, length=0)
+            var empty_span = Span[UInt8, _](unsafe_ptr=empty_buf, length=0)
             if submit_send:
                 if not ch_ptr[].send_in_flight:
                     step_done = _drive_handler_with_submit_send[H](

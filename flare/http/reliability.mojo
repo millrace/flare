@@ -269,6 +269,6 @@ struct PostHocDeadline[Inner: Handler & Copyable & Defaultable](
         var start = perf_counter_ns()
         var resp = self.inner.serve(req)
         var elapsed_ms = (perf_counter_ns() - start) // 1_000_000
-        if elapsed_ms > UInt(self.budget_ms):
+        if elapsed_ms > self.budget_ms:
             return Response(status=504, reason=String("Gateway Timeout"))
         return resp^

@@ -14,7 +14,7 @@ Covers:
 """
 
 from std.testing import assert_equal, assert_true, assert_false
-from std.memory import Span
+from std.collections import Span
 
 from flare.h3 import (
     H3FrameType,
