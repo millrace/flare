@@ -44,7 +44,7 @@ References:
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 
 from .crypto import (
     OpenSslQuicCrypto,
@@ -191,6 +191,11 @@ def unprotect_initial_packet(
         truncated_pn, pn_length, largest_received_pn
     )
     var ciphertext_start = pn_offset + pn_length
+    if ciphertext_start > packet_end:
+        raise Error(
+            "unprotect_initial: packet-number length overruns the"
+            " declared payload length"
+        )
     var ciphertext = datagram[ciphertext_start:packet_end]
     var plaintext = crypto.decrypt(
         ciphertext, Span[UInt8, _](header), packet_number
@@ -343,6 +348,11 @@ def unprotect_handshake_packet(
         truncated_pn, pn_length, largest_received_pn
     )
     var ciphertext_start = pn_offset + pn_length
+    if ciphertext_start > packet_end:
+        raise Error(
+            "unprotect_handshake: packet-number length overruns the"
+            " declared payload length"
+        )
     var ciphertext = datagram[ciphertext_start:packet_end]
     var plaintext = crypto.decrypt(
         ciphertext, Span[UInt8, _](header), packet_number

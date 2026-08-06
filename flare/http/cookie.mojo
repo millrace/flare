@@ -13,6 +13,7 @@ Example:
     ```
 """
 
+from std.collections.span import Span
 from std.format import Writable, Writer
 
 
@@ -204,13 +205,19 @@ def parse_set_cookie_header(header: String) -> Cookie:
         var attr = String(
             String(unsafe_from_utf8=header.as_bytes()[pos:attr_end]).strip()
         )
-        var attr_lower = String(capacity=attr.byte_length())
+        # Lowercase byte-for-byte (not via chr(), which re-encodes bytes
+        # >= 128 as multi-byte UTF-8 and desyncs attr_lower's byte length
+        # from attr's -- attr_eq below must stay a valid index into attr).
+        var attr_lower_bytes = List[UInt8](capacity=attr.byte_length())
         for i in range(attr.byte_length()):
             var c = attr.unsafe_ptr()[i]
             if c >= 65 and c <= 90:
-                attr_lower += chr(Int(c) + 32)
+                attr_lower_bytes.append(c + 32)
             else:
-                attr_lower += chr(Int(c))
+                attr_lower_bytes.append(c)
+        var attr_lower = String(
+            unsafe_from_utf8=Span[UInt8, _](attr_lower_bytes)
+        )
 
         # Check for attribute=value pairs
         var attr_eq = -1
