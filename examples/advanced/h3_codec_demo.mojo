@@ -42,7 +42,7 @@ this entry point.
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.http3 import (
     H3_FRAME_TYPE_DATA,

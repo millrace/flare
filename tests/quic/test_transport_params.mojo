@@ -9,7 +9,7 @@ silent drop, and the per-parameter validation thresholds (RFC
 """
 
 from std.testing import assert_equal, assert_true, assert_false
-from std.memory import Span
+from std.collections.span import Span
 from std.collections import Optional
 
 from flare.quic import (

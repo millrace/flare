@@ -72,7 +72,8 @@ References:
 # Planned decomposition tracks the same struct-method-split language support
 # as the listener. Allowlisted in tools/check_reactor_size.sh until then.
 from std.collections import Dict, List, Optional
-from std.memory import Span, UnsafePointer
+from std.memory import UnsafePointer
+from std.collections.span import Span
 
 from ..net.address import IpAddr, SocketAddr
 from ..udp import UdpSocket

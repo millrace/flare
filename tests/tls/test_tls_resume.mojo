@@ -40,6 +40,7 @@ from std.testing import TestSuite, assert_equal, assert_false, assert_true
 
 from flare.net.socket import _find_flare_lib
 from flare.tls import TlsConfig, TlsSession, TlsStream
+from flare.utils.dylib import dl_sym
 from flare.utils import (
     SIGKILL,
     exit,
@@ -72,9 +73,9 @@ struct _TlsTestServer:
 
     def __init__(out self, cert: String, key: String, ca: String = "") raises:
         self._lib = OwnedDLHandle(_find_flare_lib())
-        var fn_new = self._lib.get_function[
-            def(Int, Int, Int, c_int) thin abi("C") -> Int
-        ]("flare_test_server_new")
+        var fn_new = dl_sym[def(Int, Int, Int, c_int) thin abi("C") -> Int](
+            self._lib, "flare_test_server_new"
+        )
         var ca_int = _c_str(ca) if ca != "" else 0
         self._ptr = fn_new(_c_str(cert), _c_str(key), ca_int, c_int(0))
         if self._ptr == 0:
@@ -82,21 +83,24 @@ struct _TlsTestServer:
 
     def __del__(deinit self):
         if self._ptr != 0:
-            var fn_free = self._lib.get_function[
-                def(Int) thin abi("C") -> None
-            ]("flare_test_server_free")
-            fn_free(self._ptr)
+            try:
+                var fn_free = dl_sym[def(Int) thin abi("C") -> None](
+                    self._lib, "flare_test_server_free"
+                )
+                fn_free(self._ptr)
+            except:
+                pass
 
     def port(self) raises -> Int:
-        var fn_port = self._lib.get_function[def(Int) thin abi("C") -> c_int](
-            "flare_test_server_port"
+        var fn_port = dl_sym[def(Int) thin abi("C") -> c_int](
+            self._lib, "flare_test_server_port"
         )
         return Int(fn_port(self._ptr))
 
     def echo_n(self, n: Int) raises:
-        var fn_n = self._lib.get_function[
-            def(Int, c_int) thin abi("C") -> c_int
-        ]("flare_test_server_echo_n")
+        var fn_n = dl_sym[def(Int, c_int) thin abi("C") -> c_int](
+            self._lib, "flare_test_server_echo_n"
+        )
         _ = fn_n(self._ptr, c_int(n))
 
 

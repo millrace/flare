@@ -77,7 +77,7 @@ def test_box_move_frees_once() raises:
 def test_frame_chunk_hex_len() raises:
     var buf = List[UInt8]()
     var one = List[UInt8]()
-    one.append(ord("a"))
+    one.append(UInt8(ord("a")))
     frame_chunk_into(buf, one)
     assert_equal(_to_str(buf), "1\r\na\r\n")
 
@@ -96,14 +96,14 @@ def test_frame_chunk_large_hex() raises:
     var buf = List[UInt8]()
     var c255 = List[UInt8]()
     for _ in range(255):
-        c255.append(ord("z"))
+        c255.append(UInt8(ord("z")))
     frame_chunk_into(buf, c255)
     assert_true(_to_str(buf).startswith("ff\r\n"))
 
     var buf2 = List[UInt8]()
     var c4096 = List[UInt8]()
     for _ in range(4096):
-        c4096.append(ord("y"))
+        c4096.append(UInt8(ord("y")))
     frame_chunk_into(buf2, c4096)
     assert_true(_to_str(buf2).startswith("1000\r\n"))
 

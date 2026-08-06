@@ -35,6 +35,7 @@ from ..net.socket import RawSocket, AF_INET, SOCK_STREAM
 from ..net.address import IpAddr
 from ..net._libc import INVALID_FD
 from ..dns import resolve
+from ..utils.dylib import dl_sym
 
 # RFC 6455 §1.3 magic GUID concatenated with the Sec-WebSocket-Key for SHA-1
 comptime _WS_GUID: String = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -67,8 +68,8 @@ struct WsHandshakeError(Copyable, Movable, Writable):
 
 def _do_sha1(
     read lib: OwnedDLHandle, data_bytes: Span[UInt8, _]
-) -> List[UInt8]:
-    """Invoke SHA-1 with ``lib`` borrowed across both ``get_function``
+) raises -> List[UInt8]:
+    """Invoke SHA-1 with ``lib`` borrowed across both the symbol lookup
     and the call.
 
     Args:
@@ -79,9 +80,7 @@ def _do_sha1(
         20-byte SHA-1 digest.
     """
     # SHA1(const unsigned char *d, size_t n, unsigned char *md) -> unsigned char*
-    var fn_sha1 = lib.get_function[def(Int, Int, Int) thin abi("C") -> Int](
-        "SHA1"
-    )
+    var fn_sha1 = dl_sym[def(Int, Int, Int) thin abi("C") -> Int](lib, "SHA1")
     var digest_buf = List[UInt8](capacity=_SHA1_LEN)
     digest_buf.resize(_SHA1_LEN, 0)
     _ = fn_sha1(

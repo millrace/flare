@@ -606,7 +606,7 @@ struct StreamConn(Movable):
         single-connection driver."""
         if self.out_pos < len(self.out_buf):
             var rem = Span[UInt8, _](
-                ptr=self.out_buf.unsafe_ptr() + self.out_pos,
+                unsafe_ptr=self.out_buf.unsafe_ptr() + self.out_pos,
                 length=len(self.out_buf) - self.out_pos,
             )
             self.client.write_all(rem)

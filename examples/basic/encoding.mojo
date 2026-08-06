@@ -148,9 +148,12 @@ def main() raises:
         _ = decompress_gzip(Span[UInt8, _](garbage))
         print(" ERROR: expected an error for invalid gzip data")
     except e:
+        var msg = String(e)
         print(
             " ✓ decompress_gzip raised on garbage input:",
-            String(unsafe_from_utf8=String(e).as_bytes()[:40]),
+            String(
+                unsafe_from_utf8=msg.as_bytes()[: min(40, msg.byte_length())]
+            ),
         )
     print()
 

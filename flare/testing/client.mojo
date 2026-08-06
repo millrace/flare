@@ -25,7 +25,7 @@ test needs.
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.http.handler import Handler
 from flare.http.headers import HeaderMap

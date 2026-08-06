@@ -457,7 +457,7 @@ def _wants_close(data: List[UInt8], header_end: Int) -> Bool:
                     var c = data[pos + j]
                     if c >= 65 and c <= 90:
                         c = c + 32
-                    if c != UInt8(ord("close"[j])):
+                    if c != UInt8(ord("close"[byte=j])):
                         ck = False
                         break
                 if ck:
@@ -468,7 +468,7 @@ def _wants_close(data: List[UInt8], header_end: Int) -> Bool:
                     var c = data[pos + j]
                     if c >= 65 and c <= 90:
                         c = c + 32
-                    if c != UInt8(ord("keep-alive"[j])):
+                    if c != UInt8(ord("keep-alive"[byte=j])):
                         ck2 = False
                         break
                 if ck2:

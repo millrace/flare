@@ -54,7 +54,8 @@ References:
 """
 
 from std.collections import Dict, List, Optional
-from std.memory import ArcPointer, Span
+from std.memory import ArcPointer
+from std.collections.span import Span
 
 from flare.http3.frame import (
     H3_FRAME_TYPE_GOAWAY,

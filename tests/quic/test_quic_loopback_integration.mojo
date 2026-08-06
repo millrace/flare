@@ -46,7 +46,7 @@ configured idle window and asserting the slot's ``alive`` flag
 flips False + the CID is retired from the routing table.
 """
 
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_false, assert_true
 
 from flare.net import IpAddr, SocketAddr

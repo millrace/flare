@@ -43,7 +43,7 @@ References:
 # functions. Allowlisted in tools/check_reactor_size.sh until then.
 
 from std.collections import Dict, List
-from std.memory import Span
+from std.collections.span import Span
 from std.os import getenv
 
 from ..net.address import IpAddr, SocketAddr
@@ -1667,10 +1667,15 @@ struct QuicListener(Movable):
             tp_blob = _encode_server_transport_params(self.config, local_cid)
         except:
             return _SessionSlot(handle=0)
-        var handle = _do_accept(
-            self.tls_acceptor._lib, self.tls_acceptor._opaque_handle, tp_blob
-        )
-        return _SessionSlot(handle=handle)
+        try:
+            var handle = _do_accept(
+                self.tls_acceptor._lib,
+                self.tls_acceptor._opaque_handle,
+                tp_blob,
+            )
+            return _SessionSlot(handle=handle)
+        except:
+            return _SessionSlot(handle=0)
 
     def tick(mut self, timeout_ms: Int = 100) raises -> Bool:
         """Drain a burst of inbound datagrams and pump egress.

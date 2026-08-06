@@ -321,7 +321,10 @@ struct RustlsQuicAcceptor(Movable):
 
     def __del__(deinit self):
         if self._opaque_handle != 0:
-            _do_acceptor_free(self._lib, self._opaque_handle)
+            try:
+                _do_acceptor_free(self._lib, self._opaque_handle)
+            except:
+                pass
 
     def free_session(self, handle: Int):
         """Release a per-connection rustls session previously
@@ -334,7 +337,10 @@ struct RustlsQuicAcceptor(Movable):
         ``self.tls_acceptor._lib`` (which Mojo's ``deinit``
         ordering rule forbids).
         """
-        _do_session_free(self._lib, handle)
+        try:
+            _do_session_free(self._lib, handle)
+        except:
+            pass
 
     def accept(self, dst_cid: List[UInt8]) raises -> RustlsQuicSession:
         """Create a new per-connection session bound to the
@@ -468,13 +474,19 @@ struct RustlsQuicConnector(Movable):
 
     def __del__(deinit self):
         if self._opaque_handle != 0:
-            _do_connector_free(self._lib, self._opaque_handle)
+            try:
+                _do_connector_free(self._lib, self._opaque_handle)
+            except:
+                pass
 
     def free_session(self, handle: Int):
         """Release a per-connection session through the connector's
         pinned library handle (mirror of
         :meth:`RustlsQuicAcceptor.free_session`). NULL is a no-op."""
-        _do_session_free(self._lib, handle)
+        try:
+            _do_session_free(self._lib, handle)
+        except:
+            pass
 
     def connect(
         self,
@@ -611,7 +623,10 @@ struct RustlsQuicSession(Movable):
 
     def __del__(deinit self):
         if self._opaque_session_handle != 0:
-            _do_session_free(self._lib, self._opaque_session_handle)
+            try:
+                _do_session_free(self._lib, self._opaque_session_handle)
+            except:
+                pass
 
     def feed_crypto(mut self, level: Int, data: List[UInt8]) raises:
         """Feed inbound CRYPTO frame bytes at ``level``.
@@ -664,7 +679,12 @@ struct RustlsQuicSession(Movable):
         """Whether the 1-RTT keys are derived. Returns False on a
         NULL session (test path) or while handshaking; True after
         rustls flips into the application-keyed state."""
-        return _do_is_handshake_complete(self._lib, self._opaque_session_handle)
+        try:
+            return _do_is_handshake_complete(
+                self._lib, self._opaque_session_handle
+            )
+        except:
+            return False
 
     def selected_alpn(self) raises -> String:
         """ALPN identifier the rustls side picked.
@@ -719,7 +739,13 @@ struct RustlsQuicSession(Movable):
         """
         if self._opaque_session_handle == 0:
             return False
-        return _do_have_keys(self._lib, self._opaque_session_handle, level) == 1
+        try:
+            return (
+                _do_have_keys(self._lib, self._opaque_session_handle, level)
+                == 1
+            )
+        except:
+            return False
 
     def install_early_keys(self) -> Bool:
         """Capture rustls's 0-RTT (EarlyData) keys into the session,
@@ -739,9 +765,13 @@ struct RustlsQuicSession(Movable):
         """
         if self._opaque_session_handle == 0:
             return False
-        return (
-            _do_install_early_keys(self._lib, self._opaque_session_handle) == 1
-        )
+        try:
+            return (
+                _do_install_early_keys(self._lib, self._opaque_session_handle)
+                == 1
+            )
+        except:
+            return False
 
     def is_early_data_accepted(self) -> Bool:
         """Whether the server signalled it will process the client's
@@ -753,10 +783,15 @@ struct RustlsQuicSession(Movable):
         """
         if self._opaque_session_handle == 0:
             return False
-        return (
-            _do_is_early_data_accepted(self._lib, self._opaque_session_handle)
-            == 1
-        )
+        try:
+            return (
+                _do_is_early_data_accepted(
+                    self._lib, self._opaque_session_handle
+                )
+                == 1
+            )
+        except:
+            return False
 
     def packet_encrypt(
         self,

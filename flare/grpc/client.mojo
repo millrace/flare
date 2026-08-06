@@ -24,7 +24,7 @@ if reply.is_ok():
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 
 from ..crypto.base64 import base64_encode
 from ..http.client import HttpClient

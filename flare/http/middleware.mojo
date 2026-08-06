@@ -34,7 +34,7 @@ from .encoding import (
 from .handler import Handler
 from .request import Request
 from .response import Response
-from ..utils.dylib import find_flare_lib
+from ..utils.dylib import find_flare_lib, dl_sym
 
 
 # ── Logger ─────────────────────────────────────────────────────────────────
@@ -283,7 +283,7 @@ def _brotli_available() -> Bool:
     return _file_exists(find_flare_lib("brotli"))
 
 
-def _flare_fs_access(read lib: OwnedDLHandle, addr: Int) -> c_int:
+def _flare_fs_access(read lib: OwnedDLHandle, addr: Int) raises -> c_int:
     """Invoke ``flare_fs_access`` while ``lib`` is borrowed by the caller.
 
     Taking ``lib`` as ``read`` ties the dylib's lifetime to the caller's
@@ -295,8 +295,8 @@ def _flare_fs_access(read lib: OwnedDLHandle, addr: Int) -> c_int:
     and the cached pointer dangles into unmapped memory by the time we
     call it.
     """
-    var fn_access = lib.get_function[def(Int) thin abi("C") -> c_int](
-        "flare_fs_access"
+    var fn_access = dl_sym[def(Int) thin abi("C") -> c_int](
+        lib, "flare_fs_access"
     )
     return fn_access(addr)
 

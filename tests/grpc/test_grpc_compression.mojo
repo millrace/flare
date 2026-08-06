@@ -1,7 +1,7 @@
 """Tests for gRPC message compression negotiation (gzip)."""
 
 from std.collections import Optional
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_true, TestSuite
 
 from flare.grpc.framing import decode_grpc_message, encode_grpc_message

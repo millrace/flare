@@ -18,7 +18,7 @@ defensive pattern is documented at length in
 from std.collections import List
 from std.ffi import OwnedDLHandle, c_int, CStringSlice
 
-from ..utils.dylib import find_flare_lib
+from ..utils.dylib import find_flare_lib, dl_sym
 
 
 def _find_rustls_quic_lib() -> String:
@@ -65,7 +65,7 @@ def _do_acceptor_new(
     read key_pem: List[UInt8],
     read alpn_wire: List[UInt8],
     max_early_data: UInt32,
-) -> Int:
+) raises -> Int:
     """Call ``flare_rustls_quic_acceptor_new`` and return the
     ``Box<Acceptor>*`` as an ``Int``. Zero on failure (read
     :func:`_do_last_error` for the reason).
@@ -75,9 +75,9 @@ def _do_acceptor_new(
     a TLS1.3 ticketer and sets the RFC-9001 0xffffffff QUIC early-data
     window on the rustls ServerConfig.
     """
-    var f = lib.get_function[
+    var f = dl_sym[
         def(Int, Int, Int, Int, Int, Int, UInt32) thin abi("C") -> Int
-    ]("flare_rustls_quic_acceptor_new")
+    ](lib, "flare_rustls_quic_acceptor_new")
     return f(
         Int(cert_pem.unsafe_ptr()),
         len(cert_pem),
@@ -89,14 +89,14 @@ def _do_acceptor_new(
     )
 
 
-def _do_acceptor_free(read lib: OwnedDLHandle, handle: Int):
+def _do_acceptor_free(read lib: OwnedDLHandle, handle: Int) raises:
     """Free an acceptor allocated by :func:`_do_acceptor_new`.
     NULL handle is a no-op (so the destructor is safe to call on
     a zero-initialised carrier whose construction failed)."""
     if handle == 0:
         return
-    var f = lib.get_function[def(Int) thin abi("C") -> None](
-        "flare_rustls_quic_acceptor_free"
+    var f = dl_sym[def(Int) thin abi("C") -> None](
+        lib, "flare_rustls_quic_acceptor_free"
     )
     f(handle)
 
@@ -106,12 +106,12 @@ def _do_acceptor_free(read lib: OwnedDLHandle, handle: Int):
 
 def _do_accept(
     read lib: OwnedDLHandle, acceptor: Int, read transport_params: List[UInt8]
-) -> Int:
+) raises -> Int:
     """Call ``flare_rustls_quic_accept`` to construct a fresh
     per-connection session. Returns the ``Box<Session>*`` as
     ``Int``; zero on failure (read :func:`_do_last_error`)."""
-    var f = lib.get_function[def(Int, Int, Int) thin abi("C") -> Int](
-        "flare_rustls_quic_accept"
+    var f = dl_sym[def(Int, Int, Int) thin abi("C") -> Int](
+        lib, "flare_rustls_quic_accept"
     )
     return f(
         acceptor,
@@ -120,13 +120,13 @@ def _do_accept(
     )
 
 
-def _do_session_free(read lib: OwnedDLHandle, handle: Int):
+def _do_session_free(read lib: OwnedDLHandle, handle: Int) raises:
     """Free a session allocated by :func:`_do_accept`. NULL is a
     no-op."""
     if handle == 0:
         return
-    var f = lib.get_function[def(Int) thin abi("C") -> None](
-        "flare_rustls_quic_session_free"
+    var f = dl_sym[def(Int) thin abi("C") -> None](
+        lib, "flare_rustls_quic_session_free"
     )
     f(handle)
 
@@ -138,14 +138,14 @@ def _do_connector_new(
     read lib: OwnedDLHandle,
     read ca_pem: List[UInt8],
     read alpn_wire: List[UInt8],
-) -> Int:
+) raises -> Int:
     """Call ``flare_rustls_quic_connector_new`` and return the
     ``Box<Connector>*`` as an ``Int``. Zero on failure (read
     :func:`_do_last_error` for the reason). The client-role mirror
     of :func:`_do_acceptor_new`.
     """
-    var f = lib.get_function[def(Int, Int, Int, Int) thin abi("C") -> Int](
-        "flare_rustls_quic_connector_new"
+    var f = dl_sym[def(Int, Int, Int, Int) thin abi("C") -> Int](
+        lib, "flare_rustls_quic_connector_new"
     )
     return f(
         Int(ca_pem.unsafe_ptr()),
@@ -158,13 +158,13 @@ def _do_connector_new(
 def _do_connector_new_native_roots(
     read lib: OwnedDLHandle,
     read alpn_wire: List[UInt8],
-) -> Int:
+) raises -> Int:
     """Call ``flare_rustls_quic_connector_new_native_roots`` and
     return the ``Box<Connector>*`` as an ``Int``. Zero on failure
     (read :func:`_do_last_error` for the reason). Builds a connector
     trusting the OS CA bundle (loaded via rustls-native-certs)."""
-    var f = lib.get_function[def(Int, Int) thin abi("C") -> Int](
-        "flare_rustls_quic_connector_new_native_roots"
+    var f = dl_sym[def(Int, Int) thin abi("C") -> Int](
+        lib, "flare_rustls_quic_connector_new_native_roots"
     )
     return f(
         Int(alpn_wire.unsafe_ptr()),
@@ -172,13 +172,13 @@ def _do_connector_new_native_roots(
     )
 
 
-def _do_connector_free(read lib: OwnedDLHandle, handle: Int):
+def _do_connector_free(read lib: OwnedDLHandle, handle: Int) raises:
     """Free a connector allocated by :func:`_do_connector_new`.
     NULL handle is a no-op."""
     if handle == 0:
         return
-    var f = lib.get_function[def(Int) thin abi("C") -> None](
-        "flare_rustls_quic_connector_free"
+    var f = dl_sym[def(Int) thin abi("C") -> None](
+        lib, "flare_rustls_quic_connector_free"
     )
     f(handle)
 
@@ -188,13 +188,13 @@ def _do_connect(
     connector: Int,
     read server_name: List[UInt8],
     read transport_params: List[UInt8],
-) -> Int:
+) raises -> Int:
     """Call ``flare_rustls_quic_connect`` to construct a fresh
     client-role per-connection session for ``server_name`` (SNI).
     Returns the ``Box<Session>*`` as ``Int``; zero on failure
     (read :func:`_do_last_error`)."""
-    var f = lib.get_function[def(Int, Int, Int, Int, Int) thin abi("C") -> Int](
-        "flare_rustls_quic_connect"
+    var f = dl_sym[def(Int, Int, Int, Int, Int) thin abi("C") -> Int](
+        lib, "flare_rustls_quic_connect"
     )
     return f(
         connector,
@@ -210,12 +210,12 @@ def _do_connect(
 
 def _do_feed_crypto(
     read lib: OwnedDLHandle, session: Int, level: Int, read data: List[UInt8]
-) -> Int:
+) raises -> Int:
     """Push inbound CRYPTO frame bytes into the rustls handshake
     state machine. Returns 0 on success, -1 on bad pointer, -2 on
     a rustls protocol error (read :func:`_do_last_error`)."""
-    var f = lib.get_function[def(Int, c_int, Int, Int) thin abi("C") -> c_int](
-        "flare_rustls_quic_feed_crypto"
+    var f = dl_sym[def(Int, c_int, Int, Int) thin abi("C") -> c_int](
+        lib, "flare_rustls_quic_feed_crypto"
     )
     return Int(f(session, c_int(level), Int(data.unsafe_ptr()), len(data)))
 
@@ -271,7 +271,7 @@ def _take_crypto_call(
     mut out_buf: List[UInt8],
     cap: Int,
     written_addr: Int,
-) -> Int:
+) raises -> Int:
     """Inner one-shot helper: route the FFI thunk through a
     ``read lib`` borrow so Mojo's ASAP destructor cannot unmap
     the .so between the symbol resolution and the call.
@@ -280,9 +280,9 @@ def _take_crypto_call(
     ``Int`` cell that the FFI writes back the actual byte count
     copied into ``out_buf``.
     """
-    var f = lib.get_function[
-        def(Int, c_int, Int, Int, Int) thin abi("C") -> c_int
-    ]("flare_rustls_quic_take_crypto")
+    var f = dl_sym[def(Int, c_int, Int, Int, Int) thin abi("C") -> c_int](
+        lib, "flare_rustls_quic_take_crypto"
+    )
     return Int(
         f(
             session,
@@ -294,14 +294,16 @@ def _take_crypto_call(
     )
 
 
-def _do_is_handshake_complete(read lib: OwnedDLHandle, session: Int) -> Bool:
+def _do_is_handshake_complete(
+    read lib: OwnedDLHandle, session: Int
+) raises -> Bool:
     """``flare_rustls_quic_is_handshake_complete`` returns 1 once
     the 1-RTT keys are derived, 0 while still handshaking, -1 on
     NULL session (treated as "not complete" by callers)."""
     if session == 0:
         return False
-    var f = lib.get_function[def(Int) thin abi("C") -> c_int](
-        "flare_rustls_quic_is_handshake_complete"
+    var f = dl_sym[def(Int) thin abi("C") -> c_int](
+        lib, "flare_rustls_quic_is_handshake_complete"
     )
     return Int(f(session)) == 1
 
@@ -315,8 +317,8 @@ def _do_alpn(read lib: OwnedDLHandle, session: Int) raises -> String:
             " session handle is zero -- typically because the"
             " acceptor failed to construct with the supplied PEM)"
         )
-    var f = lib.get_function[def(Int, Int, Int, Int) thin abi("C") -> c_int](
-        "flare_rustls_quic_alpn"
+    var f = dl_sym[def(Int, Int, Int, Int) thin abi("C") -> c_int](
+        lib, "flare_rustls_quic_alpn"
     )
     var buf = List[UInt8](capacity=256)
     for _ in range(256):
@@ -360,8 +362,8 @@ def _do_peer_transport_params(
     """
     if session == 0:
         raise Error("flare_rustls_quic_peer_transport_params: NULL session")
-    var f = lib.get_function[def(Int, Int, Int, Int) thin abi("C") -> c_int](
-        "flare_rustls_quic_peer_transport_params"
+    var f = dl_sym[def(Int, Int, Int, Int) thin abi("C") -> c_int](
+        lib, "flare_rustls_quic_peer_transport_params"
     )
     var cap = 1024
     var buf = List[UInt8](capacity=cap)
@@ -384,7 +386,9 @@ def _do_peer_transport_params(
 # ── Per-level AEAD + header protection ─────────────────────────────────────
 
 
-def _do_have_keys(read lib: OwnedDLHandle, session: Int, level: Int) -> Int:
+def _do_have_keys(
+    read lib: OwnedDLHandle, session: Int, level: Int
+) raises -> Int:
     """``flare_rustls_quic_have_keys``: 1 if rustls has installed
     keys at ``level``, 0 otherwise, -1 on bad pointer / level out
     of range.
@@ -399,13 +403,13 @@ def _do_have_keys(read lib: OwnedDLHandle, session: Int, level: Int) -> Int:
     """
     if session == 0:
         return -1
-    var f = lib.get_function[def(Int, c_int) thin abi("C") -> c_int](
-        "flare_rustls_quic_have_keys"
+    var f = dl_sym[def(Int, c_int) thin abi("C") -> c_int](
+        lib, "flare_rustls_quic_have_keys"
     )
     return Int(f(session, c_int(level)))
 
 
-def _do_install_early_keys(read lib: OwnedDLHandle, session: Int) -> Int:
+def _do_install_early_keys(read lib: OwnedDLHandle, session: Int) raises -> Int:
     """``flare_rustls_quic_install_early_keys``: capture rustls's
     0-RTT (EarlyData) ``DirectionalKeys`` into the session's slot.
 
@@ -416,21 +420,23 @@ def _do_install_early_keys(read lib: OwnedDLHandle, session: Int) -> Int:
     """
     if session == 0:
         return -1
-    var f = lib.get_function[def(Int) thin abi("C") -> c_int](
-        "flare_rustls_quic_install_early_keys"
+    var f = dl_sym[def(Int) thin abi("C") -> c_int](
+        lib, "flare_rustls_quic_install_early_keys"
     )
     return Int(f(session))
 
 
-def _do_is_early_data_accepted(read lib: OwnedDLHandle, session: Int) -> Int:
+def _do_is_early_data_accepted(
+    read lib: OwnedDLHandle, session: Int
+) raises -> Int:
     """``flare_rustls_quic_is_early_data_accepted``: 1 if the server
     accepted the client's 0-RTT data, 0 if not (or not a resumed
     client), -1 on a NULL session. Client-role only; the server
     side always returns 0."""
     if session == 0:
         return -1
-    var f = lib.get_function[def(Int) thin abi("C") -> c_int](
-        "flare_rustls_quic_is_early_data_accepted"
+    var f = dl_sym[def(Int) thin abi("C") -> c_int](
+        lib, "flare_rustls_quic_is_early_data_accepted"
     )
     return Int(f(session))
 
@@ -454,11 +460,11 @@ def _do_packet_encrypt(
     Raises if the FFI returns a non-zero code: rustls error
     text is in :func:`_do_last_error`.
     """
-    var f = lib.get_function[
+    var f = dl_sym[
         def(
             Int, c_int, UInt64, Int, Int, Int, Int, Int, Int, Int
         ) thin abi("C") -> c_int
-    ]("flare_rustls_quic_packet_encrypt")
+    ](lib, "flare_rustls_quic_packet_encrypt")
     var tag = List[UInt8](capacity=16)
     for _ in range(16):
         tag.append(UInt8(0))
@@ -508,9 +514,9 @@ def _do_packet_decrypt(
     Raises if rustls rejects the tag (the typical "wrong keys at
     this level" symptom).
     """
-    var f = lib.get_function[
+    var f = dl_sym[
         def(Int, c_int, UInt64, Int, Int, Int, Int, Int) thin abi("C") -> c_int
-    ]("flare_rustls_quic_packet_decrypt")
+    ](lib, "flare_rustls_quic_packet_decrypt")
     var plaintext_len: Int = 0
     # Keep the pointer in a named variable across the FFI call:
     # a throwaway ``Int(UnsafePointer(to=...))`` temporary lets the
@@ -559,9 +565,9 @@ def _do_header_encrypt(
     Int) so the caller can keep the byte cells on the stack and
     let rustls write through.
     """
-    var f = lib.get_function[
+    var f = dl_sym[
         def(Int, c_int, Int, Int, Int, Int, Int) thin abi("C") -> c_int
-    ]("flare_rustls_quic_header_encrypt")
+    ](lib, "flare_rustls_quic_header_encrypt")
     var rc = Int(
         f(
             session,
@@ -593,9 +599,9 @@ def _do_header_decrypt(
     bytes using rustls's ``Keys.remote.header.decrypt_in_place``.
     Same sample contract as :func:`_do_header_encrypt`.
     """
-    var f = lib.get_function[
+    var f = dl_sym[
         def(Int, c_int, Int, Int, Int, Int, Int) thin abi("C") -> c_int
-    ]("flare_rustls_quic_header_decrypt")
+    ](lib, "flare_rustls_quic_header_decrypt")
     var rc = Int(
         f(
             session,
@@ -613,14 +619,14 @@ def _do_header_decrypt(
         )
 
 
-def _do_last_error(read lib: OwnedDLHandle) -> String:
+def _do_last_error(read lib: OwnedDLHandle) raises -> String:
     """Read the thread-local last-error message set by the
     rustls FFI. Returns an empty string when no message is
     recorded.
     """
-    var f = lib.get_function[
+    var f = dl_sym[
         def() thin abi("C") -> UnsafePointer[UInt8, MutUntrackedOrigin]
-    ]("flare_rustls_quic_last_error")
+    ](lib, "flare_rustls_quic_last_error")
     var p = f()
     return String(
         StringSlice(

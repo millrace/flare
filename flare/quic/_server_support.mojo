@@ -16,7 +16,8 @@ References:
 
 from std.collections import List
 from std.ffi import c_int, external_call
-from std.memory import Span, stack_allocation
+from std.memory import stack_allocation
+from std.collections.span import Span
 from std.os import getenv
 from std.sys.info import CompilationTarget
 

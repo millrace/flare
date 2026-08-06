@@ -33,7 +33,7 @@ Run:
 """
 
 from mozz import fuzz, FuzzConfig
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.quic.crypto import (
     OpenSslQuicCrypto,

@@ -79,8 +79,8 @@ def new_session_id(n_bytes: Int = 32) raises -> String:
     comptime digits = "0123456789abcdef"
     for i in range(n_bytes):
         var b = Int(raw[i])
-        hex += digits[(b >> 4) & 0xF]
-        hex += digits[b & 0xF]
+        hex += digits[byte=(b >> 4) & 0xF]
+        hex += digits[byte=b & 0xF]
     return hex^
 
 

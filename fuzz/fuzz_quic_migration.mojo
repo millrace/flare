@@ -40,7 +40,7 @@ from flare.quic.state import (
     handle_frame_buf,
     new_connection,
 )
-from std.memory import Span
+from std.collections.span import Span
 
 
 def _bytes(s: StringLiteral) -> List[UInt8]:

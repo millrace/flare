@@ -38,7 +38,7 @@ from std.ffi import (
 )
 from std.memory import UnsafePointer
 
-from ..utils.dylib import find_flare_lib
+from ..utils.dylib import find_flare_lib, dl_sym
 
 
 def _find_flare_lib_for_io() -> String:
@@ -99,12 +99,12 @@ struct FlareRawIO(Movable):
                 ``_find_flare_lib_for_io``) or any symbol is missing.
         """
         self._lib = OwnedDLHandle(_find_flare_lib_for_io())
-        self._read = self._lib.get_function[
+        self._read = dl_sym[
             def(c_int, Int, c_size_t) thin abi("C") -> c_ssize_t
-        ]("flare_read")
-        self._write = self._lib.get_function[
+        ](self._lib, "flare_read")
+        self._write = dl_sym[
             def(c_int, Int, c_size_t) thin abi("C") -> c_ssize_t
-        ]("flare_write")
+        ](self._lib, "flare_write")
 
     @always_inline
     def read(
@@ -162,9 +162,9 @@ def _do_read_fd(
     call it. The ``read`` parameter keeps ``lib`` alive across the
     ``fn_r(...)`` call so ASAP doesn't ``dlclose`` it mid-helper.
     """
-    var fn_r = lib.get_function[
-        def(c_int, Int, c_size_t) thin abi("C") -> c_ssize_t
-    ]("flare_read")
+    var fn_r = dl_sym[def(c_int, Int, c_size_t) thin abi("C") -> c_ssize_t](
+        lib, "flare_read"
+    )
     return fn_r(fd, Int(buf), n)
 
 
@@ -177,9 +177,9 @@ def _do_write_fd(
     """Inner helper: resolve ``flare_write`` on the borrowed ``lib``
     and call it. See ``_do_read_fd`` for the borrow rationale.
     """
-    var fn_w = lib.get_function[
-        def(c_int, Int, c_size_t) thin abi("C") -> c_ssize_t
-    ]("flare_write")
+    var fn_w = dl_sym[def(c_int, Int, c_size_t) thin abi("C") -> c_ssize_t](
+        lib, "flare_write"
+    )
     return fn_w(fd, Int(buf), n)
 
 

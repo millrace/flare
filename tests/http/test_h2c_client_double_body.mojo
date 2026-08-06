@@ -10,7 +10,7 @@ fed each recv chunk into the in-process HTTP/2 decoder via
 scheduling, so the heap could re-publish the slot to the same
 ``read`` call's next iteration -- doubling the response body the
 next time the loop appended into ``buf``. Fixed by feeding via
-``Span[UInt8, _](ptr=buf.unsafe_ptr(), length=n)`` so the
+``Span[UInt8, _](unsafe_ptr=buf.unsafe_ptr(), length=n)`` so the
 lifetime is the named ``buf``, which lives across the loop.
 
 This regression fixture pins the fix:
@@ -69,8 +69,8 @@ def test_post_body_not_doubled() raises:
     assert_true(not raised, "h2c-upgrade POST raised")
     assert_equal(got_body, "POST:12")
     assert_equal(
-        len(got_body),
-        len("POST:12"),
+        got_body.byte_length(),
+        "POST:12".byte_length(),
         (
             "h2c response body length must equal expected; doubling"
             " regression would yield twice this length"
@@ -99,7 +99,7 @@ def test_get_response_length_invariant() raises:
 
     kill_forked_server(pid)
     assert_true(not raised, "h2c-upgrade GET raised")
-    assert_equal(len(got_body), 64, "body length must be 64 bytes")
+    assert_equal(got_body.byte_length(), 64, "body length must be 64 bytes")
     assert_true(
         got_body.startswith("0123456789abcdef"),
         "body content must start with the handler's prefix",

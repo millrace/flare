@@ -54,7 +54,7 @@ References:
 """
 
 from std.collections import List, Optional
-from std.memory import Span
+from std.collections.span import Span
 
 from .varint import (
     Varint,

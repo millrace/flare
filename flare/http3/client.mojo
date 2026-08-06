@@ -42,7 +42,7 @@ and FIN fires only once every byte up to the final offset arrived.
 """
 
 from std.collections import Dict, List, Optional
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.qpack import QpackHeader
 from flare.quic.client import QuicClientConnection

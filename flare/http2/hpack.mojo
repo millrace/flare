@@ -418,7 +418,7 @@ struct HpackEncoder(Copyable, Defaultable, Movable):
         var n = s.byte_length()
         var src = s.unsafe_ptr()
         if self.allow_huffman and n > 0:
-            var src_span = Span[UInt8, origin_of(s)](ptr=src, length=n)
+            var src_span = Span[UInt8, origin_of(s)](unsafe_ptr=src, length=n)
             var hlen = huffman_encoded_length(src_span)
             if hlen < n:
                 encode_integer(out_buf, hlen, 7, UInt8(0x80))  # H=1

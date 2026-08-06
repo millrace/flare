@@ -126,7 +126,10 @@ struct TlsConnHandle(Movable):
     def __del__(deinit self):
         """Free the ``SSL`` (fd close is the moved-in stream's job)."""
         if self.ssl_addr != 0:
-            _do_ssl_free(self._lib, self.ssl_addr)
+            try:
+                _do_ssl_free(self._lib, self.ssl_addr)
+            except:
+                pass
 
     @always_inline
     def fd(self) -> c_int:

@@ -34,7 +34,7 @@ Public API surface:
 from std.os import getenv
 from std.ffi import OwnedDLHandle, c_int
 
-from ..utils.dylib import find_flare_lib
+from ..utils.dylib import find_flare_lib, dl_sym
 
 
 comptime DEFAULT_MAX_DECOMPRESSED_BYTES: Int = 16 * 1024 * 1024
@@ -107,9 +107,9 @@ def _do_decompress(
     Raises:
         Error: If zlib reports a non-recoverable error.
     """
-    var fn_decomp = lib.get_function[
+    var fn_decomp = dl_sym[
         def(Int, c_int, Int, c_int, c_int) thin abi("C") -> c_int
-    ]("flare_decompress")
+    ](lib, "flare_decompress")
 
     var cap = max(len(data) * 4, 4096)
     if cap > max_out:
@@ -190,9 +190,9 @@ def _do_decompress_deflate(
     Raises:
         Error: If neither zlib-wrapped nor raw deflate succeeds.
     """
-    var fn_decomp = lib.get_function[
-        def(Int, c_int, Int, c_int) thin abi("C") -> c_int
-    ]("flare_decompress_deflate")
+    var fn_decomp = dl_sym[def(Int, c_int, Int, c_int) thin abi("C") -> c_int](
+        lib, "flare_decompress_deflate"
+    )
 
     var cap = max(len(data) * 4, 4096)
     if cap > max_out:
@@ -268,9 +268,9 @@ def _do_compress(
     Raises:
         Error: If compression fails.
     """
-    var fn_comp = lib.get_function[
+    var fn_comp = dl_sym[
         def(Int, c_int, Int, c_int, c_int) thin abi("C") -> c_int
-    ]("flare_compress_gzip")
+    ](lib, "flare_compress_gzip")
 
     # Worst-case gzip overhead: ~18 bytes header/trailer + 0.1% + 12 bytes.
     var cap = len(data) + (len(data) >> 10) + 32
@@ -419,9 +419,9 @@ def _do_compress_brotli(
     Raises:
         Error: If the FFI call fails or the output buffer cannot be grown.
     """
-    var fn_comp = lib.get_function[
-        def(Int, Int, Int, Int, c_int) thin abi("C") -> c_int
-    ]("flare_brotli_compress")
+    var fn_comp = dl_sym[def(Int, Int, Int, Int, c_int) thin abi("C") -> c_int](
+        lib, "flare_brotli_compress"
+    )
     var cap = max(len(data) * 2 + 64, 1024)
     while True:
         var out = List[UInt8](capacity=cap)
@@ -486,9 +486,9 @@ def _do_decompress_brotli(
     Raises:
         Error: If the FFI call fails or the input is not valid brotli.
     """
-    var fn_dec = lib.get_function[
-        def(Int, Int, Int, Int) thin abi("C") -> c_int
-    ]("flare_brotli_decompress")
+    var fn_dec = dl_sym[def(Int, Int, Int, Int) thin abi("C") -> c_int](
+        lib, "flare_brotli_decompress"
+    )
     var cap = max(len(data) * 8, 4096)
     if cap > max_out:
         cap = max_out

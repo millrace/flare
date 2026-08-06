@@ -625,7 +625,7 @@ def _drive_handler_with_submit_send[
                 # whole thing once.
                 var empty_buf = stack_allocation[1, UInt8]()
                 last_step = ch_ptr[].on_readable_from_buf(
-                    Span[UInt8, _](ptr=empty_buf, length=0),
+                    Span[UInt8, _](unsafe_ptr=empty_buf, length=0),
                     handler,
                     config,
                 )
@@ -691,7 +691,7 @@ def _on_send_cqe_complete[
         return _drive_handler_with_submit_send[H](
             fd,
             conn_id,
-            Span[UInt8, _](ptr=empty_buf, length=0),
+            Span[UInt8, _](unsafe_ptr=empty_buf, length=0),
             config,
             handler,
             ch_ptr,
@@ -737,7 +737,7 @@ def _drive_handler_after_buf_recv[
                 # be a use-after-free).
                 var empty_buf = stack_allocation[1, UInt8]()
                 last_step = ch_ptr[].on_readable_from_buf(
-                    Span[UInt8, _](ptr=empty_buf, length=0),
+                    Span[UInt8, _](unsafe_ptr=empty_buf, length=0),
                     handler,
                     config,
                 )
@@ -943,7 +943,7 @@ def run_uring_bufring_reactor_loop_shared[
 
             var step_done = False
             var empty_buf = stack_allocation[1, UInt8]()
-            var empty_span = Span[UInt8, _](ptr=empty_buf, length=0)
+            var empty_span = Span[UInt8, _](unsafe_ptr=empty_buf, length=0)
             if submit_send:
                 if not ch_ptr[].send_in_flight:
                     step_done = _drive_handler_with_submit_send[H](

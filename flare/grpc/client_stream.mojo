@@ -23,7 +23,7 @@ streaming path).
 """
 
 from std.collections import List, Optional
-from std.memory import Span
+from std.collections.span import Span
 from std.time import perf_counter_ns
 
 from flare.http.handler import Handler

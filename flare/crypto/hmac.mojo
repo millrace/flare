@@ -24,6 +24,7 @@ from std.ffi import c_int, OwnedDLHandle
 from std.memory import UnsafePointer
 
 from ..net.socket import _find_flare_lib
+from ..utils.dylib import dl_sym
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -51,9 +52,9 @@ def _do_hmac_sha256(
     msg: List[UInt8],
     mut out: List[UInt8],
 ) raises:
-    var fn_hmac = lib.get_function[
-        def(Int, Int, Int, Int, Int) thin abi("C") -> c_int
-    ]("flare_hmac_sha256")
+    var fn_hmac = dl_sym[def(Int, Int, Int, Int, Int) thin abi("C") -> c_int](
+        lib, "flare_hmac_sha256"
+    )
     var rc = fn_hmac(
         Int(key.unsafe_ptr()),
         len(key),
@@ -92,9 +93,9 @@ def _do_hmac_sha256_verify(
     msg: List[UInt8],
     mac: List[UInt8],
 ) raises -> Bool:
-    var fn_v = lib.get_function[
-        def(Int, Int, Int, Int, Int) thin abi("C") -> c_int
-    ]("flare_hmac_sha256_verify")
+    var fn_v = dl_sym[def(Int, Int, Int, Int, Int) thin abi("C") -> c_int](
+        lib, "flare_hmac_sha256_verify"
+    )
     var rc = fn_v(
         Int(key.unsafe_ptr()),
         len(key),

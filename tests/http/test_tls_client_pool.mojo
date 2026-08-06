@@ -30,6 +30,7 @@ from flare.net.socket import _find_flare_lib
 from flare.tls import TlsConfig, TlsStream
 from flare.http._client.tls_pool import TlsConnectionPool
 from flare.utils import SIGKILL, exit, fork, kill, usleep, waitpid
+from flare.utils.dylib import dl_sym
 
 
 comptime _CA_CRT: String = "tests/certs/ca.crt"
@@ -51,9 +52,9 @@ struct _TlsEchoServer:
 
     def __init__(out self) raises:
         self._lib = OwnedDLHandle(_find_flare_lib())
-        var fn_new = self._lib.get_function[
-            def(Int, Int, Int, c_int) thin abi("C") -> Int
-        ]("flare_test_server_new")
+        var fn_new = dl_sym[def(Int, Int, Int, c_int) thin abi("C") -> Int](
+            self._lib, "flare_test_server_new"
+        )
         self._ptr = fn_new(
             _c_str(_SERVER_CRT), _c_str(_SERVER_KEY), 0, c_int(0)
         )
@@ -62,21 +63,24 @@ struct _TlsEchoServer:
 
     def __del__(deinit self):
         if self._ptr != 0:
-            var fn_free = self._lib.get_function[
-                def(Int) thin abi("C") -> None
-            ]("flare_test_server_free")
-            fn_free(self._ptr)
+            try:
+                var fn_free = dl_sym[def(Int) thin abi("C") -> None](
+                    self._lib, "flare_test_server_free"
+                )
+                fn_free(self._ptr)
+            except:
+                pass
 
     def port(self) raises -> Int:
-        var fn_port = self._lib.get_function[def(Int) thin abi("C") -> c_int](
-            "flare_test_server_port"
+        var fn_port = dl_sym[def(Int) thin abi("C") -> c_int](
+            self._lib, "flare_test_server_port"
         )
         return Int(fn_port(self._ptr))
 
     def echo_n(self, n: Int) raises:
-        var fn_n = self._lib.get_function[
-            def(Int, c_int) thin abi("C") -> c_int
-        ]("flare_test_server_echo_n")
+        var fn_n = dl_sym[def(Int, c_int) thin abi("C") -> c_int](
+            self._lib, "flare_test_server_echo_n"
+        )
         _ = fn_n(self._ptr, c_int(n))
 
 

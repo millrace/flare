@@ -24,7 +24,7 @@ QUIC connection state machine wraps inside
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.quic import (
     AckFrame,

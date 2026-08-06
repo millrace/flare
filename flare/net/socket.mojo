@@ -34,7 +34,7 @@ from .error import (
     BrokenPipe,
     AddressParseError,
 )
-from ..utils.dylib import find_flare_lib
+from ..utils.dylib import find_flare_lib, dl_sym
 from ._libc import (
     AF_INET,
     AF_INET6,
@@ -96,14 +96,14 @@ def _find_flare_lib() -> String:
 
 def _do_flare_set_nonblocking(
     read lib: OwnedDLHandle, fd: c_int, enable: c_int
-) -> c_int:
+) raises -> c_int:
     """Invoke ``flare_set_nonblocking`` with ``lib`` borrowed across both
-    ``get_function`` and the call (macOS path only). See the OwnedDLHandle /
+    the symbol lookup and the call (macOS path only). See the OwnedDLHandle /
     ASAP-destruction discussion in ``flare/tls/stream.mojo`` for why the
     borrow is required.
     """
-    var fn_nb = lib.get_function[def(c_int, c_int) thin abi("C") -> c_int](
-        "flare_set_nonblocking"
+    var fn_nb = dl_sym[def(c_int, c_int) thin abi("C") -> c_int](
+        lib, "flare_set_nonblocking"
     )
     return fn_nb(fd, enable)
 

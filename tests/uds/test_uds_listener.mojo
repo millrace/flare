@@ -46,7 +46,7 @@ def _tmp_uds_path(suffix: String) raises -> String:
 def _maybe_unlink(path: String) raises:
     """Best-effort unlink; ignore if the file's already gone."""
     try:
-        os.path.remove(path)
+        os.remove(path)
     except:
         pass
 

@@ -59,7 +59,7 @@ References
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 
 from .varint import (
     Varint,

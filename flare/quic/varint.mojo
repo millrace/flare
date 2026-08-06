@@ -27,7 +27,7 @@ References:
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 
 
 comptime VARINT_MAX: Int = (1 << 62) - 1

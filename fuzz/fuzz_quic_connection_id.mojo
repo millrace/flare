@@ -83,7 +83,7 @@ def target(data: List[UInt8]) raises:
         "cid_to_hex must be deterministic on a single CID",
     )
     _assert(
-        len(hex_a) == length * 2,
+        hex_a.byte_length() == length * 2,
         "cid_to_hex must emit exactly 2 hex chars per CID byte",
     )
 
@@ -115,7 +115,7 @@ def target(data: List[UInt8]) raises:
     # Bonus: empty CID short-circuits to an empty string.
     var empty = ConnectionId(bytes=List[UInt8]())
     _assert(
-        len(cid_to_hex(empty)) == 0,
+        cid_to_hex(empty).byte_length() == 0,
         "zero-length CID hex must be the empty string",
     )
 

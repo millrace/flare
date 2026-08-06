@@ -26,7 +26,8 @@ without leaking a transport type parameter through the public API.
 """
 
 from std.collections import List, Optional
-from std.memory import Span, UnsafePointer
+from std.memory import UnsafePointer
+from std.collections.span import Span
 
 from ..http2.client import Http2ClientConnection
 from ..http2.hpack import HpackHeader
@@ -180,7 +181,7 @@ struct GrpcServerStream(Movable):
         var n = self._t.read(buf.unsafe_ptr(), _READ_BUF_SIZE)
         if n == 0:
             return False
-        self._conn.feed(Span[UInt8, _](ptr=buf.unsafe_ptr(), length=n))
+        self._conn.feed(Span[UInt8, _](unsafe_ptr=buf.unsafe_ptr(), length=n))
         var ack = self._conn.drain()
         if len(ack) > 0:
             self._t.write_all(Span[UInt8, _](ack))
@@ -313,7 +314,7 @@ struct GrpcBidiStream(Movable):
         var n = self._t.read(buf.unsafe_ptr(), _READ_BUF_SIZE)
         if n == 0:
             return False
-        self._conn.feed(Span[UInt8, _](ptr=buf.unsafe_ptr(), length=n))
+        self._conn.feed(Span[UInt8, _](unsafe_ptr=buf.unsafe_ptr(), length=n))
         var ack = self._conn.drain()
         if len(ack) > 0:
             self._t.write_all(Span[UInt8, _](ack))

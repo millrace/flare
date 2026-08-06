@@ -18,7 +18,7 @@ link.
 from std.ffi import OwnedDLHandle, c_int
 from std.testing import assert_equal, assert_true
 
-from flare.utils.dylib import find_flare_lib
+from flare.utils.dylib import find_flare_lib, dl_sym
 
 
 def _find_rustls_lib() -> String:
@@ -33,7 +33,7 @@ def _find_rustls_lib() -> String:
     return find_flare_lib("rustls_quic")
 
 
-def _call_abi_version(read lib: OwnedDLHandle) -> Int:
+def _call_abi_version(read lib: OwnedDLHandle) raises -> Int:
     """Wrap the FFI thunk in a `read lib` function so Mojo's ASAP
     destructor doesn't unmap the .so between `get_function` and the
     actual call (the same defensive pattern documented in
@@ -41,8 +41,8 @@ def _call_abi_version(read lib: OwnedDLHandle) -> Int:
     binding -- without the borrow, the .so is destroyed at the
     last-use point of `lib` and the function pointer becomes
     unmapped before invocation)."""
-    var ver_fn = lib.get_function[def() thin abi("C") -> Int](
-        "flare_rustls_quic_abi_version"
+    var ver_fn = dl_sym[def() thin abi("C") -> Int](
+        lib, "flare_rustls_quic_abi_version"
     )
     return ver_fn()
 
@@ -55,13 +55,13 @@ def _call_acceptor_new(
     key_len: Int,
     alpn_ptr: Int,
     alpn_len: Int,
-) -> Int:
+) raises -> Int:
     """`read lib` wrapper for `flare_rustls_quic_acceptor_new`; see
     `_call_abi_version` for why the borrow is required. The trailing
     0 is the ABI-4 ``max_early_data`` arg (0 = 1-RTT only)."""
-    var new_fn = lib.get_function[
+    var new_fn = dl_sym[
         def(Int, Int, Int, Int, Int, Int, UInt32) thin abi("C") -> Int
-    ]("flare_rustls_quic_acceptor_new")
+    ](lib, "flare_rustls_quic_acceptor_new")
     return new_fn(
         cert_ptr, cert_len, key_ptr, key_len, alpn_ptr, alpn_len, UInt32(0)
     )

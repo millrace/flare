@@ -20,7 +20,7 @@ keep resolving unchanged.
 """
 
 from std.collections import Dict, List, Optional
-from std.memory import Span
+from std.collections.span import Span
 
 from ._server_0rtt import EarlyDataReplayGuard
 from .crypto import QuicAead

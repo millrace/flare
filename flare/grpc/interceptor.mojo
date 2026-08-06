@@ -23,7 +23,7 @@ runs last (standard onion ordering).
 """
 
 from std.collections import Optional
-from std.memory import Span
+from std.collections.span import Span
 
 from .server import GrpcCallContext, GrpcUnary, GrpcUnaryReply
 

@@ -20,7 +20,7 @@ The flare H2 server carries ``grpc-status`` in the response header set
 arrived as an initial header or a trailing HEADERS frame.
 """
 
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_true
 
 from flare.grpc import (
@@ -48,7 +48,7 @@ def _decode_all(body: List[UInt8]) raises -> List[List[UInt8]]:
     var pos = 0
     while pos + 5 <= len(body):
         var sub = Span[UInt8, _](
-            ptr=body.unsafe_ptr() + pos, length=len(body) - pos
+            unsafe_ptr=body.unsafe_ptr() + pos, length=len(body) - pos
         )
         var dec = decode_grpc_message(sub)
         if dec.needs_more:

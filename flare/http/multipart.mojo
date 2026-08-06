@@ -133,10 +133,10 @@ def _extract_boundary(content_type: String) raises -> String:
             )
         return String(unsafe_from_utf8=content_type.as_bytes()[start + 1 : end])
     var boundary = String(unsafe_from_utf8=content_type.as_bytes()[start:end])
-    boundary = String(boundary.strip())
-    if boundary.byte_length() == 0:
+    var trimmed = String(boundary.strip())
+    if trimmed.byte_length() == 0:
         raise Error("multipart: empty boundary parameter")
-    return boundary^
+    return trimmed^
 
 
 def _parse_disposition_param(disp: String, name: String) -> String:

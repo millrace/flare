@@ -30,7 +30,7 @@ handler.
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.grpc import (
     GRPC_STATUS_OK,

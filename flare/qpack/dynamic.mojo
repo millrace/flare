@@ -44,7 +44,7 @@ References: RFC 9204 sections 2-4; RFC 7541 Appendix B (Huffman).
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.http2.hpack import (
     HpackHeader as QpackHeader,

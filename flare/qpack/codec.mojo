@@ -48,7 +48,7 @@ References:
 """
 
 from std.collections import Dict, List
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.http.proto.ascii import ascii_unchecked_string
 from flare.http2.hpack import (

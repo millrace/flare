@@ -150,7 +150,7 @@ def main() raises:
     ws.append(UInt8(0x1))  # method = CONNECT
     ws.append(UInt8(9))  # plen
     for i in range(9):
-        ws.append(UInt8(ord("websocket"[i])))
+        ws.append(UInt8(ord("websocket"[byte=i])))
     seeds.append(ws^)
     # CONNECT + :protocol but server didn't enable it.
     var off = List[UInt8]()
@@ -159,7 +159,7 @@ def main() raises:
     off.append(UInt8(0x1))
     off.append(UInt8(9))
     for i in range(9):
-        off.append(UInt8(ord("websocket"[i])))
+        off.append(UInt8(ord("websocket"[byte=i])))
     seeds.append(off^)
     # Plain GET, no :protocol.
     seeds.append(_seed(1, 0x0F, 0x0, 0))

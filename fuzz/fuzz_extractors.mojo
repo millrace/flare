@@ -65,7 +65,12 @@ def _to_ascii(data: List[UInt8], start: Int, end: Int) -> String:
     var out = String(capacity=n)
     for i in range(start, end):
         var b = data[i]
-        if b >= 32 and b < 127 and b != Int(ord("?")) and b != Int(ord("#")):
+        if (
+            b >= 32
+            and b < 127
+            and b != UInt8(ord("?"))
+            and b != UInt8(ord("#"))
+        ):
             out += chr(Int(b))
         else:
             out += "_"

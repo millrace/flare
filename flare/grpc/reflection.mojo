@@ -28,7 +28,7 @@ References:
 """
 
 from std.collections import Dict, List
-from std.memory import Span
+from std.collections.span import Span
 
 from .client_stream import GrpcBidiStreaming
 from .proto import ProtoReader, ProtoWriter, WIRE_LEN

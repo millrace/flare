@@ -60,7 +60,7 @@ def b64_length(data: List[UInt8]) -> Bool:
     var n = len(data)
     var expected = ((n + 2) // 3) * 4
     var encoded = _b64_encode(Span[UInt8, _](data))
-    return len(encoded) == expected
+    return encoded.byte_length() == expected
 
 
 def _bytes_to_ascii(data: List[UInt8], start: Int, end: Int) -> String:

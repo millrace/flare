@@ -45,7 +45,8 @@ References:
 """
 
 from std.collections import List
-from std.memory import ArcPointer, Span
+from std.memory import ArcPointer
+from std.collections.span import Span
 
 from flare.qpack import QpackHeader
 from flare.qpack.dynamic import QpackDynamicTable, decode_field_section_dynamic

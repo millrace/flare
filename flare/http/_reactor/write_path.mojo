@@ -124,7 +124,7 @@ def serialize_static_into(
         n = len(resp.keepalive_bytes)
     else:
         n = len(resp.close_bytes)
-    if write_buf.capacity < n:
+    if write_buf.capacity() < n:
         write_buf.reserve(n)
     write_buf.resize(n, UInt8(0))
     if keep_alive:

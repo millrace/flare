@@ -1,6 +1,6 @@
 """Tests for gRPC server reflection (list_services + error path)."""
 
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_true, TestSuite
 
 from flare.grpc import GrpcCallContext, GrpcMetadata

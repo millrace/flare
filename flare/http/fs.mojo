@@ -29,7 +29,7 @@ from std.os import getenv
 from .handler import Handler
 from .request import Request
 from .response import Response
-from ..utils.dylib import find_flare_lib
+from ..utils.dylib import find_flare_lib, dl_sym
 
 
 # ── libflare_fs.so bindings ────────────────────────────────────────────
@@ -67,9 +67,9 @@ def _cstr(path: String) -> List[UInt8]:
     return buf^
 
 
-def _fs_open_rdonly(lib: OwnedDLHandle, path: String) -> Int:
-    var fn_open = lib.get_function[def(Int) thin abi("C") -> c_int](
-        "flare_fs_open_rdonly"
+def _fs_open_rdonly(lib: OwnedDLHandle, path: String) raises -> Int:
+    var fn_open = dl_sym[def(Int) thin abi("C") -> c_int](
+        lib, "flare_fs_open_rdonly"
     )
     var c = _cstr(path)
     var addr = Int(c.unsafe_ptr())
@@ -78,26 +78,24 @@ def _fs_open_rdonly(lib: OwnedDLHandle, path: String) -> Int:
     return rc
 
 
-def _fs_close(lib: OwnedDLHandle, fd: Int):
-    var fn_close = lib.get_function[def(c_int) thin abi("C") -> c_int](
-        "flare_fs_close"
+def _fs_close(lib: OwnedDLHandle, fd: Int) raises:
+    var fn_close = dl_sym[def(c_int) thin abi("C") -> c_int](
+        lib, "flare_fs_close"
     )
     _ = fn_close(c_int(fd))
 
 
 def _fs_pread(
     lib: OwnedDLHandle, fd: Int, buf_addr: Int, n: Int, offset: Int
-) -> Int:
-    var fn_read = lib.get_function[
-        def(c_int, Int, Int, Int64) thin abi("C") -> Int64
-    ]("flare_fs_pread")
+) raises -> Int:
+    var fn_read = dl_sym[def(c_int, Int, Int, Int64) thin abi("C") -> Int64](
+        lib, "flare_fs_pread"
+    )
     return Int(fn_read(c_int(fd), buf_addr, n, Int64(offset)))
 
 
-def _fs_size(lib: OwnedDLHandle, path: String) -> Int:
-    var fn_size = lib.get_function[def(Int) thin abi("C") -> Int64](
-        "flare_fs_size"
-    )
+def _fs_size(lib: OwnedDLHandle, path: String) raises -> Int:
+    var fn_size = dl_sym[def(Int) thin abi("C") -> Int64](lib, "flare_fs_size")
     var c = _cstr(path)
     var addr = Int(c.unsafe_ptr())
     var rc = Int(fn_size(addr))

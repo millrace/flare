@@ -25,6 +25,7 @@ from std.ffi import OwnedDLHandle, c_int
 from std.testing import assert_equal, assert_not_equal
 
 from flare.net.socket import _find_flare_lib
+from flare.utils.dylib import dl_sym
 
 
 comptime HP_AES_128: Int = 1
@@ -60,9 +61,9 @@ def _do_mask(
     sample: List[UInt8],
     mut out: List[UInt8],
 ) raises:
-    var mask_fn = lib.get_function[
-        def(c_int, Int, Int, Int, Int) thin abi("C") -> c_int
-    ]("flare_quic_hp_mask")
+    var mask_fn = dl_sym[def(c_int, Int, Int, Int, Int) thin abi("C") -> c_int](
+        lib, "flare_quic_hp_mask"
+    )
     var rc = mask_fn(
         c_int(cipher_id),
         Int(hp_key.unsafe_ptr()),

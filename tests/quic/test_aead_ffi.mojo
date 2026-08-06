@@ -24,6 +24,7 @@ from std.ffi import OwnedDLHandle, c_int
 from std.testing import assert_equal, assert_true
 
 from flare.net.socket import _find_flare_lib
+from flare.utils.dylib import dl_sym
 
 
 comptime AEAD_AES_128_GCM: Int = 1
@@ -39,9 +40,9 @@ def _do_build_nonce(
     pn: UInt64,
     mut out: List[UInt8],
 ) raises:
-    var nonce_fn = lib.get_function[
-        def(Int, UInt64, Int) thin abi("C") -> c_int
-    ]("flare_quic_aead_build_nonce")
+    var nonce_fn = dl_sym[def(Int, UInt64, Int) thin abi("C") -> c_int](
+        lib, "flare_quic_aead_build_nonce"
+    )
     var rc = nonce_fn(Int(iv.unsafe_ptr()), pn, Int(out.unsafe_ptr()))
     if Int(rc) != 0:
         raise Error("flare_quic_aead_build_nonce: FFI failed")
@@ -57,7 +58,7 @@ def _do_seal(
     plaintext: List[UInt8],
     mut out: List[UInt8],
 ) raises -> Int:
-    var seal_fn = lib.get_function[
+    var seal_fn = dl_sym[
         def(
             c_int,
             Int,
@@ -72,7 +73,7 @@ def _do_seal(
             Int,
             Int,
         ) thin abi("C") -> c_int
-    ]("flare_quic_aead_seal")
+    ](lib, "flare_quic_aead_seal")
     var written = List[Int](length=1, fill=0)
     var rc = seal_fn(
         c_int(cipher_id),
@@ -105,7 +106,7 @@ def _do_open(
     mut out: List[UInt8],
 ) raises -> Int:
     """Returns: written count on success, -2 on AEAD tag failure."""
-    var open_fn = lib.get_function[
+    var open_fn = dl_sym[
         def(
             c_int,
             Int,
@@ -120,7 +121,7 @@ def _do_open(
             Int,
             Int,
         ) thin abi("C") -> c_int
-    ]("flare_quic_aead_open")
+    ](lib, "flare_quic_aead_open")
     var written = List[Int](length=1, fill=0)
     var rc = open_fn(
         c_int(cipher_id),

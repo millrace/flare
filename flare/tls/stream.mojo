@@ -52,6 +52,7 @@ from std.ffi import OwnedDLHandle, c_int, CStringSlice
 from std.memory import UnsafePointer, stack_allocation
 from ..dns import resolve
 from ..net import SocketAddr, NetworkError, _find_flare_lib
+from ..utils.dylib import dl_sym
 from ..tcp import TcpStream
 from ..tcp.stream import _connect_with_fallback
 from ..io import Readable
@@ -70,7 +71,7 @@ comptime _CERT_SUBJ_LEN: Int = 512
 # ── Borrow helpers (one per FFI export) ──────────────────────────────────────
 
 
-def _c_err(read lib: OwnedDLHandle) -> String:
+def _c_err(read lib: OwnedDLHandle) raises -> String:
     """Return the last OpenSSL error string from ``flare_ssl_last_error()``.
 
     Args:
@@ -80,9 +81,9 @@ def _c_err(read lib: OwnedDLHandle) -> String:
     Returns:
         Human-readable error string (empty if no error).
     """
-    var fn_err = lib.get_function[
+    var fn_err = dl_sym[
         def() thin abi("C") -> UnsafePointer[UInt8, MutUntrackedOrigin]
-    ]("flare_ssl_last_error")
+    ](lib, "flare_ssl_last_error")
     var p = fn_err()
     return String(
         StringSlice(
@@ -91,41 +92,41 @@ def _c_err(read lib: OwnedDLHandle) -> String:
     )
 
 
-def _do_ssl_ctx_new(read lib: OwnedDLHandle) -> Int:
-    var f = lib.get_function[def() thin abi("C") -> Int]("flare_ssl_ctx_new")
+def _do_ssl_ctx_new(read lib: OwnedDLHandle) raises -> Int:
+    var f = dl_sym[def() thin abi("C") -> Int](lib, "flare_ssl_ctx_new")
     return f()
 
 
-def _do_ssl_ctx_free(read lib: OwnedDLHandle, ctx: Int):
+def _do_ssl_ctx_free(read lib: OwnedDLHandle, ctx: Int) raises:
     if ctx == 0:
         return
-    var f = lib.get_function[def(Int) thin abi("C") -> None](
-        "flare_ssl_ctx_free"
-    )
+    var f = dl_sym[def(Int) thin abi("C") -> None](lib, "flare_ssl_ctx_free")
     f(ctx)
 
 
-def _do_ssl_ctx_set_security_policy(read lib: OwnedDLHandle, ctx: Int) -> Int:
-    var f = lib.get_function[def(Int) thin abi("C") -> c_int](
-        "flare_ssl_ctx_set_security_policy"
+def _do_ssl_ctx_set_security_policy(
+    read lib: OwnedDLHandle, ctx: Int
+) raises -> Int:
+    var f = dl_sym[def(Int) thin abi("C") -> c_int](
+        lib, "flare_ssl_ctx_set_security_policy"
     )
     return Int(f(ctx))
 
 
 def _do_ssl_ctx_set_verify_peer(
     read lib: OwnedDLHandle, ctx: Int, verify: c_int
-) -> Int:
-    var f = lib.get_function[def(Int, c_int) thin abi("C") -> c_int](
-        "flare_ssl_ctx_set_verify_peer"
+) raises -> Int:
+    var f = dl_sym[def(Int, c_int) thin abi("C") -> c_int](
+        lib, "flare_ssl_ctx_set_verify_peer"
     )
     return Int(f(ctx, verify))
 
 
 def _do_ssl_ctx_load_ca_bundle(
     read lib: OwnedDLHandle, ctx: Int, var ca_path: String
-) -> Int:
-    var f = lib.get_function[def(Int, Int) thin abi("C") -> c_int](
-        "flare_ssl_ctx_load_ca_bundle"
+) raises -> Int:
+    var f = dl_sym[def(Int, Int) thin abi("C") -> c_int](
+        lib, "flare_ssl_ctx_load_ca_bundle"
     )
     # NUL-terminate in place before the C call. A path materialized from
     # a StringSlice is not NUL-terminated under unsafe_ptr, so OpenSSL's
@@ -147,9 +148,9 @@ def _do_ssl_ctx_load_cert_key(
     ctx: Int,
     var cert_path: String,
     var key_path: String,
-) -> Int:
-    var f = lib.get_function[def(Int, Int, Int) thin abi("C") -> c_int](
-        "flare_ssl_ctx_load_cert_key"
+) raises -> Int:
+    var f = dl_sym[def(Int, Int, Int) thin abi("C") -> c_int](
+        lib, "flare_ssl_ctx_load_cert_key"
     )
     # See _do_ssl_ctx_load_ca_bundle: NUL-terminate slice-derived paths
     # in place. Both owned args outlive the single FFI call.
@@ -164,30 +165,30 @@ def _do_ssl_ctx_load_cert_key(
 
 def _do_ssl_ctx_set_alpn_protos(
     read lib: OwnedDLHandle, ctx: Int, blob: List[UInt8]
-) -> Int:
-    var f = lib.get_function[def(Int, Int, c_int) thin abi("C") -> c_int](
-        "flare_ssl_ctx_set_alpn_protos"
+) raises -> Int:
+    var f = dl_sym[def(Int, Int, c_int) thin abi("C") -> c_int](
+        lib, "flare_ssl_ctx_set_alpn_protos"
     )
     return Int(f(ctx, Int(blob.unsafe_ptr()), c_int(len(blob))))
 
 
-def _do_ssl_new(read lib: OwnedDLHandle, ctx: Int, fd: c_int) -> Int:
-    var f = lib.get_function[def(Int, c_int) thin abi("C") -> Int](
-        "flare_ssl_new"
-    )
+def _do_ssl_new(read lib: OwnedDLHandle, ctx: Int, fd: c_int) raises -> Int:
+    var f = dl_sym[def(Int, c_int) thin abi("C") -> Int](lib, "flare_ssl_new")
     return f(ctx, fd)
 
 
-def _do_ssl_free(read lib: OwnedDLHandle, ssl: Int):
+def _do_ssl_free(read lib: OwnedDLHandle, ssl: Int) raises:
     if ssl == 0:
         return
-    var f = lib.get_function[def(Int) thin abi("C") -> None]("flare_ssl_free")
+    var f = dl_sym[def(Int) thin abi("C") -> None](lib, "flare_ssl_free")
     f(ssl)
 
 
-def _do_ssl_connect(read lib: OwnedDLHandle, ssl: Int, var sni: String) -> Int:
-    var f = lib.get_function[def(Int, Int) thin abi("C") -> c_int](
-        "flare_ssl_connect"
+def _do_ssl_connect(
+    read lib: OwnedDLHandle, ssl: Int, var sni: String
+) raises -> Int:
+    var f = dl_sym[def(Int, Int) thin abi("C") -> c_int](
+        lib, "flare_ssl_connect"
     )
     # NUL-terminate in place: a `sni` materialised from a StringSlice (the
     # common case — `Url.parse(...).host`) is not NUL-terminated under
@@ -207,33 +208,31 @@ def _do_ssl_read(
     ssl: Int,
     buf: UnsafePointer[UInt8, _],
     size: Int,
-) -> Int:
-    var f = lib.get_function[def(Int, Int, c_int) thin abi("C") -> c_int](
-        "flare_ssl_read"
+) raises -> Int:
+    var f = dl_sym[def(Int, Int, c_int) thin abi("C") -> c_int](
+        lib, "flare_ssl_read"
     )
     return Int(f(ssl, Int(buf), c_int(size)))
 
 
 def _do_ssl_write(
     read lib: OwnedDLHandle, ssl: Int, data: Span[UInt8, _]
-) -> Int:
-    var f = lib.get_function[def(Int, Int, c_int) thin abi("C") -> c_int](
-        "flare_ssl_write"
+) raises -> Int:
+    var f = dl_sym[def(Int, Int, c_int) thin abi("C") -> c_int](
+        lib, "flare_ssl_write"
     )
     return Int(f(ssl, Int(data.unsafe_ptr()), c_int(len(data))))
 
 
-def _do_ssl_shutdown(read lib: OwnedDLHandle, ssl: Int) -> Int:
-    var f = lib.get_function[def(Int) thin abi("C") -> c_int](
-        "flare_ssl_shutdown"
-    )
+def _do_ssl_shutdown(read lib: OwnedDLHandle, ssl: Int) raises -> Int:
+    var f = dl_sym[def(Int) thin abi("C") -> c_int](lib, "flare_ssl_shutdown")
     return Int(f(ssl))
 
 
-def _do_ssl_get_version(read lib: OwnedDLHandle, ssl: Int) -> String:
-    var f = lib.get_function[
+def _do_ssl_get_version(read lib: OwnedDLHandle, ssl: Int) raises -> String:
+    var f = dl_sym[
         def(Int) thin abi("C") -> UnsafePointer[UInt8, MutUntrackedOrigin]
-    ]("flare_ssl_get_version")
+    ](lib, "flare_ssl_get_version")
     var p = f(ssl)
     return String(
         StringSlice(
@@ -242,10 +241,10 @@ def _do_ssl_get_version(read lib: OwnedDLHandle, ssl: Int) -> String:
     )
 
 
-def _do_ssl_get_cipher(read lib: OwnedDLHandle, ssl: Int) -> String:
-    var f = lib.get_function[
+def _do_ssl_get_cipher(read lib: OwnedDLHandle, ssl: Int) raises -> String:
+    var f = dl_sym[
         def(Int) thin abi("C") -> UnsafePointer[UInt8, MutUntrackedOrigin]
-    ]("flare_ssl_get_cipher")
+    ](lib, "flare_ssl_get_cipher")
     var p = f(ssl)
     return String(
         StringSlice(
@@ -256,18 +255,18 @@ def _do_ssl_get_cipher(read lib: OwnedDLHandle, ssl: Int) -> String:
 
 def _do_ssl_get_peer_cert_subject(
     read lib: OwnedDLHandle, ssl: Int, buf: UnsafePointer[UInt8, _], size: Int
-) -> Int:
-    var f = lib.get_function[def(Int, Int, c_int) thin abi("C") -> c_int](
-        "flare_ssl_get_peer_cert_subject"
+) raises -> Int:
+    var f = dl_sym[def(Int, Int, c_int) thin abi("C") -> c_int](
+        lib, "flare_ssl_get_peer_cert_subject"
     )
     return Int(f(ssl, Int(buf), c_int(size)))
 
 
 def _do_ssl_get_alpn_selected(
     read lib: OwnedDLHandle, ssl: Int, buf: UnsafePointer[UInt8, _], size: Int
-) -> Int:
-    var f = lib.get_function[def(Int, Int, c_int) thin abi("C") -> c_int](
-        "flare_ssl_get_alpn_selected"
+) raises -> Int:
+    var f = dl_sym[def(Int, Int, c_int) thin abi("C") -> c_int](
+        lib, "flare_ssl_get_alpn_selected"
     )
     return Int(f(ssl, Int(buf), c_int(size)))
 
@@ -277,39 +276,41 @@ def _do_ssl_get_alpn_selected(
 
 def _do_ssl_ctx_enable_client_session_cache(
     read lib: OwnedDLHandle, ctx: Int
-) -> Int:
-    var f = lib.get_function[def(Int) thin abi("C") -> c_int](
-        "flare_ssl_ctx_enable_client_session_cache"
+) raises -> Int:
+    var f = dl_sym[def(Int) thin abi("C") -> c_int](
+        lib, "flare_ssl_ctx_enable_client_session_cache"
     )
     return Int(f(ctx))
 
 
-def _do_ssl_ctx_take_session(read lib: OwnedDLHandle, ctx: Int) -> Int:
-    var f = lib.get_function[def(Int) thin abi("C") -> Int](
-        "flare_ssl_ctx_take_session"
+def _do_ssl_ctx_take_session(read lib: OwnedDLHandle, ctx: Int) raises -> Int:
+    var f = dl_sym[def(Int) thin abi("C") -> Int](
+        lib, "flare_ssl_ctx_take_session"
     )
     return f(ctx)
 
 
-def _do_ssl_session_free(read lib: OwnedDLHandle, sess: Int):
+def _do_ssl_session_free(read lib: OwnedDLHandle, sess: Int) raises:
     if sess == 0:
         return
-    var f = lib.get_function[def(Int) thin abi("C") -> None](
-        "flare_ssl_session_free"
+    var f = dl_sym[def(Int) thin abi("C") -> None](
+        lib, "flare_ssl_session_free"
     )
     f(sess)
 
 
-def _do_ssl_set_session(read lib: OwnedDLHandle, ssl: Int, sess: Int) -> Int:
-    var f = lib.get_function[def(Int, Int) thin abi("C") -> c_int](
-        "flare_ssl_set_session"
+def _do_ssl_set_session(
+    read lib: OwnedDLHandle, ssl: Int, sess: Int
+) raises -> Int:
+    var f = dl_sym[def(Int, Int) thin abi("C") -> c_int](
+        lib, "flare_ssl_set_session"
     )
     return Int(f(ssl, sess))
 
 
-def _do_ssl_session_reused(read lib: OwnedDLHandle, ssl: Int) -> Int:
-    var f = lib.get_function[def(Int) thin abi("C") -> c_int](
-        "flare_ssl_session_reused"
+def _do_ssl_session_reused(read lib: OwnedDLHandle, ssl: Int) raises -> Int:
+    var f = dl_sym[def(Int) thin abi("C") -> c_int](
+        lib, "flare_ssl_session_reused"
     )
     return Int(f(ssl))
 
@@ -422,7 +423,10 @@ struct TlsSession(Movable):
 
     def __del__(deinit self):
         if self._addr != 0:
-            _do_ssl_session_free(self._lib, self._addr)
+            try:
+                _do_ssl_session_free(self._lib, self._addr)
+            except:
+                pass
 
     def session_addr(self) -> Int:
         """Underlying ``SSL_SESSION*`` as an ``Int``. For
@@ -499,9 +503,12 @@ struct TlsStream(Movable, Readable):
             # Best-effort; the cached lib handle is valid for the
             # stream's lifetime, so these no longer open (and cannot
             # fail on) a per-call handle. tcp fd closed by _tcp.__del__.
-            _ = _do_ssl_shutdown(self._lib, self._ssl)
-            _do_ssl_free(self._lib, self._ssl)
-            _do_ssl_ctx_free(self._lib, self._ctx)
+            try:
+                _ = _do_ssl_shutdown(self._lib, self._ssl)
+                _do_ssl_free(self._lib, self._ssl)
+                _do_ssl_ctx_free(self._lib, self._ctx)
+            except:
+                pass
 
     # ── Context manager ───────────────────────────────────────────────────────
 
@@ -788,7 +795,9 @@ struct TlsStream(Movable, Readable):
         var sent = 0
         var ptr = data.unsafe_ptr()
         while sent < total:
-            var chunk = Span[UInt8, _](ptr=ptr + sent, length=total - sent)
+            var chunk = Span[UInt8, _](
+                unsafe_ptr=ptr + sent, length=total - sent
+            )
             sent += self.write(chunk)
 
     # ── Introspection ─────────────────────────────────────────────────────────
@@ -800,7 +809,10 @@ struct TlsStream(Movable, Readable):
             E.g. ``"TLSv1.3"`` or ``"TLSv1.2"``. Returns ``"unknown"`` if
             called before the handshake or if the library cannot be loaded.
         """
-        return _do_ssl_get_version(self._lib, self._ssl)
+        try:
+            return _do_ssl_get_version(self._lib, self._ssl)
+        except:
+            return "unknown"
 
     def cipher_suite(self) -> String:
         """Return the negotiated cipher suite name.
@@ -808,7 +820,10 @@ struct TlsStream(Movable, Readable):
         Returns:
             E.g. ``"TLS_AES_256_GCM_SHA384"`` or ``"unknown"``.
         """
-        return _do_ssl_get_cipher(self._lib, self._ssl)
+        try:
+            return _do_ssl_get_cipher(self._lib, self._ssl)
+        except:
+            return "unknown"
 
     def peer_cert_subject(self) raises -> String:
         """Return the subject DN of the server's certificate.
@@ -911,7 +926,10 @@ struct TlsStream(Movable, Readable):
         handshake skipped). Mirrors OpenSSL's
         ``SSL_session_reused``.
         """
-        return _do_ssl_session_reused(self._lib, self._ssl) == 1
+        try:
+            return _do_ssl_session_reused(self._lib, self._ssl) == 1
+        except:
+            return False
 
     @staticmethod
     def connect_resumed(
@@ -1018,9 +1036,12 @@ struct TlsStream(Movable, Readable):
         if self._ssl != 0:
             # Use the connection-cached handle (valid for the stream's
             # lifetime) rather than reopening per close.
-            _ = _do_ssl_shutdown(self._lib, self._ssl)
-            _do_ssl_free(self._lib, self._ssl)
-            _do_ssl_ctx_free(self._lib, self._ctx)
+            try:
+                _ = _do_ssl_shutdown(self._lib, self._ssl)
+                _do_ssl_free(self._lib, self._ssl)
+                _do_ssl_ctx_free(self._lib, self._ctx)
+            except:
+                pass
             self._ssl = 0
             self._ctx = 0
         self._tcp.close()

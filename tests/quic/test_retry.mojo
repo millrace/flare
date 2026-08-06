@@ -7,7 +7,7 @@ layout) against the spec. The token cases exercise the HMAC
 address-validation token's authenticity, address binding, and expiry.
 """
 
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_false, assert_true
 
 from flare.quic.packet import ConnectionId, QUIC_VERSION_1

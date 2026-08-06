@@ -37,7 +37,7 @@ project), so DCID+window is the achievable approximation. See
 """
 
 from std.collections import Dict, List
-from std.memory import Span
+from std.collections.span import Span
 
 from .packet import decode_varint, parse_long_header
 

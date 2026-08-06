@@ -384,7 +384,7 @@ def _slice_derived(path: String) -> String:
     ``Url.parse(...).host``) that the FFI loaders must NUL-terminate
     before handing the pointer to OpenSSL."""
     var backing = path + "/sentinel-not-part-of-the-path"
-    return String(unsafe_from_utf8=backing.as_bytes()[: len(path)])
+    return String(unsafe_from_utf8=backing.as_bytes()[: path.byte_length()])
 
 
 def test_acceptor_construct_slice_derived_paths() raises:

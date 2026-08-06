@@ -27,7 +27,7 @@ health))``.
 """
 
 from std.collections import Dict
-from std.memory import Span
+from std.collections.span import Span
 
 from .proto import ProtoReader, ProtoWriter, WIRE_LEN
 from .server import GrpcCallContext, GrpcUnary, GrpcUnaryReply

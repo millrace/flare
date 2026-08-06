@@ -13,7 +13,7 @@ Exercises the per-connection dynamic table on :class:`Http3Connection`:
    and applied once the remainder arrives.
 """
 
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_true
 
 from flare.http3 import (

@@ -40,7 +40,7 @@ References:
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.http.proto.ascii import ascii_lower
 from flare.qpack import QpackHeader, encode_field_section

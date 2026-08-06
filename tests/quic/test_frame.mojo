@@ -8,7 +8,7 @@ asserted as a single end-to-end identity per type.
 """
 
 from std.testing import assert_equal, assert_true, assert_false
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.quic import (
     AckFrame,

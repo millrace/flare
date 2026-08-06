@@ -23,6 +23,7 @@ from ..tcp import TcpListener, TcpStream
 from ..net import SocketAddr, NetworkError, _find_flare_lib
 from ..runtime._thread import ThreadHandle, _OpaquePtr
 from ..runtime.reuseport import bind_reuseport
+from ..utils.dylib import dl_sym
 
 # RFC 6455 §1.3 magic GUID
 comptime _WS_GUID: String = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -34,14 +35,14 @@ comptime _SHA1_LEN: Int = 20
 
 def _do_sha1_srv(
     read lib: OwnedDLHandle, data_bytes: Span[UInt8, _]
-) -> List[UInt8]:
+) raises -> List[UInt8]:
     """Invoke the SHA-1 C function with ``lib`` borrowed.
 
-    Doing both ``get_function`` and the call inside the borrow keeps
+    Doing both the symbol lookup and the call inside the borrow keeps
     ``lib`` mapped across the entire FFI surface — matches the
     canonical idiom from ``flare.http.encoding._do_compress`` and
     avoids the ASAP-destruction window where the cached function
-    pointer would dangle after ``get_function`` returns. See the long
+    pointer would dangle after the lookup returns. See the long
     discussion in ``flare/http/encoding.mojo``.
 
     Args:
@@ -51,9 +52,7 @@ def _do_sha1_srv(
     Returns:
         20-byte SHA-1 digest as ``List[UInt8]``.
     """
-    var fn_sha1 = lib.get_function[def(Int, Int, Int) thin abi("C") -> Int](
-        "SHA1"
-    )
+    var fn_sha1 = dl_sym[def(Int, Int, Int) thin abi("C") -> Int](lib, "SHA1")
     var digest = List[UInt8](capacity=_SHA1_LEN)
     digest.resize(_SHA1_LEN, 0)
     _ = fn_sha1(

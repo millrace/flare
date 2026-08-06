@@ -5,7 +5,7 @@ handler.
 The bug (Mojo `1.0.0b1` destructor reorder + stricter Span origin
 tracking): the bufring dispatch in
 :func:`flare.http._server_reactor_impl.run_uring_bufring_reactor_loop`
-used to forward a ``Span[UInt8, _](ptr=buf, length=n)`` over kernel-
+used to forward a ``Span[UInt8, _](unsafe_ptr=buf, length=n)`` over kernel-
 shared pool memory directly into ``_drive_handler_after_buf_recv``,
 then recycle the buffer slot once the handler returned. Under
 1.0.0b1's stricter scheduling, the kernel could re-issue the same

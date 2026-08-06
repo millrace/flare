@@ -33,24 +33,24 @@ def test_size_for_oversize_returns_caller_request_verbatim() raises:
 def test_handle_for_class_reserves_size_class_capacity() raises:
     var h = BufferHandle.for_class(0)
     assert_equal(h.class_index, 0)
-    assert_true(h.bytes.capacity >= 1024)
+    assert_true(h.bytes.capacity() >= 1024)
     assert_equal(len(h.bytes), 0)
 
     var h2 = BufferHandle.for_class(3)
     assert_equal(h2.class_index, 3)
-    assert_true(h2.bytes.capacity >= 64 * 1024)
+    assert_true(h2.bytes.capacity() >= 64 * 1024)
     assert_equal(len(h2.bytes), 0)
 
 
 def test_handle_reset_preserves_capacity() raises:
     var h = BufferHandle.for_class(2)
-    var cap_before = h.bytes.capacity
+    var cap_before = h.bytes.capacity()
     for i in range(1024):
         h.bytes.append(UInt8(i % 256))
     assert_equal(len(h.bytes), 1024)
     h.reset()
     assert_equal(len(h.bytes), 0)
-    assert_true(h.bytes.capacity >= cap_before)
+    assert_true(h.bytes.capacity() >= cap_before)
 
 
 # ── BufferPool tests ────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ def test_pool_acquire_from_empty_constructs_fresh_class_0() raises:
     var p = BufferPool()
     var h = p.acquire(min_capacity=512)
     assert_equal(h.class_index, 0)
-    assert_true(h.bytes.capacity >= 1024)
+    assert_true(h.bytes.capacity() >= 1024)
 
 
 def test_pool_acquire_dispatches_to_correct_class() raises:
@@ -102,7 +102,7 @@ def test_pool_acquire_oversize_bypasses_pool() raises:
     var p = BufferPool()
     var h = p.acquire(min_capacity=200_000)
     assert_equal(h.class_index, -1)
-    assert_true(h.bytes.capacity >= 200_000)
+    assert_true(h.bytes.capacity() >= 200_000)
 
 
 def test_pool_release_oversize_does_not_grow_any_bucket() raises:
@@ -120,7 +120,7 @@ def test_pool_release_then_acquire_recycles_capacity() raises:
     """
     var p = BufferPool()
     var h = p.acquire(min_capacity=8000)
-    var marker_cap = h.bytes.capacity
+    var marker_cap = h.bytes.capacity()
     for i in range(5000):
         h.bytes.append(UInt8(i % 256))
     p.release(h^)
@@ -129,7 +129,7 @@ def test_pool_release_then_acquire_recycles_capacity() raises:
     var h2 = p.acquire(min_capacity=8000)
     assert_equal(h2.class_index, 2)
     assert_equal(len(h2.bytes), 0)
-    assert_true(h2.bytes.capacity >= marker_cap)
+    assert_true(h2.bytes.capacity() >= marker_cap)
     assert_equal(p.size(2), 0)
 
 

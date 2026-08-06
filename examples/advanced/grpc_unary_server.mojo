@@ -15,7 +15,7 @@ Run:
     pixi run mojo -I . examples/advanced/grpc_unary_server.mojo
 """
 
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.grpc import (
     GrpcCallContext,

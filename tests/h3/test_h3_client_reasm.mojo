@@ -13,7 +13,7 @@ gap-then-fill, asserting:
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_false, assert_true
 
 from flare.http3 import encode_response_data, encode_response_headers

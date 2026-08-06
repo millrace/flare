@@ -531,11 +531,11 @@ struct Metrics[Inner: Handler & Copyable & Defaultable](
         try:
             resp = self.inner.serve(req).lower()
         except e:
-            var latency_micros = (perf_counter_ns() - start) // UInt(1_000)
+            var latency_micros = (perf_counter_ns() - start) // 1_000
             reg[].record_error(UInt64(Int(latency_micros)))
             reg[].exit()
             raise Error(String(e))
-        var latency_micros = (perf_counter_ns() - start) // UInt(1_000)
+        var latency_micros = (perf_counter_ns() - start) // 1_000
         reg[].record(
             _method_index(req.method),
             _status_index(Int(resp.status)),

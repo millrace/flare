@@ -11,7 +11,7 @@ truncated frame -> NEEDS_MORE).
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_true
 
 from flare.http3 import (

@@ -869,7 +869,7 @@ def generate(path_in: str, module_doc: str) -> str:
     out.append('"""')
     out.append("")
     out.append("from std.collections import List, Optional")
-    out.append("from std.memory import Span")
+    out.append("from std.collections.span import Span")
     out.append("")
     out.append(
         "from flare.grpc.proto import (\n"

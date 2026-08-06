@@ -21,7 +21,7 @@ that ship today:
 """
 
 from std.testing import assert_equal, assert_true
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.quic.crypto import (
     QUIC_V1_INITIAL_SALT,

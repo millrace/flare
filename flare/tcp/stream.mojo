@@ -49,6 +49,7 @@ from ..net.socket import (
     _sockaddr_to_socket_addr,
     _find_flare_lib,
 )
+from ..utils.dylib import dl_sym
 from ..net._libc import (
     _connect,
     _recv,
@@ -77,15 +78,15 @@ def _do_flare_connect_timeout(
     sa_addr: Int,
     sa_len: c_uint,
     timeout_ms: c_int,
-) -> c_int:
+) raises -> c_int:
     """Invoke ``flare_connect_timeout`` with ``lib`` borrowed across both
-    ``get_function`` and the call. See the ASAP-destruction discussion in
+    the symbol lookup and the call. See the ASAP-destruction discussion in
     ``flare/tls/stream.mojo`` and ``flare/http/encoding.mojo`` for why this
     indirection is required.
     """
-    var fn_ct = lib.get_function[
-        def(c_int, Int, c_uint, c_int) thin abi("C") -> c_int
-    ]("flare_connect_timeout")
+    var fn_ct = dl_sym[def(c_int, Int, c_uint, c_int) thin abi("C") -> c_int](
+        lib, "flare_connect_timeout"
+    )
     return fn_ct(fd, sa_addr, sa_len, timeout_ms)
 
 
@@ -537,7 +538,9 @@ struct TcpStream(Movable, Readable):
         var ptr = data.unsafe_ptr()
         var sent = 0
         while sent < total:
-            var chunk = Span[UInt8, _](ptr=ptr + sent, length=total - sent)
+            var chunk = Span[UInt8, _](
+                unsafe_ptr=ptr + sent, length=total - sent
+            )
             var n = self.write(chunk)
             sent += n
 

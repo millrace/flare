@@ -1,7 +1,7 @@
 """Tests for flare.grpc.interceptor (chainable) + flare.grpc.health."""
 
 from std.collections import Optional
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_true, TestSuite
 
 from flare.grpc.health import (

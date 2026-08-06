@@ -265,7 +265,7 @@ struct BatchReceiver(Movable):
         if n > self._max_payload:
             n = self._max_payload  # MSG_TRUNC guard
         return Span[UInt8, MutUntrackedOrigin](
-            ptr=self._data + i * self._max_payload, length=n
+            unsafe_ptr=self._data + i * self._max_payload, length=n
         )
 
     def sender(self, i: Int) raises -> SocketAddr:

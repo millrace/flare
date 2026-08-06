@@ -19,7 +19,7 @@ compiler) is tracked separately; this guards the generator's own
 encode/decode symmetry, including packed repeated-scalar reads.
 """
 
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_true, TestSuite
 
 from flare.grpc import GrpcCallContext, GrpcService

@@ -64,7 +64,7 @@ review only needs to scrutinise this single file.
 
 from std.ffi import OwnedDLHandle, c_int
 
-from ..utils.dylib import find_flare_lib
+from ..utils.dylib import find_flare_lib, dl_sym
 
 
 def _find_flare_zlib_lib() -> String:
@@ -185,9 +185,9 @@ def _do_compress_raw_deflate(
         level: zlib compression level passed through to
             ``deflateInit2``.
     """
-    var fn_compress = lib.get_function[
+    var fn_compress = dl_sym[
         def(Int, c_int, Int, c_int, c_int) thin abi("C") -> c_int
-    ]("flare_compress_raw_deflate")
+    ](lib, "flare_compress_raw_deflate")
 
     # zlib's worst-case bound: srclen + (srclen >> 12) + (srclen >> 14)
     # + (srclen >> 25) + 13. We add a constant slack for the empty
@@ -285,9 +285,9 @@ def _do_decompress_raw_inflate_capped(
             already re-appended).
         max_out: The decompressed-size cap.
     """
-    var fn_decomp = lib.get_function[
+    var fn_decomp = dl_sym[
         def(Int, c_int, Int, c_int, c_int) thin abi("C") -> c_int
-    ]("flare_decompress")
+    ](lib, "flare_decompress")
     var window_bits = c_int(-15)
     var cap = max(len(data) * 4, 4096)
     if cap > max_out:
@@ -374,8 +374,8 @@ def _do_pmd_compressor_new(
 ) raises -> Int:
     """Allocate a persistent deflate z_stream via FFI. Returns the
     opaque handle (an ``intptr_t``-encoded ``z_stream*``)."""
-    var fn_new = lib.get_function[def(c_int, c_int) thin abi("C") -> Int](
-        "flare_pmd_compressor_new"
+    var fn_new = dl_sym[def(c_int, c_int) thin abi("C") -> Int](
+        lib, "flare_pmd_compressor_new"
     )
     return fn_new(level, window_bits)
 
@@ -389,9 +389,9 @@ def _do_pmd_compress_chunk(
     out_cap: c_int,
 ) raises -> c_int:
     """Compress one chunk through a persistent deflate context."""
-    var fn_chunk = lib.get_function[
+    var fn_chunk = dl_sym[
         def(Int, Int, c_int, Int, c_int) thin abi("C") -> c_int
-    ]("flare_pmd_compress_chunk")
+    ](lib, "flare_pmd_compress_chunk")
     return fn_chunk(handle, in_buf, in_len, out_buf, out_cap)
 
 
@@ -399,8 +399,8 @@ def _do_pmd_compressor_free(
     read lib: OwnedDLHandle, handle: Int
 ) raises -> None:
     """Release a persistent deflate context."""
-    var fn_free = lib.get_function[def(Int) thin abi("C") -> None](
-        "flare_pmd_compressor_free"
+    var fn_free = dl_sym[def(Int) thin abi("C") -> None](
+        lib, "flare_pmd_compressor_free"
     )
     fn_free(handle)
 
@@ -409,8 +409,8 @@ def _do_pmd_decompressor_new(
     read lib: OwnedDLHandle, window_bits: c_int
 ) raises -> Int:
     """Allocate a persistent inflate z_stream via FFI."""
-    var fn_new = lib.get_function[def(c_int) thin abi("C") -> Int](
-        "flare_pmd_decompressor_new"
+    var fn_new = dl_sym[def(c_int) thin abi("C") -> Int](
+        lib, "flare_pmd_decompressor_new"
     )
     return fn_new(window_bits)
 
@@ -423,17 +423,17 @@ def _do_pmd_decompress_chunk(
     out_buf: Int,
     out_cap: c_int,
 ) raises -> c_int:
-    var fn_chunk = lib.get_function[
+    var fn_chunk = dl_sym[
         def(Int, Int, c_int, Int, c_int) thin abi("C") -> c_int
-    ]("flare_pmd_decompress_chunk")
+    ](lib, "flare_pmd_decompress_chunk")
     return fn_chunk(handle, in_buf, in_len, out_buf, out_cap)
 
 
 def _do_pmd_decompressor_free(
     read lib: OwnedDLHandle, handle: Int
 ) raises -> None:
-    var fn_free = lib.get_function[def(Int) thin abi("C") -> None](
-        "flare_pmd_decompressor_free"
+    var fn_free = dl_sym[def(Int) thin abi("C") -> None](
+        lib, "flare_pmd_decompressor_free"
     )
     fn_free(handle)
 

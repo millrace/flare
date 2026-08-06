@@ -50,7 +50,7 @@ References:
 """
 
 from std.collections import List, Optional
-from std.memory import Span
+from std.collections.span import Span
 from std.time import perf_counter_ns
 
 from flare.crypto.base64 import base64_decode, base64_encode

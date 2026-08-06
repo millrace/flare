@@ -37,7 +37,7 @@ References:
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.qpack import QpackHeader, decode_field_section
 from flare.quic.varint import decode_varint

@@ -45,7 +45,7 @@ focuses on the AEAD round-trip side of the schedule.
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal
 
 from flare.quic.crypto import (

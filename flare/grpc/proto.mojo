@@ -27,7 +27,8 @@ descriptors -- those live in :mod:`flare.grpc.reflection`.
 """
 
 from std.collections import List
-from std.memory import Span, stack_allocation
+from std.memory import stack_allocation
+from std.collections.span import Span
 
 
 # ── Wire types ────────────────────────────────────────────────────────────────

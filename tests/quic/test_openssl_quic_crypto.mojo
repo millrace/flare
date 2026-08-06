@@ -19,7 +19,7 @@ ClientHello bytes -> packet bytes match the RFC) lands in Track
 Q1-W commit 4/4 alongside the aioquic cross-validation.
 """
 
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_true
 
 from flare.quic.crypto import (

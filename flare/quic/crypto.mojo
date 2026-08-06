@@ -50,10 +50,11 @@ References:
 
 from std.collections import List, Optional
 from std.ffi import OwnedDLHandle, c_int
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.crypto.hmac import hmac_sha256
 from flare.net.socket import _find_flare_lib
+from flare.utils.dylib import dl_sym
 
 
 # ── RFC 9001 §5.2 initial salt (QUIC v1) ────────────────────────────────
@@ -543,7 +544,7 @@ def _do_aead_seal(
     plaintext: List[UInt8],
     mut out: List[UInt8],
 ) raises -> Int:
-    var seal_fn = lib.get_function[
+    var seal_fn = dl_sym[
         def(
             c_int,
             Int,
@@ -558,7 +559,7 @@ def _do_aead_seal(
             Int,
             Int,
         ) thin abi("C") -> c_int
-    ]("flare_quic_aead_seal")
+    ](lib, "flare_quic_aead_seal")
     var written = List[Int](length=1, fill=0)
     var rc = seal_fn(
         c_int(cipher_id),
@@ -589,7 +590,7 @@ def _do_aead_open(
     ct: List[UInt8],
     mut out: List[UInt8],
 ) raises -> Int:
-    var open_fn = lib.get_function[
+    var open_fn = dl_sym[
         def(
             c_int,
             Int,
@@ -604,7 +605,7 @@ def _do_aead_open(
             Int,
             Int,
         ) thin abi("C") -> c_int
-    ]("flare_quic_aead_open")
+    ](lib, "flare_quic_aead_open")
     var written = List[Int](length=1, fill=0)
     var rc = open_fn(
         c_int(cipher_id),
@@ -638,9 +639,9 @@ def _do_hp_mask(
     sample: List[UInt8],
     mut out: List[UInt8],
 ) raises:
-    var mask_fn = lib.get_function[
-        def(c_int, Int, Int, Int, Int) thin abi("C") -> c_int
-    ]("flare_quic_hp_mask")
+    var mask_fn = dl_sym[def(c_int, Int, Int, Int, Int) thin abi("C") -> c_int](
+        lib, "flare_quic_hp_mask"
+    )
     var rc = mask_fn(
         c_int(cipher_id),
         Int(hp_key.unsafe_ptr()),

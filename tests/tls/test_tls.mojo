@@ -30,6 +30,7 @@ from flare.utils import (
     waitpid,
 )
 from flare.net.socket import _find_flare_lib
+from flare.utils.dylib import dl_sym
 from flare.tls import (
     TlsConfig,
     TlsVerify,
@@ -52,11 +53,11 @@ def _c_str(s: String) -> Int:
     return Int(s.unsafe_ptr())
 
 
-def _tls_err(lib: OwnedDLHandle) -> String:
+def _tls_err(lib: OwnedDLHandle) raises -> String:
     """Return the last error from ``flare_ssl_last_error``."""
-    var fn_e = lib.get_function[
+    var fn_e = dl_sym[
         def() thin abi("C") -> UnsafePointer[UInt8, MutUntrackedOrigin]
-    ]("flare_ssl_last_error")
+    ](lib, "flare_ssl_last_error")
     var p = fn_e()
     return String(
         StringSlice(
@@ -87,9 +88,9 @@ struct _TlsTestServer:
             ca: Path to CA bundle for client cert verification, or ``""``.
         """
         self._lib = OwnedDLHandle(_find_flare_lib())
-        var fn_new = self._lib.get_function[
-            def(Int, Int, Int, c_int) thin abi("C") -> Int
-        ]("flare_test_server_new")
+        var fn_new = dl_sym[def(Int, Int, Int, c_int) thin abi("C") -> Int](
+            self._lib, "flare_test_server_new"
+        )
         var ca_int = _c_str(ca) if ca != "" else 0
         self._ptr = fn_new(
             _c_str(cert),
@@ -102,10 +103,13 @@ struct _TlsTestServer:
 
     def __del__(deinit self):
         if self._ptr != 0:
-            var fn_free = self._lib.get_function[
-                def(Int) thin abi("C") -> None
-            ]("flare_test_server_free")
-            fn_free(self._ptr)
+            try:
+                var fn_free = dl_sym[def(Int) thin abi("C") -> None](
+                    self._lib, "flare_test_server_free"
+                )
+                fn_free(self._ptr)
+            except:
+                pass
 
     def port(self) raises -> Int:
         """Return the actual bound TCP port.
@@ -113,8 +117,8 @@ struct _TlsTestServer:
         Returns:
             Port number the server is listening on.
         """
-        var fn_port = self._lib.get_function[def(Int) thin abi("C") -> c_int](
-            "flare_test_server_port"
+        var fn_port = dl_sym[def(Int) thin abi("C") -> c_int](
+            self._lib, "flare_test_server_port"
         )
         return Int(fn_port(self._ptr))
 
@@ -124,8 +128,8 @@ struct _TlsTestServer:
         Blocks until a client connects, performs TLS handshake, echoes data,
         then returns. Intended to be the only operation in a forked child.
         """
-        var fn_echo = self._lib.get_function[def(Int) thin abi("C") -> c_int](
-            "flare_test_server_echo_once"
+        var fn_echo = dl_sym[def(Int) thin abi("C") -> c_int](
+            self._lib, "flare_test_server_echo_once"
         )
         _ = fn_echo(self._ptr)
 

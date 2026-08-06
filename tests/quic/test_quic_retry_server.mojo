@@ -8,7 +8,7 @@ real reactor over a loopback socket, mirroring
 test_quic_loopback_integration's synth-Initial pattern.
 """
 
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_false, assert_true
 
 from flare.net import IpAddr, SocketAddr

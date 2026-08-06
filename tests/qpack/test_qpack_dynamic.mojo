@@ -9,7 +9,7 @@ field section references dynamic entries by relative and post-base index.
 """
 
 from std.collections import List
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_false, assert_true
 
 from flare.qpack import QpackHeader

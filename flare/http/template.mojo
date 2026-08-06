@@ -246,7 +246,7 @@ child did not override the block."""
 
 
 @fieldwise_init
-struct TemplateNode(Copyable, Movable):
+struct TemplateNode(Copyable, Deinitable, Movable):
     """Single node in the parsed template tree.
 
     ``kind`` is one of the ``_NODE_*`` constants above. The other
@@ -274,6 +274,12 @@ struct TemplateNode(Copyable, Movable):
     var name: String
     var loop_var: String
     var children: List[TemplateNode]
+
+    def __deinit__(deinit self):
+        # Explicit (no-op) deinit breaks the self-referential
+        # `List[TemplateNode]` field's `Deinitable` completeness check;
+        # fields are still destroyed automatically after this runs.
+        pass
 
 
 # ── Context ────────────────────────────────────────────────────────────────

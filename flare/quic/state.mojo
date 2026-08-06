@@ -47,7 +47,8 @@ References:
 """
 
 from std.collections import List, Optional, Dict
-from std.memory import Span, UnsafePointer
+from std.memory import UnsafePointer
+from std.collections.span import Span
 from .frame import (
     AckFrame,
     AckRange,

@@ -143,7 +143,7 @@ def _send_h2_over_tls(
         # Mojo 1.0.0b1: name the slice's lifetime via ``buf``
         # itself; ``buf[:n]`` was an anonymous temporary whose
         # storage could be freed before ``feed`` returned.
-        conn.feed(Span[UInt8, _](ptr=buf.unsafe_ptr(), length=n))
+        conn.feed(Span[UInt8, _](unsafe_ptr=buf.unsafe_ptr(), length=n))
         var ack_bytes = conn.drain()
         if len(ack_bytes) > 0:
             stream.write_all(Span[UInt8, _](ack_bytes))
@@ -223,7 +223,7 @@ def _send_h2_over_tcp(
         # Mojo 1.0.0b1 Span lifetime: same fix as the h2-over-tls
         # path -- bind to the named ``buf`` rather than the
         # slice temporary.
-        conn.feed(Span[UInt8, _](ptr=buf.unsafe_ptr(), length=n))
+        conn.feed(Span[UInt8, _](unsafe_ptr=buf.unsafe_ptr(), length=n))
         var ack_bytes = conn.drain()
         if len(ack_bytes) > 0:
             stream.write_all(Span[UInt8, _](ack_bytes))
@@ -401,7 +401,7 @@ def _send_h2c_via_upgrade(
         # over ``buf``'s backing storage so the lifetime is the
         # named ``buf`` (which lives across the whole loop), not
         # the slice's anonymous temporary.
-        h2_conn.feed(Span[UInt8, _](ptr=buf.unsafe_ptr(), length=n))
+        h2_conn.feed(Span[UInt8, _](unsafe_ptr=buf.unsafe_ptr(), length=n))
         var ack_bytes = h2_conn.drain()
         if len(ack_bytes) > 0:
             stream.write_all(Span[UInt8, _](ack_bytes))

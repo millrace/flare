@@ -176,7 +176,7 @@ def huffman_decode_simd(
         # accumulator currently holds.
         while nbits >= 8:
             var top = Int((bits >> UInt64(nbits - 8)) & UInt64(0xFF))
-            var entry = Int(_ROOT_TABLE[top])
+            var entry = Int(materialize[_ROOT_TABLE]()[top])
             var clen = entry & 0xFF
             if clen > 0:
                 var sym = entry >> 8

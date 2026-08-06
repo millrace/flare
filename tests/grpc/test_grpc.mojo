@@ -7,7 +7,7 @@ table (which clients ship hard-coded against).
 """
 
 from std.testing import assert_equal, assert_true, assert_false
-from std.memory import Span
+from std.collections.span import Span
 
 from flare.grpc import (
     GRPC_COMPRESSION_NONE,

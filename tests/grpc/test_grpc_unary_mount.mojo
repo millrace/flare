@@ -17,7 +17,7 @@ Tests:
   ``grpc-timeout`` yields ``DEADLINE_EXCEEDED`` (status code 4).
 """
 
-from std.memory import Span
+from std.collections.span import Span
 from std.testing import assert_equal, assert_true
 
 from flare.grpc import (
