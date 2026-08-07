@@ -259,6 +259,8 @@ def test_on_readable_cancel_dispatches_through_cancel_handler() raises:
     var attempts = 0
     while not client.response_ready(sid) and attempts < 50:
         attempts += 1
+        usleep(2000)  # same pacing as the pump loop above: an unslept spin can
+        # burn all 50 attempts before the server task flushes (flaky under load)
         var buf = stack_allocation[8192, UInt8]()
         var got_n = _recv(client_fd, buf, c_size_t(8192), c_int(0))
         if Int(got_n) > 0:

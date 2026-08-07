@@ -133,8 +133,8 @@ def _extract_boundary(content_type: String) raises -> String:
             )
         return String(unsafe_from_utf8=content_type.as_bytes()[start + 1 : end])
     var boundary = String(unsafe_from_utf8=content_type.as_bytes()[start:end])
-    var stripped = String(boundary.strip())
-    boundary = stripped^
+    var boundary_str = String(boundary.strip())
+    boundary = boundary_str^
     if boundary.byte_length() == 0:
         raise Error("multipart: empty boundary parameter")
     return boundary^

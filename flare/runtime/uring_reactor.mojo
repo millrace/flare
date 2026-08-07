@@ -77,9 +77,10 @@ the single owning thread; the only cross-thread hook is
 ``wakeup`` which writes 1 byte into the per-reactor eventfd.
 """
 
+from std.memory.alloc import unsafe_alloc
 from std.atomic import Atomic, Ordering
 from std.ffi import c_int, c_uint, c_size_t, external_call, get_errno
-from std.memory import UnsafePointer, alloc, stack_allocation
+from std.memory import UnsafePointer, stack_allocation
 from std.os import getenv
 from std.sys.info import CompilationTarget
 
@@ -153,7 +154,7 @@ def _munmap(addr: Int, size: Int) -> None:
     """Release memory previously returned by ``_mmap_anon_rw``."""
     if addr == 0:
         return
-    var p = UnsafePointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)
+    var p = Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)
     _ = libc_munmap(p, size)
 
 
@@ -192,7 +193,7 @@ def _pbuf_ring_add(
     """
     var mask = ring_entries - 1
     var idx = (Int(cur_tail) + buf_offset) & mask
-    var entry = UnsafePointer[UInt8, MutUntrackedOrigin](
+    var entry = Pointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=ring_addr + idx * 16
     )
     # addr (offset 0, u64 LE)
@@ -202,7 +203,7 @@ def _pbuf_ring_add(
         )
     # len (offset 8, u32 LE)
     for i in range(4):
-        (entry.unsafe_offset(8).unsafe_offset(i)).unsafe_write(
+        (entry.unsafe_offset(8 + i)).unsafe_write(
             UInt8(Int((buf_len >> UInt32(8 * i)) & 0xFF))
         )
     # bid (offset 12, u16 LE)
@@ -218,7 +219,7 @@ def _pbuf_ring_get_tail(ring_addr: Int) -> UInt16:
     of slot[0]) with relaxed ordering. App-side load only -- the
     kernel reads tail on every recv-buffer-select with acquire
     ordering, which is the publishing barrier."""
-    var tail_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
+    var tail_ptr = Pointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=ring_addr + 14
     )
     var lo = Int(tail_ptr.unsafe_load())
@@ -231,7 +232,7 @@ def _pbuf_ring_set_tail(ring_addr: Int, new_tail: UInt16) -> None:
     """Release-store the ring's tail field. Pairs with the
     kernel's acquire-load on every recv-buffer-select.
     """
-    var tail_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
+    var tail_ptr = Pointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=ring_addr + 14
     )
     # Use Atomic[u16] release store for cross-platform memory
@@ -407,7 +408,7 @@ struct UringReactor(Movable):
     # stays valid. Stored under ``MutUntrackedOrigin`` to match
     # the ``prep_recv`` buf-pointer convention used everywhere
     # in :mod:`flare.runtime.io_uring_sqe`.
-    var _wake_buf: UnsafePointer[UInt8, MutUntrackedOrigin]
+    var _wake_buf: Pointer[UInt8, MutUntrackedOrigin]
     var _io: FlareRawIO
     var _wake_armed: Bool
     var _cross_thread_wakeup: Bool
@@ -501,10 +502,10 @@ struct UringReactor(Movable):
             # 8 bytes is the eventfd read width; we keep the buffer
             # pinned for the reactor's lifetime so the multishot recv
             # arming SQE keeps a stable pointer.
-            var raw = alloc[UInt8](8)
+            var raw = unsafe_alloc[UInt8](8)
             for i in range(8):
                 (raw.unsafe_offset(i)).unsafe_write(UInt8(0))
-            self._wake_buf = UnsafePointer[UInt8, MutUntrackedOrigin](
+            self._wake_buf = Pointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=Int(raw)
             )
         else:
@@ -514,7 +515,7 @@ struct UringReactor(Movable):
             # free() when these are sentinel) so the no-wakeup
             # mode is fully no-op on shutdown too.
             self._wake_fd = INVALID_FD
-            self._wake_buf = UnsafePointer[UInt8, MutUntrackedOrigin](
+            self._wake_buf = Pointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=Int(0)
             )
         self._wake_armed = False
@@ -575,7 +576,7 @@ struct UringReactor(Movable):
     def arm_recv_multishot(
         mut self,
         fd: Int,
-        buf: UnsafePointer[UInt8, MutUntrackedOrigin],
+        buf: Pointer[UInt8, MutUntrackedOrigin],
         buf_len: Int,
         conn_id: UInt64,
     ) raises -> None:
@@ -731,7 +732,7 @@ struct UringReactor(Movable):
         # ring_entries (offset 8, u32 LE)
         var re = UInt32(ring_entries)
         for i in range(4):
-            (reg.unsafe_offset(8).unsafe_offset(i)).unsafe_write(
+            (reg.unsafe_offset(8 + i)).unsafe_write(
                 UInt8(Int((re >> UInt32(8 * i)) & 0xFF))
             )
         # bgid (offset 12, u16 LE)
@@ -820,7 +821,7 @@ struct UringReactor(Movable):
     def submit_send(
         mut self,
         fd: Int,
-        buf: UnsafePointer[UInt8, _],
+        buf: Pointer[UInt8, _],
         buf_len: Int,
         conn_id: UInt64,
     ) raises -> None:
@@ -857,8 +858,8 @@ struct UringReactor(Movable):
         # The IoUringSqe wrapper exposes set_flags but we're
         # writing a raw slot here; use the helper directly.
         # Offset 1 is _SQE_OFF_FLAGS; we OR in the skip-success bit.
-        var flag_byte = (slot + 1).load()
-        (slot + 1).init_pointee_copy(
+        var flag_byte = (slot.unsafe_offset(1)).unsafe_load()
+        (slot.unsafe_offset(1)).unsafe_write(
             flag_byte | UInt8(Int(IOSQE_CQE_SKIP_SUCCESS))
         )
         self._driver.commit_sqe()

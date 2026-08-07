@@ -41,7 +41,7 @@ site with the explicit ``[W=64]`` parameter on AVX-512 hosts.
 
 
 @always_inline
-def _check_crlfcrlf(p: UnsafePointer[UInt8, _], pos: Int, n: Int) -> Bool:
+def _check_crlfcrlf(p: Pointer[UInt8, _], pos: Int, n: Int) -> Bool:
     """Check whether ``p[pos:pos+4]`` is CRLFCRLF, bounds-safe against ``n``."""
     if pos + 3 >= n:
         return False
@@ -142,7 +142,7 @@ def _scalar_find_crlfcrlf(data: List[UInt8], start: Int) -> Int:
 
 @always_inline
 def _match_content_length_prefix(
-    p: UnsafePointer[UInt8, _], pos: Int, header_end: Int
+    p: Pointer[UInt8, _], pos: Int, header_end: Int
 ) -> Bool:
     """Case-insensitive compare against ``"content-length:"`` at ``pos``.
 
@@ -237,7 +237,7 @@ def scan_content_length[
 
 
 @always_inline
-def _parse_decimal(p: UnsafePointer[UInt8, _], start: Int, end: Int) -> Int:
+def _parse_decimal(p: Pointer[UInt8, _], start: Int, end: Int) -> Int:
     """Skip leading SP / HTAB, parse an unsigned decimal up to ``end``."""
     var pos = start
     while pos < end and (

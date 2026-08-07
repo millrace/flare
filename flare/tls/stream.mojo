@@ -47,6 +47,7 @@ sequence. Same idiom as
 ``flare.tls._server_ffi._do_ssl_ctx_new_server``.
 """
 
+from ..runtime.cfn import _CFn, _cfn
 from std.sys import stderr
 from std.ffi import OwnedDLHandle, c_int, CStringSlice
 from std.memory import UnsafePointer, stack_allocation
@@ -92,7 +93,7 @@ def _c_str(s: String) -> Int:
 # ── Borrow helpers (one per FFI export) ──────────────────────────────────────
 
 
-def _c_err(imm lib: OwnedDLHandle) raises -> String:
+def _c_err(imm lib: OwnedDLHandle) -> String:
     """Return the last OpenSSL error string from ``flare_ssl_last_error()``.
 
     Args:
@@ -102,8 +103,8 @@ def _c_err(imm lib: OwnedDLHandle) raises -> String:
     Returns:
         Human-readable error string (empty if no error).
     """
-    var fn_err = lib.get_function[UnsafePointer[UInt8, MutUntrackedOrigin]](
-        "flare_ssl_last_error"
+    var fn_err = _cfn[Pointer[UInt8, MutUntrackedOrigin]](
+        lib, "flare_ssl_last_error"
     )
     var p = fn_err()
     return String(
@@ -115,69 +116,65 @@ def _c_err(imm lib: OwnedDLHandle) raises -> String:
     )
 
 
-def _do_ssl_ctx_new(imm lib: OwnedDLHandle) raises -> Int:
-    var f = lib.get_function[Int]("flare_ssl_ctx_new")
+def _do_ssl_ctx_new(imm lib: OwnedDLHandle) -> Int:
+    var f = _cfn[Int](lib, "flare_ssl_ctx_new")
     return f()
 
 
-def _do_ssl_ctx_free(imm lib: OwnedDLHandle, ctx: Int) raises:
+def _do_ssl_ctx_free(imm lib: OwnedDLHandle, ctx: Int):
     if ctx == 0:
         return
-    var f = lib.get_function[NoneType]("flare_ssl_ctx_free")
+    var f = _cfn[NoneType](lib, "flare_ssl_ctx_free")
     f(ctx)
 
 
-def _do_ssl_ctx_set_security_policy(
-    imm lib: OwnedDLHandle, ctx: Int
-) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_ctx_set_security_policy")
+def _do_ssl_ctx_set_security_policy(imm lib: OwnedDLHandle, ctx: Int) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_ctx_set_security_policy")
     return Int(f(ctx))
 
 
 def _do_ssl_ctx_set_verify_peer(
     imm lib: OwnedDLHandle, ctx: Int, verify: c_int
-) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_ctx_set_verify_peer")
+) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_ctx_set_verify_peer")
     return Int(f(ctx, verify))
 
 
 def _do_ssl_ctx_load_ca_bundle(
     imm lib: OwnedDLHandle, ctx: Int, ca_path: String
-) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_ctx_load_ca_bundle")
+) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_ctx_load_ca_bundle")
     return Int(f(ctx, _c_str(ca_path)))
 
 
 def _do_ssl_ctx_load_cert_key(
     imm lib: OwnedDLHandle, ctx: Int, cert_path: String, key_path: String
-) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_ctx_load_cert_key")
+) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_ctx_load_cert_key")
     return Int(f(ctx, _c_str(cert_path), _c_str(key_path)))
 
 
 def _do_ssl_ctx_set_alpn_protos(
     imm lib: OwnedDLHandle, ctx: Int, blob: List[UInt8]
-) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_ctx_set_alpn_protos")
+) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_ctx_set_alpn_protos")
     return Int(f(ctx, Int(blob.unsafe_ptr()), c_int(len(blob))))
 
 
-def _do_ssl_new(imm lib: OwnedDLHandle, ctx: Int, fd: c_int) raises -> Int:
-    var f = lib.get_function[Int]("flare_ssl_new")
+def _do_ssl_new(imm lib: OwnedDLHandle, ctx: Int, fd: c_int) -> Int:
+    var f = _cfn[Int](lib, "flare_ssl_new")
     return f(ctx, fd)
 
 
-def _do_ssl_free(imm lib: OwnedDLHandle, ssl: Int) raises:
+def _do_ssl_free(imm lib: OwnedDLHandle, ssl: Int):
     if ssl == 0:
         return
-    var f = lib.get_function[NoneType]("flare_ssl_free")
+    var f = _cfn[NoneType](lib, "flare_ssl_free")
     f(ssl)
 
 
-def _do_ssl_connect(
-    imm lib: OwnedDLHandle, ssl: Int, var sni: String
-) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_connect")
+def _do_ssl_connect(imm lib: OwnedDLHandle, ssl: Int, var sni: String) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_connect")
     # NUL-terminate in place: a `sni` materialised from a StringSlice (the
     # common case — `Url.parse(...).host`) is not NUL-terminated under
     # `unsafe_ptr`, so OpenSSL's SSL_set_tlsext_host_name would read past the
@@ -190,28 +187,28 @@ def _do_ssl_connect(
 def _do_ssl_read(
     imm lib: OwnedDLHandle,
     ssl: Int,
-    buf: UnsafePointer[UInt8, _],
+    buf: Pointer[UInt8, _],
     size: Int,
-) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_read")
+) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_read")
     return Int(f(ssl, Int(buf), c_int(size)))
 
 
 def _do_ssl_write(
     imm lib: OwnedDLHandle, ssl: Int, data: Span[UInt8, _]
-) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_write")
+) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_write")
     return Int(f(ssl, Int(data.unsafe_ptr()), c_int(len(data))))
 
 
-def _do_ssl_shutdown(imm lib: OwnedDLHandle, ssl: Int) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_shutdown")
+def _do_ssl_shutdown(imm lib: OwnedDLHandle, ssl: Int) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_shutdown")
     return Int(f(ssl))
 
 
-def _do_ssl_get_version(imm lib: OwnedDLHandle, ssl: Int) raises -> String:
-    var f = lib.get_function[UnsafePointer[UInt8, MutUntrackedOrigin]](
-        "flare_ssl_get_version"
+def _do_ssl_get_version(imm lib: OwnedDLHandle, ssl: Int) -> String:
+    var f = _cfn[Pointer[UInt8, MutUntrackedOrigin]](
+        lib, "flare_ssl_get_version"
     )
     var p = f(ssl)
     return String(
@@ -223,9 +220,9 @@ def _do_ssl_get_version(imm lib: OwnedDLHandle, ssl: Int) raises -> String:
     )
 
 
-def _do_ssl_get_cipher(imm lib: OwnedDLHandle, ssl: Int) raises -> String:
-    var f = lib.get_function[UnsafePointer[UInt8, MutUntrackedOrigin]](
-        "flare_ssl_get_cipher"
+def _do_ssl_get_cipher(imm lib: OwnedDLHandle, ssl: Int) -> String:
+    var f = _cfn[Pointer[UInt8, MutUntrackedOrigin]](
+        lib, "flare_ssl_get_cipher"
     )
     var p = f(ssl)
     return String(
@@ -238,16 +235,16 @@ def _do_ssl_get_cipher(imm lib: OwnedDLHandle, ssl: Int) raises -> String:
 
 
 def _do_ssl_get_peer_cert_subject(
-    imm lib: OwnedDLHandle, ssl: Int, buf: UnsafePointer[UInt8, _], size: Int
-) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_get_peer_cert_subject")
+    imm lib: OwnedDLHandle, ssl: Int, buf: Pointer[UInt8, _], size: Int
+) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_get_peer_cert_subject")
     return Int(f(ssl, Int(buf), c_int(size)))
 
 
 def _do_ssl_get_alpn_selected(
-    imm lib: OwnedDLHandle, ssl: Int, buf: UnsafePointer[UInt8, _], size: Int
-) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_get_alpn_selected")
+    imm lib: OwnedDLHandle, ssl: Int, buf: Pointer[UInt8, _], size: Int
+) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_get_alpn_selected")
     return Int(f(ssl, Int(buf), c_int(size)))
 
 
@@ -256,32 +253,30 @@ def _do_ssl_get_alpn_selected(
 
 def _do_ssl_ctx_enable_client_session_cache(
     imm lib: OwnedDLHandle, ctx: Int
-) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_ctx_enable_client_session_cache")
+) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_ctx_enable_client_session_cache")
     return Int(f(ctx))
 
 
-def _do_ssl_ctx_take_session(imm lib: OwnedDLHandle, ctx: Int) raises -> Int:
-    var f = lib.get_function[Int]("flare_ssl_ctx_take_session")
+def _do_ssl_ctx_take_session(imm lib: OwnedDLHandle, ctx: Int) -> Int:
+    var f = _cfn[Int](lib, "flare_ssl_ctx_take_session")
     return f(ctx)
 
 
-def _do_ssl_session_free(imm lib: OwnedDLHandle, sess: Int) raises:
+def _do_ssl_session_free(imm lib: OwnedDLHandle, sess: Int):
     if sess == 0:
         return
-    var f = lib.get_function[NoneType]("flare_ssl_session_free")
+    var f = _cfn[NoneType](lib, "flare_ssl_session_free")
     f(sess)
 
 
-def _do_ssl_set_session(
-    imm lib: OwnedDLHandle, ssl: Int, sess: Int
-) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_set_session")
+def _do_ssl_set_session(imm lib: OwnedDLHandle, ssl: Int, sess: Int) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_set_session")
     return Int(f(ssl, sess))
 
 
-def _do_ssl_session_reused(imm lib: OwnedDLHandle, ssl: Int) raises -> Int:
-    var f = lib.get_function[c_int]("flare_ssl_session_reused")
+def _do_ssl_session_reused(imm lib: OwnedDLHandle, ssl: Int) -> Int:
+    var f = _cfn[c_int](lib, "flare_ssl_session_reused")
     return Int(f(ssl))
 
 
@@ -392,13 +387,8 @@ struct TlsSession(Movable):
         self._addr = addr
 
     def __deinit__(deinit self):
-        # _do_ssl_session_free raises if the symbol is missing (get_function);
-        # a destructor can't propagate that, so treat it as a no-op.
         if self._addr != 0:
-            try:
-                _do_ssl_session_free(self._lib, self._addr)
-            except:
-                pass
+            _do_ssl_session_free(self._lib, self._addr)
 
     def session_addr(self) -> Int:
         """Underlying ``SSL_SESSION*`` as an ``Int``. For
@@ -648,7 +638,7 @@ struct TlsStream(Movable, Readable):
 
     # ── I/O ───────────────────────────────────────────────────────────────────
 
-    def read(mut self, buf: UnsafePointer[UInt8, _], size: Int) raises -> Int:
+    def read(mut self, buf: Pointer[UInt8, _], size: Int) raises -> Int:
         """Decrypt and read up to ``size`` bytes into ``buf``.
 
         Returns 0 on clean TLS closure (``close_notify`` received).
@@ -670,7 +660,7 @@ struct TlsStream(Movable, Readable):
             raise NetworkError("TLS read error: " + _c_err(lib))
         return n
 
-    def read_exact(mut self, buf: UnsafePointer[UInt8, _], size: Int) raises:
+    def read_exact(mut self, buf: Pointer[UInt8, _], size: Int) raises:
         """Read exactly ``size`` bytes into ``buf``.
 
         Args:
@@ -682,7 +672,7 @@ struct TlsStream(Movable, Readable):
         """
         var received = 0
         while received < size:
-            var n = self.read(buf + received, size - received)
+            var n = self.read(buf.unsafe_offset(received), size - received)
             if n == 0:
                 raise NetworkError("TLS EOF before buffer full")
             received += n

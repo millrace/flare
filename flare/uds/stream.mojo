@@ -117,7 +117,7 @@ struct UnixStream(Movable):
 
     # ── I/O ──────────────────────────────────────────────────────────────
 
-    def read(self, buf: UnsafePointer[UInt8, _], n: Int) raises -> Int:
+    def read(self, buf: Pointer[UInt8, _], n: Int) raises -> Int:
         """Read up to ``n`` bytes into ``buf``. Returns 0 on EOF.
 
         Retries transparently on ``EINTR``. Raises
@@ -135,7 +135,7 @@ struct UnixStream(Movable):
                 raise ConnectionReset(self._peer_path, Int(e.value))
             raise NetworkError(_strerror(e.value) + " (recv)", Int(e.value))
 
-    def write(self, buf: UnsafePointer[UInt8, _], n: Int) raises -> Int:
+    def write(self, buf: Pointer[UInt8, _], n: Int) raises -> Int:
         """Write at most ``n`` bytes from ``buf``. Returns the byte
         count actually written (may be less than ``n``).
 

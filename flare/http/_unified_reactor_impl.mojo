@@ -262,7 +262,7 @@ def _apply_step_h2(
     mut reactor: Reactor,
     mut wheel: TimerWheel,
     mut timers: Dict[Int, UInt64],
-    h2_ptr: UnsafePointer[H2ConnHandle, MutUntrackedOrigin],
+    h2_ptr: Pointer[H2ConnHandle, MutUntrackedOrigin],
 ) raises:
     """Translate an :class:`H2ConnHandle` step into reactor + timer ops.
 
@@ -835,8 +835,8 @@ def run_unified_reactor_loop[
     reactor.register(listener_fd, UInt64(0), INTEREST_READ)
 
     var events = List[Event]()
-    var stopping_addr = Int(UnsafePointer[Bool, _](to=stopping))
-    while not UnsafePointer[Bool, MutUntrackedOrigin](
+    var stopping_addr = Int(Pointer[Bool, _](to=stopping))
+    while not Pointer[Bool, MutUntrackedOrigin](
         unsafe_from_address=stopping_addr
     )[]:
         events.clear()
@@ -948,8 +948,8 @@ def run_unified_reactor_loop_multi[
         reactor.register(f, UInt64(Int(f)), INTEREST_READ)
 
     var events = List[Event]()
-    var stopping_addr = Int(UnsafePointer[Bool, _](to=stopping))
-    while not UnsafePointer[Bool, MutUntrackedOrigin](
+    var stopping_addr = Int(Pointer[Bool, _](to=stopping))
+    while not Pointer[Bool, MutUntrackedOrigin](
         unsafe_from_address=stopping_addr
     )[]:
         events.clear()
@@ -1020,8 +1020,8 @@ def run_unified_reactor_loop_shared[
     reactor.register_exclusive(c_int(listener_fd), UInt64(0), INTEREST_READ)
 
     var events = List[Event]()
-    var stopping_addr = Int(UnsafePointer[Bool, _](to=stopping))
-    while not UnsafePointer[Bool, MutUntrackedOrigin](
+    var stopping_addr = Int(Pointer[Bool, _](to=stopping))
+    while not Pointer[Bool, MutUntrackedOrigin](
         unsafe_from_address=stopping_addr
     )[]:
         events.clear()

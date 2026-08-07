@@ -29,7 +29,8 @@ Coverage:
 """
 
 from std.ffi import c_int, c_uint, c_size_t, get_errno
-from std.memory import UnsafePointer, alloc, stack_allocation
+from std.memory import UnsafePointer, stack_allocation
+from std.memory.alloc import unsafe_alloc
 from std.testing import assert_equal, assert_true, assert_false
 
 from flare.net._libc import (
@@ -193,7 +194,7 @@ def _connect_loopback(port: UInt16) raises -> c_int:
     var ip = stack_allocation[4, UInt8]()
     (ip.unsafe_offset(0)).unsafe_write(UInt8(127))
     (ip.unsafe_offset(1)).unsafe_write(UInt8(0))
-    (ip.unsafe_offset(2)).unsafe_write(UInt8(0))
+    ip.unsafe_offset(2).unsafe_write(UInt8(0))
     (ip.unsafe_offset(3)).unsafe_write(UInt8(1))
     _fill_sockaddr_in(sa, port, ip)
     if _connect(c, sa, c_uint(16)) < c_int(0):
@@ -284,7 +285,7 @@ def test_submit_send_round_trip() raises:
 
     # Allocate a small recv buffer (32 bytes) and arm a
     # multishot recv on the accepted fd.
-    var rx = alloc[UInt8](32)
+    var rx = unsafe_alloc[UInt8](32)
     for i in range(32):
         (rx.unsafe_offset(i)).unsafe_write(UInt8(0))
     r.arm_recv_multishot(accepted_fd, rx, 32, UInt64(0x42))
@@ -580,7 +581,7 @@ def test_buffer_ring_recv_round_trip() raises:
     comptime BUFS = 4
     comptime BUF_SIZE = 1024
     comptime BGID: UInt16 = 7
-    var pool = alloc[UInt8](BUFS * BUF_SIZE)
+    var pool = unsafe_alloc[UInt8](BUFS * BUF_SIZE)
     for i in range(BUFS * BUF_SIZE):
         (pool.unsafe_offset(i)).unsafe_write(UInt8(0))
     r.arm_provide_buffers(
@@ -718,7 +719,7 @@ def test_register_pbuf_ring_recv_round_trip() raises:
     # Allocate the actual buffer storage (independent of the
     # ring; the ring just holds {addr, len, bid} entries that
     # point into this buffer pool).
-    var pool = alloc[UInt8](RING_ENTRIES * BUF_BYTES)
+    var pool = unsafe_alloc[UInt8](RING_ENTRIES * BUF_BYTES)
     for i in range(RING_ENTRIES * BUF_BYTES):
         (pool.unsafe_offset(i)).unsafe_write(UInt8(0))
 
@@ -847,7 +848,7 @@ def test_register_pbuf_ring_multishot_continues() raises:
     comptime BGID: UInt16 = 11
 
     var ring_addr = r.register_pbuf_ring(BGID, RING_ENTRIES)
-    var pool = alloc[UInt8](RING_ENTRIES * BUF_BYTES)
+    var pool = unsafe_alloc[UInt8](RING_ENTRIES * BUF_BYTES)
     for i in range(RING_ENTRIES * BUF_BYTES):
         (pool.unsafe_offset(i)).unsafe_write(UInt8(0))
 
@@ -921,7 +922,7 @@ def test_register_pbuf_ring_multishot_continues() raises:
                     var slot = pool.unsafe_offset((bid * BUF_BYTES))
                     assert_equal(Int(slot.unsafe_load()), ord("a") + i)
                     assert_equal(
-                        Int((slot.unsafe_offset(1)).unsafe_load()), ord("0") + i
+                        Int(slot.unsafe_offset(1).unsafe_load()), ord("0") + i
                     )
                     seen += 1
                     got_this_round = True

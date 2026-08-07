@@ -103,7 +103,8 @@ care about fast-cancel during long work can poll ``cancel``
 inside ``work()``.
 """
 
-from std.memory import UnsafePointer, alloc, unsafe_memcpy
+from std.memory.alloc import unsafe_alloc
+from std.memory import UnsafePointer, unsafe_memcpy
 
 from ..http.cancel import Cancel, CancelReason
 from ._thread import ThreadHandle
@@ -123,7 +124,7 @@ comptime _ERR_BUF_CAP: Int = 256
 
 
 @fieldwise_init
-struct _Task[T: ImplicitlyDeletable & Movable](Movable):
+struct _Task[T: Deinitable & Movable](Movable):
     """Heap-allocated task delivered to the worker pthread.
 
     Address fields are stored as ``Int`` rather than typed
@@ -162,8 +163,8 @@ struct _Task[T: ImplicitlyDeletable & Movable](Movable):
 
 
 def _block_thunk[
-    T: ImplicitlyDeletable & Movable
-](arg: UnsafePointer[UInt8, MutUntrackedOrigin]) -> UnsafePointer[
+    T: Deinitable & Movable
+](arg: Pointer[UInt8, MutUntrackedOrigin]) -> Pointer[
     UInt8, MutUntrackedOrigin
 ]:
     """pthread start routine. Per-T monomorphisation.
@@ -180,22 +181,20 @@ def _block_thunk[
     6. Always free the ``_Task`` allocation we own; the buffers
        it points at are freed-or-not based on step 5.
     """
-    var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
-        unsafe_from_address=Int(arg)
-    )
+    var raw = Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(arg))
     var task_ptr = raw.unsafe_bitcast[_Task[T]]()
     var task = task_ptr.unsafe_take_pointee()
 
-    var result_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
+    var result_ptr = Pointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=task.result_addr
     ).unsafe_bitcast[T]()
-    var err_buf = UnsafePointer[UInt8, MutUntrackedOrigin](
+    var err_buf = Pointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=task.err_buf_addr
     )
-    var err_len_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
+    var err_len_ptr = Pointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=task.err_len_addr
     ).unsafe_bitcast[Int]()
-    var success_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
+    var success_ptr = Pointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=task.success_addr
     )
 
@@ -220,7 +219,7 @@ def _block_thunk[
     # _Task allocation itself.
     task_ptr.unsafe_free()
 
-    return UnsafePointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(0))
+    return Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(0))
 
 
 # ── Cancel-reason error formatting ──────────────────────────────────────────
@@ -244,7 +243,7 @@ def _raise_cancel(prefix: String, reason: Int) raises:
 
 
 def block_in_pool[
-    T: ImplicitlyDeletable & Movable
+    T: Deinitable & Movable
 ](work: def() raises thin -> T, cancel: Cancel) raises -> T:
     """Run ``work()`` on a fresh kernel thread; wait for its
     result on the calling thread.
@@ -287,17 +286,17 @@ def block_in_pool[
     # allocations. Splitting them across allocs (rather than one big
     # block) keeps the per-T parametric step (the result slot) cleanly
     # separate from the type-erased flag bytes.
-    var result_ptr = alloc[T](1)
-    var err_buf = alloc[UInt8](_ERR_BUF_CAP)
-    var err_len_ptr = alloc[Int](1)
-    var success_ptr = alloc[UInt8](1)
+    var result_ptr = unsafe_alloc[T](1)
+    var err_buf = unsafe_alloc[UInt8](_ERR_BUF_CAP)
+    var err_len_ptr = unsafe_alloc[Int](1)
+    var success_ptr = unsafe_alloc[UInt8](1)
 
     # Initialise flags to 0. (T's slot is uninitialised; the worker
     # init_pointee_move's into it on success.)
     err_len_ptr[unsafe_offset=0] = 0
     success_ptr[unsafe_offset=0] = UInt8(0)
 
-    var task_ptr = alloc[_Task[T]](1)
+    var task_ptr = unsafe_alloc[_Task[T]](1)
     task_ptr.unsafe_write(
         _Task[T](
             work=work,
@@ -316,7 +315,7 @@ def block_in_pool[
     # libc_usleep, which on this Mojo nightly hits the documented
     # 1000-1500x multiplier in multi-threaded contexts and inflates
     # per-call latency from ~50 us to ~1 s.
-    var task_opaque = UnsafePointer[UInt8, MutUntrackedOrigin](
+    var task_opaque = Pointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=Int(task_ptr)
     )
     var handle = ThreadHandle.spawn[_block_thunk[T]](task_opaque)

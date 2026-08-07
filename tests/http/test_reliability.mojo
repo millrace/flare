@@ -1,6 +1,7 @@
 """Unit tests for the reliability middleware (Retry, PostHocDeadline)."""
 
-from std.memory import UnsafePointer, alloc
+from std.memory import UnsafePointer
+from std.memory.alloc import unsafe_alloc
 from std.testing import assert_equal, assert_true
 from std.time import perf_counter_ns
 
@@ -34,7 +35,7 @@ struct AlwaysFiveHundredHandler(Copyable, Defaultable, Handler, Movable):
 
     def serve(self, req: Request) raises -> Response:
         if self.calls_ptr != 0:
-            var p = UnsafePointer[Int, MutUntrackedOrigin](
+            var p = Pointer[Int, MutUntrackedOrigin](
                 unsafe_from_address=self.calls_ptr
             )
             p[] = p[] + 1
@@ -68,7 +69,7 @@ struct EventuallyOkHandler(Copyable, Defaultable, Handler, Movable):
     def serve(self, req: Request) raises -> Response:
         if self.counter_ptr == 0:
             return ok(String("no-counter"))
-        var p = UnsafePointer[Int, MutUntrackedOrigin](
+        var p = Pointer[Int, MutUntrackedOrigin](
             unsafe_from_address=self.counter_ptr
         )
         var n = p[]
@@ -81,18 +82,18 @@ struct EventuallyOkHandler(Copyable, Defaultable, Handler, Movable):
 def _new_counter() -> Int:
     """Allocate a fresh shared Int cell and return its raw
     address. Caller must call ``_free_counter`` after the test."""
-    var p = alloc[Int](1)
+    var p = unsafe_alloc[Int](1)
     p[] = 0
     return Int(p)
 
 
 def _read_counter(addr: Int) -> Int:
-    var p = UnsafePointer[Int, MutUntrackedOrigin](unsafe_from_address=addr)
+    var p = Pointer[Int, MutUntrackedOrigin](unsafe_from_address=addr)
     return p[]
 
 
 def _free_counter(addr: Int):
-    var p = UnsafePointer[Int, MutUntrackedOrigin](unsafe_from_address=addr)
+    var p = Pointer[Int, MutUntrackedOrigin](unsafe_from_address=addr)
     p.unsafe_free()
 
 

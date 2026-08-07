@@ -522,7 +522,7 @@ struct Reactor(Movable):
                         UInt8((sec >> UInt64(8 * k)) & 0xFF)
                     )
                 for k in range(8):
-                    (ts.unsafe_offset(8).unsafe_offset(k)).unsafe_write(
+                    (ts.unsafe_offset(8 + k)).unsafe_write(
                         UInt8((nsec >> UInt64(8 * k)) & 0xFF)
                     )
             else:
@@ -542,7 +542,7 @@ struct Reactor(Movable):
                     ts,
                 )
             else:
-                var null_ts = UnsafePointer[UInt8, MutUntrackedOrigin](
+                var null_ts = Pointer[UInt8, MutUntrackedOrigin](
                     unsafe_from_address=Int(0)
                 )
                 n = _kevent(

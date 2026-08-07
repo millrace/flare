@@ -62,6 +62,7 @@ side is fully isolated here so the compression-oracle hardening
 review only needs to scrutinise this single file.
 """
 
+from ..runtime.cfn import _CFn, _cfn
 from std.ffi import OwnedDLHandle, c_int
 
 from ..utils.dylib import find_flare_lib
@@ -185,7 +186,7 @@ def _do_compress_raw_deflate(
         level: zlib compression level passed through to
             ``deflateInit2``.
     """
-    var fn_compress = lib.get_function[c_int]("flare_compress_raw_deflate")
+    var fn_compress = _cfn[c_int](lib, "flare_compress_raw_deflate")
 
     # zlib's worst-case bound: srclen + (srclen >> 12) + (srclen >> 14)
     # + (srclen >> 25) + 13. We add a constant slack for the empty
@@ -283,7 +284,7 @@ def _do_decompress_raw_inflate_capped(
             already re-appended).
         max_out: The decompressed-size cap.
     """
-    var fn_decomp = lib.get_function[c_int]("flare_decompress")
+    var fn_decomp = _cfn[c_int](lib, "flare_decompress")
     var window_bits = c_int(-15)
     var cap = max(len(data) * 4, 4096)
     if cap > max_out:
@@ -370,7 +371,7 @@ def _do_pmd_compressor_new(
 ) raises -> Int:
     """Allocate a persistent deflate z_stream via FFI. Returns the
     opaque handle (an ``intptr_t``-encoded ``z_stream*``)."""
-    var fn_new = lib.get_function[Int]("flare_pmd_compressor_new")
+    var fn_new = _cfn[Int](lib, "flare_pmd_compressor_new")
     return fn_new(level, window_bits)
 
 
@@ -383,13 +384,13 @@ def _do_pmd_compress_chunk(
     out_cap: c_int,
 ) raises -> c_int:
     """Compress one chunk through a persistent deflate context."""
-    var fn_chunk = lib.get_function[c_int]("flare_pmd_compress_chunk")
+    var fn_chunk = _cfn[c_int](lib, "flare_pmd_compress_chunk")
     return fn_chunk(handle, in_buf, in_len, out_buf, out_cap)
 
 
 def _do_pmd_compressor_free(imm lib: OwnedDLHandle, handle: Int) raises -> None:
     """Release a persistent deflate context."""
-    var fn_free = lib.get_function[NoneType]("flare_pmd_compressor_free")
+    var fn_free = _cfn[NoneType](lib, "flare_pmd_compressor_free")
     fn_free(handle)
 
 
@@ -397,7 +398,7 @@ def _do_pmd_decompressor_new(
     imm lib: OwnedDLHandle, window_bits: c_int
 ) raises -> Int:
     """Allocate a persistent inflate z_stream via FFI."""
-    var fn_new = lib.get_function[Int]("flare_pmd_decompressor_new")
+    var fn_new = _cfn[Int](lib, "flare_pmd_decompressor_new")
     return fn_new(window_bits)
 
 
@@ -409,14 +410,14 @@ def _do_pmd_decompress_chunk(
     out_buf: Int,
     out_cap: c_int,
 ) raises -> c_int:
-    var fn_chunk = lib.get_function[c_int]("flare_pmd_decompress_chunk")
+    var fn_chunk = _cfn[c_int](lib, "flare_pmd_decompress_chunk")
     return fn_chunk(handle, in_buf, in_len, out_buf, out_cap)
 
 
 def _do_pmd_decompressor_free(
     imm lib: OwnedDLHandle, handle: Int
 ) raises -> None:
-    var fn_free = lib.get_function[NoneType]("flare_pmd_decompressor_free")
+    var fn_free = _cfn[NoneType](lib, "flare_pmd_decompressor_free")
     fn_free(handle)
 
 
@@ -523,14 +524,14 @@ struct PermessageDeflateContext(Movable):
         self._level = level
         self._window_bits = window_bits
 
-    def __init__(out self, *, deinit take: Self):
+    def __init__(out self, *, deinit move: Self):
         """Transfer ownership; the source is consumed via
         ``deinit`` so its destructor is never invoked."""
-        self._comp_handle = take._comp_handle
-        self._decomp_handle = take._decomp_handle
-        self.max_decompressed_bytes = take.max_decompressed_bytes
-        self._level = take._level
-        self._window_bits = take._window_bits
+        self._comp_handle = move._comp_handle
+        self._decomp_handle = move._decomp_handle
+        self.max_decompressed_bytes = move.max_decompressed_bytes
+        self._level = move._level
+        self._window_bits = move._window_bits
 
     def __deinit__(deinit self):
         """Release both z_streams through the FFI; safe to call

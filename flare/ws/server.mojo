@@ -12,6 +12,8 @@ The upgrade handshake (§4.2):
     5. Hand off to ``WsConnection``.
 """
 
+from ..runtime.cfn import _CFn, _cfn
+from std.memory.alloc import unsafe_alloc
 from std.builtin.debug_assert import debug_assert
 from std.ffi import OwnedDLHandle, c_int
 from std.memory import UnsafePointer
@@ -34,7 +36,7 @@ comptime _SHA1_LEN: Int = 20
 
 def _do_sha1_srv(
     imm lib: OwnedDLHandle, data_bytes: Span[UInt8, _]
-) raises -> List[UInt8]:
+) -> List[UInt8]:
     """Invoke the SHA-1 C function with ``lib`` borrowed.
 
     Doing both ``get_function`` and the call inside the borrow keeps
@@ -51,7 +53,7 @@ def _do_sha1_srv(
     Returns:
         20-byte SHA-1 digest as ``List[UInt8]``.
     """
-    var fn_sha1 = lib.get_function[Int]("SHA1")
+    var fn_sha1 = _cfn[Int](lib, "SHA1")
     var digest = List[UInt8](capacity=_SHA1_LEN)
     digest.resize(_SHA1_LEN, 0)
     _ = fn_sha1(
@@ -723,9 +725,7 @@ def _ws_offload_entry(arg: _OpaquePtr) -> _OpaquePtr:
         ctx_addr != 0,
         "_ws_offload_entry: ctx pointer must be non-NULL",
     )
-    var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
-        unsafe_from_address=ctx_addr
-    )
+    var raw = Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=ctx_addr)
     var ctx_ptr = raw.unsafe_bitcast[_WsOffloadCtx]()
     var ctx = ctx_ptr.unsafe_take_pointee()
     ctx_ptr.unsafe_free()
@@ -733,7 +733,7 @@ def _ws_offload_entry(arg: _OpaquePtr) -> _OpaquePtr:
         ctx.handler(ctx.conn)
     except e:
         print("[ws] offloaded connection error: " + String(e))
-    return UnsafePointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(0))
+    return Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(0))
 
 
 def spawn_ws_offload(
@@ -749,13 +749,13 @@ def spawn_ws_offload(
     """
     from std.memory import alloc
 
-    var ctx_ptr = alloc[_WsOffloadCtx](1)
+    var ctx_ptr = unsafe_alloc[_WsOffloadCtx](1)
     debug_assert[assert_mode="safe"](
         Int(ctx_ptr) != 0,
         "spawn_ws_offload: alloc[_WsOffloadCtx] returned NULL",
     )
     ctx_ptr.unsafe_write(_WsOffloadCtx(conn^, handler))
-    var arg = UnsafePointer[UInt8, MutUntrackedOrigin](
+    var arg = Pointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=Int(ctx_ptr)
     )
     var th = ThreadHandle.spawn[_ws_offload_entry](arg)
@@ -798,9 +798,7 @@ def _ws_worker_entry(arg: _OpaquePtr) -> _OpaquePtr:
         ctx_addr != 0,
         "_ws_worker_entry: ctx pointer must be non-NULL",
     )
-    var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
-        unsafe_from_address=ctx_addr
-    )
+    var raw = Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=ctx_addr)
     var ctx_ptr = raw.unsafe_bitcast[_WsWorkerCtx]()
     try:
         while True:
@@ -809,7 +807,7 @@ def _ws_worker_entry(arg: _OpaquePtr) -> _OpaquePtr:
             _handle_ws_connection(stream^, peer, ctx_ptr[].handler)
     except:
         pass
-    return UnsafePointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(0))
+    return Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(0))
 
 
 def _ws_serve_multicore(
@@ -849,7 +847,7 @@ def _ws_serve_multicore(
     # ThreadHandles themselves live in an UnsafePointer-backed
     # array we walk by index.
     var ctx_addrs = List[Int]()
-    var threads_ptr = alloc[ThreadHandle](num_workers)
+    var threads_ptr = unsafe_alloc[ThreadHandle](num_workers)
     debug_assert[assert_mode="safe"](
         Int(threads_ptr) != 0,
         "_ws_serve_multicore: alloc[ThreadHandle] returned NULL",
@@ -858,7 +856,7 @@ def _ws_serve_multicore(
     for i in range(num_workers):
         var listener = bind_reuseport(addr)
         var ctx = _WsWorkerCtx(listener^, handler)
-        var ctx_ptr = alloc[_WsWorkerCtx](1)
+        var ctx_ptr = unsafe_alloc[_WsWorkerCtx](1)
         debug_assert[assert_mode="safe"](
             Int(ctx_ptr) != 0,
             "_ws_serve_multicore: alloc[_WsWorkerCtx] returned NULL on worker ",
@@ -869,9 +867,7 @@ def _ws_serve_multicore(
         var addr_int = Int(arg)
         ctx_addrs.append(addr_int)
         var th = ThreadHandle.spawn[_ws_worker_entry](
-            UnsafePointer[UInt8, MutUntrackedOrigin](
-                unsafe_from_address=addr_int
-            )
+            Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr_int)
         )
         (threads_ptr.unsafe_offset(i)).unsafe_write(th^)
 
@@ -889,7 +885,7 @@ def _ws_serve_multicore(
             "_ws_serve_multicore: ctx_addrs[i] is null on free; i=",
             i,
         )
-        var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
+        var raw = Pointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=ctx_addrs[i]
         )
         raw.unsafe_bitcast[_WsWorkerCtx]().unsafe_deinit_pointee()

@@ -276,7 +276,7 @@ def _month_short(m: Int) -> SIMD[DType.uint8, 4]:
 
 @always_inline
 def _write_two_digits(
-    p: UnsafePointer[UInt8, _], offset: Int, n: Int
+    p: Pointer[UInt8, _], offset: Int, n: Int
 ) where type_of(p).mut:
     """Write a zero-padded two-digit decimal at ``p + offset``.
 
@@ -296,12 +296,12 @@ def _write_two_digits(
         n,
     )
     (p.unsafe_offset(offset)).unsafe_write(UInt8(48 + n // 10))
-    (p.unsafe_offset(offset).unsafe_offset(1)).unsafe_write(UInt8(48 + n % 10))
+    (p.unsafe_offset(offset + 1)).unsafe_write(UInt8(48 + n % 10))
 
 
 @always_inline
 def _write_four_digits(
-    p: UnsafePointer[UInt8, _], offset: Int, n: Int
+    p: Pointer[UInt8, _], offset: Int, n: Int
 ) where type_of(p).mut:
     """Write a zero-padded four-digit decimal at ``p + offset``.
 
@@ -322,11 +322,9 @@ def _write_four_digits(
     var tens = (n % 100) // 10
     var ones = n % 10
     (p.unsafe_offset(offset)).unsafe_write(UInt8(48 + thousands))
-    (p.unsafe_offset(offset).unsafe_offset(1)).unsafe_write(
-        UInt8(48 + hundreds)
-    )
-    (p.unsafe_offset(offset).unsafe_offset(2)).unsafe_write(UInt8(48 + tens))
-    (p.unsafe_offset(offset).unsafe_offset(3)).unsafe_write(UInt8(48 + ones))
+    (p.unsafe_offset(offset + 1)).unsafe_write(UInt8(48 + hundreds))
+    (p.unsafe_offset(offset + 2)).unsafe_write(UInt8(48 + tens))
+    (p.unsafe_offset(offset + 3)).unsafe_write(UInt8(48 + ones))
 
 
 # ── Time helpers ──────────────────────────────────────────────────────────────
@@ -364,7 +362,7 @@ def _realtime_seconds() -> Int:
 
 
 def _format_imf_fixdate(
-    unix_secs: Int, p: UnsafePointer[UInt8, _]
+    unix_secs: Int, p: Pointer[UInt8, _]
 ) where type_of(p).mut:
     """Format ``unix_secs`` as a 29-byte IMF-fixdate at ``p[0:29]``.
 

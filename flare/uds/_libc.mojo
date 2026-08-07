@@ -53,7 +53,7 @@ are rejected before any libc call."""
 
 
 def fill_sockaddr_un(
-    buf: UnsafePointer[UInt8, _],
+    buf: Pointer[UInt8, _],
     path: String,
 ) raises -> c_uint where type_of(buf).mut:
     """Populate a :data:`SOCKADDR_UN_SIZE`-byte buffer with a
@@ -100,19 +100,15 @@ def fill_sockaddr_un(
         path_offset = 2
 
     for i in range(path_bytes):
-        (buf.unsafe_offset(path_offset).unsafe_offset(i)).unsafe_write(
-            pp[unsafe_offset=i]
-        )
+        (buf.unsafe_offset(path_offset + i)).unsafe_write(pp[unsafe_offset=i])
     # NUL terminator
-    (buf.unsafe_offset(path_offset).unsafe_offset(path_bytes)).unsafe_write(
-        UInt8(0)
-    )
+    (buf.unsafe_offset(path_offset + path_bytes)).unsafe_write(UInt8(0))
 
     return c_uint(path_offset + path_bytes + 1)
 
 
 def read_path_from_sockaddr_un(
-    buf: UnsafePointer[UInt8, _],
+    buf: Pointer[UInt8, _],
     used_len: c_uint,
 ) raises -> String:
     """Decode a ``sockaddr_un`` buffer back into a Python-style
@@ -131,7 +127,7 @@ def read_path_from_sockaddr_un(
         max_len = SUN_PATH_MAX
     var out = String(capacity=max_len + 1)
     for i in range(max_len):
-        var b = (buf.unsafe_offset(path_offset).unsafe_offset(i)).unsafe_load()
+        var b = (buf.unsafe_offset(path_offset + i)).unsafe_load()
         if b == 0:
             break
         out += chr(Int(b))

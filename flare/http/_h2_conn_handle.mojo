@@ -34,10 +34,11 @@ client preface arrives flushes both the SETTINGS and the
 SETTINGS-ACK in one syscall.
 """
 
+from std.memory.alloc import unsafe_alloc
 from std.builtin.debug_assert import debug_assert
 from std.collections import Dict
 from std.ffi import c_int, c_size_t, ErrNo, get_errno
-from std.memory import UnsafePointer, alloc, stack_allocation
+from std.memory import UnsafePointer, stack_allocation
 
 from flare.http.cancel import Cancel, CancelCell, CancelReason
 from flare.http.handler import CancelHandler, Handler
@@ -371,7 +372,7 @@ struct H2ConnHandle(Movable):
         for entry in self.stream_cells.items():
             var addr = entry.value
             if addr != 0:
-                var p = UnsafePointer[Int, MutUntrackedOrigin](
+                var p = Pointer[Int, MutUntrackedOrigin](
                     unsafe_from_address=addr
                 )
                 p.unsafe_deinit_pointee()
@@ -386,7 +387,7 @@ struct H2ConnHandle(Movable):
         """
         if sid in self.stream_cells:
             return self.stream_cells[sid]
-        var p = alloc[Int](1)
+        var p = unsafe_alloc[Int](1)
         p.unsafe_write(CancelReason.NONE)
         var addr = Int(p)
         self.stream_cells[sid] = addr
@@ -399,9 +400,7 @@ struct H2ConnHandle(Movable):
             return
         var addr = self.stream_cells.pop(sid)
         if addr != 0:
-            var p = UnsafePointer[Int, MutUntrackedOrigin](
-                unsafe_from_address=addr
-            )
+            var p = Pointer[Int, MutUntrackedOrigin](unsafe_from_address=addr)
             p.unsafe_deinit_pointee()
             p.unsafe_free()
 
@@ -417,7 +416,7 @@ struct H2ConnHandle(Movable):
         for entry in self.stream_cells.items():
             var addr = entry.value
             if addr != 0:
-                var p = UnsafePointer[Int, MutUntrackedOrigin](
+                var p = Pointer[Int, MutUntrackedOrigin](
                     unsafe_from_address=addr
                 )
                 p[] = reason
@@ -436,9 +435,7 @@ struct H2ConnHandle(Movable):
             _ = self._alloc_stream_cell(sid)
         var addr = self.stream_cells[sid]
         if addr != 0:
-            var p = UnsafePointer[Int, MutUntrackedOrigin](
-                unsafe_from_address=addr
-            )
+            var p = Pointer[Int, MutUntrackedOrigin](unsafe_from_address=addr)
             p[] = reason
 
     def _stream_cell_cancelled(imm self, sid: Int) raises -> Bool:
@@ -451,7 +448,7 @@ struct H2ConnHandle(Movable):
         var addr = self.stream_cells[sid]
         if addr == 0:
             return False
-        var p = UnsafePointer[Int, MutUntrackedOrigin](unsafe_from_address=addr)
+        var p = Pointer[Int, MutUntrackedOrigin](unsafe_from_address=addr)
         return p[] != CancelReason.NONE
 
     def on_readable_cancel[
@@ -701,13 +698,13 @@ def _h2_conn_free_addr(addr: Int):
 
 def _h2_conn_ptr_from_int(
     addr: Int,
-) -> UnsafePointer[H2ConnHandle, MutUntrackedOrigin]:
+) -> Pointer[H2ConnHandle, MutUntrackedOrigin]:
     """Reverse of :func:`_h2_conn_alloc_addr`: typed pointer from an Int."""
     debug_assert[assert_mode="safe"](
         addr != 0,
         "_h2_conn_ptr_from_int: cannot reconstruct from null addr",
     )
-    return UnsafePointer[UInt8, MutUntrackedOrigin](
+    return Pointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=addr
     ).unsafe_bitcast[H2ConnHandle]()
 
@@ -912,12 +909,12 @@ def _pending_conn_free_addr(addr: Int):
 
 def _pending_conn_ptr_from_int(
     addr: Int,
-) -> UnsafePointer[PendingConnHandle, MutUntrackedOrigin]:
+) -> Pointer[PendingConnHandle, MutUntrackedOrigin]:
     """Reverse of :func:`_pending_conn_alloc_addr`."""
     debug_assert[assert_mode="safe"](
         addr != 0,
         "_pending_conn_ptr_from_int: cannot reconstruct from null addr",
     )
-    return UnsafePointer[UInt8, MutUntrackedOrigin](
+    return Pointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=addr
     ).unsafe_bitcast[PendingConnHandle]()

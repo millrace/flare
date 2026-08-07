@@ -40,9 +40,10 @@ pointer on every access; on ``HttpClient.__del__`` the state is
 freed and any remaining fds are closed.
 """
 
+from std.memory.alloc import unsafe_alloc
 from std.collections import Dict
 from std.ffi import c_int, external_call
-from std.memory import UnsafePointer, alloc
+from std.memory import UnsafePointer
 
 from flare.net._libc import _close
 
@@ -145,7 +146,7 @@ struct ClientPool(Copyable, Movable):
                 before it's evicted on the next acquire(key).
                 0 disables timeout eviction.
         """
-        var p = alloc[_ClientPoolState](1)
+        var p = unsafe_alloc[_ClientPoolState](1)
         p.unsafe_write(
             _ClientPoolState(
                 Dict[String, List[Int]](),
@@ -168,14 +169,14 @@ struct ClientPool(Copyable, Movable):
 
     def _state(
         imm self,
-    ) -> UnsafePointer[_ClientPoolState, MutUntrackedOrigin]:
+    ) -> Pointer[_ClientPoolState, MutUntrackedOrigin]:
         """Re-materialise a typed pointer from :attr:`_addr`.
 
         Mirrors the :class:`flare.http.cancel.Cancel` pattern --
         the typed pointer is rebuilt per access so Mojo's optimiser
         cannot hoist a stale load across function boundaries.
         """
-        return UnsafePointer[UInt8, MutUntrackedOrigin](
+        return Pointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=self._addr
         ).unsafe_bitcast[_ClientPoolState]()
 
@@ -321,7 +322,7 @@ def _monotonic_ms() -> Int:
     a no-op (every entry's age computes to 0), which is
     conservative.
     """
-    var ts_buf = alloc[Int](2)
+    var ts_buf = unsafe_alloc[Int](2)
     ts_buf[unsafe_offset=0] = 0
     ts_buf[unsafe_offset=1] = 0
     # CLOCK_MONOTONIC = 1 on linux + macos.

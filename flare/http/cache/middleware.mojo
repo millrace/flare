@@ -178,7 +178,7 @@ def _request_path(req: Request) -> String:
 
 
 def _alloc_store_or_zero[
-    S: CacheStore & ImplicitlyDeletable,
+    S: CacheStore & Deinitable,
 ]() -> Int:
     """Heap-allocate a fresh ``S`` and return its address, or 0
     on allocator failure. Defaultable middleware ``__init__``
@@ -195,7 +195,7 @@ def _alloc_store_or_zero[
 
 
 def _alloc_store_or_zero_move[
-    S: CacheStore & ImplicitlyDeletable,
+    S: CacheStore & Deinitable,
 ](var store: S) -> Int:
     """Same as :func:`_alloc_store_or_zero` but moves an
     already-built ``S`` value into the heap cell."""
@@ -207,7 +207,7 @@ def _alloc_store_or_zero_move[
 
 struct Cache[
     Inner: Handler & Copyable & Defaultable,
-    S: CacheStore & ImplicitlyDeletable,
+    S: CacheStore & Deinitable,
 ](Copyable, Defaultable, Handler, Movable):
     """RFC 9111 HTTP cache middleware.
 
@@ -228,8 +228,8 @@ struct Cache[
     once nightly surfaces a stable shared-pointer type.
 
     Parameters:
-        Inner: the inner handler.
-        S: the cache store; must satisfy the :class:`CacheStore`
+        Inner: The inner handler.
+        S: The cache store; must satisfy the :class:`CacheStore`
            trait.
 
     Example::
@@ -262,7 +262,7 @@ struct Cache[
         self.inner = inner^
         self.store_addr = _alloc_store_or_zero_move[Self.S](store^)
 
-    def _store_ptr(self) -> UnsafePointer[Self.S, MutUntrackedOrigin]:
+    def _store_ptr(self) -> Pointer[Self.S, MutUntrackedOrigin]:
         return Pool[Self.S].get_ptr(self.store_addr)
 
     def _build_key(self, req: Request) raises -> CacheKey:

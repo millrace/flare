@@ -18,6 +18,7 @@ Test certificates (tests/certs/):
   server.key — server private key
 """
 
+from flare.runtime.cfn import _CFn, _cfn
 from std.testing import assert_equal, assert_true, assert_false, TestSuite
 from std.ffi import OwnedDLHandle, c_int, CStringSlice
 from std.memory import UnsafePointer, stack_allocation
@@ -54,8 +55,8 @@ def _c_str(s: String) -> Int:
 
 def _tls_err(lib: OwnedDLHandle) raises -> String:
     """Return the last error from ``flare_ssl_last_error``."""
-    var fn_e = lib.get_function[UnsafePointer[UInt8, MutUntrackedOrigin]](
-        "flare_ssl_last_error"
+    var fn_e = _cfn[Pointer[UInt8, MutUntrackedOrigin]](
+        lib, "flare_ssl_last_error"
     )
     var p = fn_e()
     return String(
@@ -89,7 +90,7 @@ struct _TlsTestServer:
             ca: Path to CA bundle for client cert verification, or ``""``.
         """
         self._lib = OwnedDLHandle(_find_flare_lib())
-        var fn_new = self._lib.get_function[Int]("flare_test_server_new")
+        var fn_new = _cfn[Int](self._lib, "flare_test_server_new")
         var ca_int = _c_str(ca) if ca != "" else 0
         self._ptr = fn_new(
             _c_str(cert),
@@ -101,16 +102,9 @@ struct _TlsTestServer:
             raise Error("flare_test_server_new failed: " + _tls_err(self._lib))
 
     def __deinit__(deinit self):
-        # get_function raises if the symbol is missing; a destructor can't
-        # propagate that, so treat a missing symbol as a no-op.
         if self._ptr != 0:
-            try:
-                var fn_free = self._lib.get_function[NoneType](
-                    "flare_test_server_free"
-                )
-                fn_free(self._ptr)
-            except:
-                pass
+            var fn_free = _cfn[NoneType](self._lib, "flare_test_server_free")
+            fn_free(self._ptr)
 
     def port(self) raises -> Int:
         """Return the actual bound TCP port.
@@ -118,7 +112,7 @@ struct _TlsTestServer:
         Returns:
             Port number the server is listening on.
         """
-        var fn_port = self._lib.get_function[c_int]("flare_test_server_port")
+        var fn_port = _cfn[c_int](self._lib, "flare_test_server_port")
         return Int(fn_port(self._ptr))
 
     def echo_once(self) raises:
@@ -127,9 +121,7 @@ struct _TlsTestServer:
         Blocks until a client connects, performs TLS handshake, echoes data,
         then returns. Intended to be the only operation in a forked child.
         """
-        var fn_echo = self._lib.get_function[c_int](
-            "flare_test_server_echo_once"
-        )
+        var fn_echo = _cfn[c_int](self._lib, "flare_test_server_echo_once")
         _ = fn_echo(self._ptr)
 
 

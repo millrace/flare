@@ -20,6 +20,7 @@ the no-padding URL-safe variant is the canonical choice (matches
 JSON Web Signature compact serialisation).
 """
 
+from ..runtime.cfn import _CFn, _cfn
 from std.ffi import c_int, OwnedDLHandle
 from std.memory import UnsafePointer
 
@@ -51,7 +52,7 @@ def _do_hmac_sha256(
     msg: List[UInt8],
     mut out: List[UInt8],
 ) raises:
-    var fn_hmac = lib.get_function[c_int]("flare_hmac_sha256")
+    var fn_hmac = _cfn[c_int](lib, "flare_hmac_sha256")
     var rc = fn_hmac(
         Int(key.unsafe_ptr()),
         len(key),
@@ -90,7 +91,7 @@ def _do_hmac_sha256_verify(
     msg: List[UInt8],
     mac: List[UInt8],
 ) raises -> Bool:
-    var fn_v = lib.get_function[c_int]("flare_hmac_sha256_verify")
+    var fn_v = _cfn[c_int](lib, "flare_hmac_sha256_verify")
     var rc = fn_v(
         Int(key.unsafe_ptr()),
         len(key),

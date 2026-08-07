@@ -59,7 +59,7 @@ from .cancel import Cancel
 # ── Traits ─────────────────────────────────────────────────────────────────
 
 
-trait ChunkSource(ImplicitlyDeletable, Movable):
+trait ChunkSource(Deinitable, Movable):
     """A source of byte chunks.
 
     Implementors yield successive chunks via ``next(cancel)``;
@@ -92,7 +92,7 @@ trait ChunkSource(ImplicitlyDeletable, Movable):
         ...
 
 
-trait Body(ImplicitlyDeletable, Movable):
+trait Body(Deinitable, Movable):
     """An HTTP response body.
 
     Two shipped impls today:

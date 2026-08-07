@@ -207,7 +207,7 @@ def _parse_bool_param(s: String) raises -> Bool:
 # ── Extractor trait ─────────────────────────────────────────────────────────
 
 
-trait Extractor(Copyable, Defaultable, ImplicitlyDeletable, Movable):
+trait Extractor(Copyable, Defaultable, Deinitable, Movable):
     """Anything that can extract itself from a ``Request`` in place.
 
     ``Extracted[H]`` default-constructs the handler struct ``H`` and then
@@ -955,9 +955,8 @@ struct Extracted[H: Copyable & Defaultable & Handler](
         var expose = req.expose_errors
         comptime for idx in range(n):
             try:
-                ref field = trait_downcast[Extractor](
-                    __struct_field_ref(idx, h)
-                )
+                ref field = __struct_field_ref(idx, h)
+                comptime assert conforms_to(type_of(field), Extractor)
                 field.apply(req)
             except e:
                 return _bad_request_from_error(e, expose)

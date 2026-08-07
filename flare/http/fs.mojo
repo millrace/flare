@@ -22,6 +22,7 @@ The handler is a plain ``Handler`` so it composes with the rest of
 flare's middleware. Configure via ``FileServer.new(root)``.
 """
 
+from ..runtime.cfn import _CFn, _cfn
 from std.collections import Optional
 from std.ffi import OwnedDLHandle, c_int
 from std.os import getenv
@@ -67,8 +68,8 @@ def _cstr(path: String) -> List[UInt8]:
     return buf^
 
 
-def _fs_open_rdonly(lib: OwnedDLHandle, path: String) raises -> Int:
-    var fn_open = lib.get_function[c_int]("flare_fs_open_rdonly")
+def _fs_open_rdonly(lib: OwnedDLHandle, path: String) -> Int:
+    var fn_open = _cfn[c_int](lib, "flare_fs_open_rdonly")
     var c = _cstr(path)
     var addr = Int(c.unsafe_ptr())
     var rc = Int(fn_open(addr))
@@ -76,20 +77,20 @@ def _fs_open_rdonly(lib: OwnedDLHandle, path: String) raises -> Int:
     return rc
 
 
-def _fs_close(lib: OwnedDLHandle, fd: Int) raises:
-    var fn_close = lib.get_function[c_int]("flare_fs_close")
+def _fs_close(lib: OwnedDLHandle, fd: Int):
+    var fn_close = _cfn[c_int](lib, "flare_fs_close")
     _ = fn_close(c_int(fd))
 
 
 def _fs_pread(
     lib: OwnedDLHandle, fd: Int, buf_addr: Int, n: Int, offset: Int
-) raises -> Int:
-    var fn_read = lib.get_function[Int64]("flare_fs_pread")
+) -> Int:
+    var fn_read = _cfn[Int64](lib, "flare_fs_pread")
     return Int(fn_read(c_int(fd), buf_addr, n, Int64(offset)))
 
 
-def _fs_size(lib: OwnedDLHandle, path: String) raises -> Int:
-    var fn_size = lib.get_function[Int64]("flare_fs_size")
+def _fs_size(lib: OwnedDLHandle, path: String) -> Int:
+    var fn_size = _cfn[Int64](lib, "flare_fs_size")
     var c = _cstr(path)
     var addr = Int(c.unsafe_ptr())
     var rc = Int(fn_size(addr))

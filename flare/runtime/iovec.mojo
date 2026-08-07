@@ -79,8 +79,9 @@ the two 8-byte words at the right offset. Reading the buffer
 back via ``writev(2)`` gets the layout the kernel expects.
 """
 
+from std.memory.alloc import unsafe_alloc
 from std.ffi import c_int, c_size_t, get_errno, ErrNo
-from std.memory import UnsafePointer, alloc
+from std.memory import UnsafePointer
 
 from ..net._libc import _writev, _strerror
 from ..net.error import NetworkError, BrokenPipe, Timeout, ConnectionReset
@@ -121,7 +122,7 @@ struct IoVecBuf(Movable):
         ```
     """
 
-    var _buf: UnsafePointer[UInt8, MutUntrackedOrigin]
+    var _buf: Pointer[UInt8, MutUntrackedOrigin]
     var _n: Int
 
     def __init__(out self, n: Int):
@@ -134,12 +135,12 @@ struct IoVecBuf(Movable):
             n > 0, "IoVecBuf: n must be positive; got ", n
         )
         var bytes = n * _IOVEC_BYTES
-        var raw = alloc[UInt8](bytes)
+        var raw = unsafe_alloc[UInt8](bytes)
         # Zero-init so an unset cell behaves as { NULL, 0 } —
         # writev(2) treats { ptr, 0 } as "skip this cell".
         for i in range(bytes):
             (raw.unsafe_offset(i)).unsafe_write(UInt8(0))
-        self._buf = UnsafePointer[UInt8, MutUntrackedOrigin](
+        self._buf = Pointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=Int(raw)
         )
         self._n = n
@@ -161,7 +162,7 @@ struct IoVecBuf(Movable):
         """
         return n * _IOVEC_BYTES
 
-    def base(self) -> UnsafePointer[UInt8, MutUntrackedOrigin]:
+    def base(self) -> Pointer[UInt8, MutUntrackedOrigin]:
         """Return the buffer's base pointer (suitable as the
         ``iov`` arg to ``writev_buf``).
         """
@@ -212,7 +213,7 @@ struct IoVecBuf(Movable):
                 UInt8(Int((ptr_u64 >> UInt64(k * 8)) & UInt64(0xFF)))
             )
         var len_u64 = UInt64(n)
-        var q = self._buf.unsafe_offset(off).unsafe_offset(8)
+        var q = self._buf.unsafe_offset(off + 8)
         for k in range(8):
             (q.unsafe_offset(k)).unsafe_write(
                 UInt8(Int((len_u64 >> UInt64(k * 8)) & UInt64(0xFF)))
@@ -248,7 +249,7 @@ struct IoVecBuf(Movable):
             i,
         )
         var off = i * _IOVEC_BYTES
-        var q = self._buf.unsafe_offset(off).unsafe_offset(8)
+        var q = self._buf.unsafe_offset(off + 8)
         var v = UInt64(0)
         for k in range(8):
             v = v | (UInt64(Int(q[unsafe_offset=k])) << UInt64(k * 8))
@@ -258,9 +259,7 @@ struct IoVecBuf(Movable):
 # ── writev wrappers ──────────────────────────────────────────────────────────
 
 
-def writev_buf(
-    fd: Int, iov_base: UnsafePointer[UInt8, _], iovcnt: Int
-) raises -> Int:
+def writev_buf(fd: Int, iov_base: Pointer[UInt8, _], iovcnt: Int) raises -> Int:
     """Single ``writev(2)`` call with EINTR retry.
 
     Returns the number of bytes the kernel accepted across all

@@ -157,7 +157,7 @@ def _connect_loopback(port: UInt16) raises -> c_int:
         (sa.unsafe_offset(i)).unsafe_write(UInt8(0))
     var ip = stack_allocation[4, UInt8]()
     (ip.unsafe_offset(0)).unsafe_write(UInt8(127))
-    (ip.unsafe_offset(1)).unsafe_write(UInt8(0))
+    ip.unsafe_offset(1).unsafe_write(UInt8(0))
     (ip.unsafe_offset(2)).unsafe_write(UInt8(0))
     (ip.unsafe_offset(3)).unsafe_write(UInt8(1))
     _fill_sockaddr_in(sa, port, ip)

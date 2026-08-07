@@ -48,9 +48,10 @@ modern x86 box, which is comfortably below the cost of the
 syscall it amortises.
 """
 
+from std.memory.alloc import unsafe_alloc
 from std.collections import Optional
 from std.ffi import external_call
-from std.memory import UnsafePointer, alloc
+from std.memory import UnsafePointer
 from std.os import getenv
 
 
@@ -60,7 +61,7 @@ from std.os import getenv
 comptime _MUTEX_BYTES: Int = 64  # generous upper bound across libc flavours
 
 
-def _mutex_init(mu: UnsafePointer[UInt8, _]) -> Bool:
+def _mutex_init(mu: Pointer[UInt8, _]) -> Bool:
     """Initialise the mutex blob with default attributes (NULL attr)."""
     var rc = external_call["pthread_mutex_init", Int32](
         mu.unsafe_bitcast[Int8](), Int(0)
@@ -68,15 +69,15 @@ def _mutex_init(mu: UnsafePointer[UInt8, _]) -> Bool:
     return rc == Int32(0)
 
 
-def _mutex_destroy(mu: UnsafePointer[UInt8, _]):
-    _ = external_call["pthread_mutex_destroy", Int32](mu.bitcast[Int8]())
+def _mutex_destroy(mu: Pointer[UInt8, _]):
+    _ = external_call["pthread_mutex_destroy", Int32](mu.unsafe_bitcast[Int8]())
 
 
-def _mutex_lock(mu: UnsafePointer[UInt8, _]):
+def _mutex_lock(mu: Pointer[UInt8, _]):
     _ = external_call["pthread_mutex_lock", Int32](mu.unsafe_bitcast[Int8]())
 
 
-def _mutex_unlock(mu: UnsafePointer[UInt8, _]):
+def _mutex_unlock(mu: Pointer[UInt8, _]):
     _ = external_call["pthread_mutex_unlock", Int32](mu.unsafe_bitcast[Int8]())
 
 
@@ -101,7 +102,7 @@ struct HandoffQueue(Defaultable, Movable):
     var tail: Int
     var count: Int
     var capacity: Int
-    var mu: UnsafePointer[UInt8, MutUntrackedOrigin]
+    var mu: Pointer[UInt8, MutUntrackedOrigin]
     var pushes: Int
     var pops: Int
     var refused: Int
@@ -112,7 +113,7 @@ struct HandoffQueue(Defaultable, Movable):
         self.tail = 0
         self.count = 0
         self.capacity = 0
-        self.mu = alloc[UInt8](_MUTEX_BYTES)
+        self.mu = unsafe_alloc[UInt8](_MUTEX_BYTES)
         self.pushes = 0
         self.pops = 0
         self.refused = 0
@@ -128,7 +129,7 @@ struct HandoffQueue(Defaultable, Movable):
         self.tail = 0
         self.count = 0
         self.capacity = capacity
-        self.mu = alloc[UInt8](_MUTEX_BYTES)
+        self.mu = unsafe_alloc[UInt8](_MUTEX_BYTES)
         self.pushes = 0
         self.pops = 0
         self.refused = 0
@@ -262,13 +263,13 @@ struct WorkerHandoffPool(Movable):
     *evening out* skew over *flat-shuffling* a stable workload.
     """
 
-    var queues: UnsafePointer[HandoffQueue, MutUntrackedOrigin]
+    var queues: Pointer[HandoffQueue, MutUntrackedOrigin]
     var num: Int
     var policy: HandoffPolicy
 
     def __init__(out self, var policy: HandoffPolicy, num_workers: Int):
         self.num = num_workers
-        self.queues = alloc[HandoffQueue](num_workers)
+        self.queues = unsafe_alloc[HandoffQueue](num_workers)
         for i in range(num_workers):
             (self.queues.unsafe_offset(i)).unsafe_write(
                 HandoffQueue(policy.capacity)

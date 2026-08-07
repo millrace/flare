@@ -22,7 +22,7 @@ from ..net import NetworkError
 # ── Readable trait ────────────────────────────────────────────────────────────
 
 
-trait Readable(ImplicitlyDeletable, Movable):
+trait Readable(Deinitable, Movable):
     """A byte stream that can be read into a mutable buffer.
 
     Extends ``Movable`` so that streams can be transferred into ``BufReader``.
@@ -37,7 +37,7 @@ trait Readable(ImplicitlyDeletable, Movable):
         ```
     """
 
-    def read(mut self, buf: UnsafePointer[UInt8, _], size: Int) raises -> Int:
+    def read(mut self, buf: Pointer[UInt8, _], size: Int) raises -> Int:
         """Read up to ``size`` bytes into the buffer at ``buf``.
 
         Args:

@@ -62,7 +62,8 @@ cell is one cache line per connection — acceptable cost for the
 cancel infrastructure.
 """
 
-from std.memory import UnsafePointer, alloc
+from std.memory.alloc import unsafe_alloc
+from std.memory import UnsafePointer
 
 
 # ── Reason codes ─────────────────────────────────────────────────────────────
@@ -128,13 +129,13 @@ struct CancelCell(Movable):
 
     def __init__(out self) raises:
         """Allocate a fresh cell initialised to ``NONE``."""
-        var p = alloc[Int](1)
+        var p = unsafe_alloc[Int](1)
         p.unsafe_write(CancelReason.NONE)
         self._addr = Int(p)
 
     def __deinit__(deinit self):
         if self._addr != 0:
-            var p = UnsafePointer[Int, MutUntrackedOrigin](
+            var p = Pointer[Int, MutUntrackedOrigin](
                 unsafe_from_address=self._addr
             )
             p.unsafe_deinit_pointee()
@@ -144,18 +145,14 @@ struct CancelCell(Movable):
         """Set the cell's reason."""
         if self._addr == 0:
             return
-        var p = UnsafePointer[Int, MutUntrackedOrigin](
-            unsafe_from_address=self._addr
-        )
+        var p = Pointer[Int, MutUntrackedOrigin](unsafe_from_address=self._addr)
         p[] = reason
 
     def reset(mut self) -> None:
         """Reset the cell to ``NONE``."""
         if self._addr == 0:
             return
-        var p = UnsafePointer[Int, MutUntrackedOrigin](
-            unsafe_from_address=self._addr
-        )
+        var p = Pointer[Int, MutUntrackedOrigin](unsafe_from_address=self._addr)
         p[] = CancelReason.NONE
 
     def handle(mut self) -> Cancel:
@@ -215,17 +212,13 @@ struct Cancel(Copyable, ImplicitlyCopyable, Movable):
         """Return True once the cell is non-zero."""
         if self._addr == 0:
             return False
-        var p = UnsafePointer[Int, MutUntrackedOrigin](
-            unsafe_from_address=self._addr
-        )
+        var p = Pointer[Int, MutUntrackedOrigin](unsafe_from_address=self._addr)
         return p[] != CancelReason.NONE
 
     def reason(imm self) -> Int:
         """Return the reason code currently in the cell."""
         if self._addr == 0:
             return CancelReason.NONE
-        var p = UnsafePointer[Int, MutUntrackedOrigin](
-            unsafe_from_address=self._addr
-        )
+        var p = Pointer[Int, MutUntrackedOrigin](unsafe_from_address=self._addr)
         var v: Int = p[]
         return v

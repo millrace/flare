@@ -17,6 +17,7 @@ Design rules enforced here:
   calling into a freshly-loaded shared library.
 """
 
+from ..runtime.cfn import _CFn, _cfn
 from std.ffi import (
     OwnedDLHandle,
     c_int,
@@ -82,7 +83,7 @@ def _do_flare_connect_timeout(
     ``flare/tls/stream.mojo`` and ``flare/http/encoding.mojo`` for why this
     indirection is required.
     """
-    var fn_ct = lib.get_function[c_int]("flare_connect_timeout")
+    var fn_ct = _cfn[c_int](lib, "flare_connect_timeout")
     return fn_ct(fd, sa_addr, sa_len, timeout_ms)
 
 
@@ -395,7 +396,7 @@ struct TcpStream(Movable):
 
     # ── I/O ───────────────────────────────────────────────────────────────────
 
-    def read(mut self, buf: UnsafePointer[UInt8, _], size: Int) raises -> Int:
+    def read(mut self, buf: Pointer[UInt8, _], size: Int) raises -> Int:
         """Read up to ``size`` bytes from the stream into ``buf``.
 
         Retries transparently on ``EINTR``. Returns 0 on EOF (the peer
@@ -440,7 +441,7 @@ struct TcpStream(Movable):
                 raise ConnectionReset(String(self._peer), Int(e.value))
             raise NetworkError(_strerror(e.value) + " (recv)", Int(e.value))
 
-    def read_exact(mut self, buf: UnsafePointer[UInt8, _], size: Int) raises:
+    def read_exact(mut self, buf: Pointer[UInt8, _], size: Int) raises:
         """Read exactly ``size`` bytes into ``buf``.
 
         Loops over ``read()`` until ``size`` bytes have been received.

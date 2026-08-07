@@ -28,7 +28,7 @@ from ..ws.server import WsConnection
 # existing ``WsServer`` handler plugs into ``HttpServer`` unchanged.
 comptime WsHandlerFn = def(mut WsConnection) raises thin -> None
 
-from .handler import Handler, CancelHandler
+from .handler import Handler, CancelHandler, ViewHandler
 from .intern import intern_method_bytes
 from .request import Request, Method
 from .response import Response, Status

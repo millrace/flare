@@ -60,7 +60,7 @@ from .response import Response
 # ── Trait ────────────────────────────────────────────────────────────────────
 
 
-trait Handler(ImplicitlyDeletable, Movable):
+trait Handler(Deinitable, Movable):
     """The request-to-response contract every flare endpoint satisfies.
 
     Implementors turn a ``Request`` into a ``Response``. Handler structs
@@ -173,7 +173,7 @@ trait HandlerExtractor(Copyable, Defaultable, Handler, Movable):
     pass
 
 
-trait HandlerInfallible(ImplicitlyDeletable, Movable):
+trait HandlerInfallible(Deinitable, Movable):
     """A :trait:`Handler` whose ``serve`` is provably infallible.
 
     The standard :trait:`Handler` requires ``serve(self, req: Request)
@@ -305,7 +305,7 @@ struct FnHandlerCT[F: def(Request) raises thin -> Response](Copyable, Handler):
 # ── CancelHandler trait + WithCancel adapter ────────────────
 
 
-trait CancelHandler(ImplicitlyDeletable, Movable):
+trait CancelHandler(Deinitable, Movable):
     """A request-to-response contract that takes a ``Cancel`` token.
 
     The reactor calls ``serve(req, cancel)`` once per parsed request.
@@ -364,7 +364,7 @@ trait CancelHandler(ImplicitlyDeletable, Movable):
 # ── ViewHandler trait + WithViewCancel adapter ────
 
 
-trait ViewHandler(ImplicitlyDeletable, Movable):
+trait ViewHandler(Deinitable, Movable):
     """Borrowed-input request-to-response contract.
 
     Like ``CancelHandler`` but takes a ``RequestView[origin]`` whose

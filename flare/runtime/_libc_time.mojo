@@ -81,16 +81,14 @@ def libc_nanosleep_ms(ms: Int) -> Int:
     # Use the same MutUntrackedOrigin we already use elsewhere for
     # libc-facing pointers; this keeps the optimiser from reordering
     # loads through the ``ts`` page across the syscall boundary.
-    var null_rem = UnsafePointer[Int64, MutUntrackedOrigin](
+    var null_rem = Pointer[Int64, MutUntrackedOrigin](
         unsafe_from_address=Int(0)
     )
-    var ts_ext = UnsafePointer[Int64, MutUntrackedOrigin](
-        unsafe_from_address=Int(ts)
-    )
+    var ts_ext = Pointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(ts))
     var rc = external_call[
         "nanosleep",
         Int32,
-        UnsafePointer[Int64, MutUntrackedOrigin],
-        UnsafePointer[Int64, MutUntrackedOrigin],
+        Pointer[Int64, MutUntrackedOrigin],
+        Pointer[Int64, MutUntrackedOrigin],
     ](ts_ext, null_rem)
     return Int(rc)

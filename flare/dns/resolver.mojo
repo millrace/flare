@@ -133,9 +133,7 @@ def resolve(host: String) raises -> List[IpAddr]:
             break
         guard += 1
 
-        var node = UnsafePointer[UInt8, MutUntrackedOrigin](
-            unsafe_from_address=cur
-        )
+        var node = Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=cur)
         var family = Int(
             (node.unsafe_offset(ADDRINFO_AI_FAMILY_OFF))
             .unsafe_bitcast[Int32]()
@@ -240,16 +238,14 @@ def _ipv4_from_sockaddr(sa_ptr: Int) -> String:
         Dotted-decimal string (e.g. ``"127.0.0.1"``), or empty string on
         ``inet_ntop`` failure.
     """
-    var sa = UnsafePointer[UInt8, MutUntrackedOrigin](
-        unsafe_from_address=sa_ptr
-    )
+    var sa = Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=sa_ptr)
     var ntop = stack_allocation[64, UInt8]()
     for i in range(64):
         (ntop.unsafe_offset(i)).unsafe_write(0)
 
     # sockaddr_in: [sin_len/family(2), sin_port(2), sin_addr(4), ...]
     # sin_addr is at byte offset 4 on both macOS and Linux
-    _ = external_call["inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]](
+    _ = external_call["inet_ntop", Pointer[UInt8, MutUntrackedOrigin]](
         c_int(2),
         (sa.unsafe_offset(4)).unsafe_bitcast[NoneType](),
         ntop.unsafe_bitcast[c_char](),
@@ -278,16 +274,14 @@ def _ipv6_from_sockaddr(sa_ptr: Int) -> String:
     comptime _pm = platform_map[T=Int, ...]
     comptime AF_INET6_VAL: c_int = c_int(_pm["AF_INET6", linux=10, macos=30]())
 
-    var sa = UnsafePointer[UInt8, MutUntrackedOrigin](
-        unsafe_from_address=sa_ptr
-    )
+    var sa = Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=sa_ptr)
     var ntop = stack_allocation[64, UInt8]()
     for i in range(64):
         (ntop.unsafe_offset(i)).unsafe_write(0)
 
     # sockaddr_in6: [family(2), port(2), flowinfo(4), addr(16), ...]
     # sin6_addr starts at byte offset 8
-    _ = external_call["inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]](
+    _ = external_call["inet_ntop", Pointer[UInt8, MutUntrackedOrigin]](
         AF_INET6_VAL,
         (sa.unsafe_offset(8)).unsafe_bitcast[NoneType](),
         ntop.unsafe_bitcast[c_char](),

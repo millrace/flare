@@ -12,6 +12,8 @@ Safety contracts for this module:
    transport-agnostic and does not know whether it carries TCP or UDP.
 """
 
+from ..runtime.cfn import _CFn, _cfn
+from std.memory.alloc import unsafe_alloc
 from std.ffi import (
     external_call,
     OwnedDLHandle,
@@ -20,7 +22,7 @@ from std.ffi import (
     get_errno,
     ErrNo,
 )
-from std.memory import UnsafePointer, stack_allocation, alloc
+from std.memory import UnsafePointer, stack_allocation
 from std.os import getenv
 from std.sys.info import CompilationTarget
 
@@ -95,13 +97,13 @@ def _find_flare_lib() -> String:
 
 def _do_flare_set_nonblocking(
     imm lib: OwnedDLHandle, fd: c_int, enable: c_int
-) raises -> c_int:
+) -> c_int:
     """Invoke ``flare_set_nonblocking`` with ``lib`` borrowed across both
     ``get_function`` and the call (macOS path only). See the OwnedDLHandle /
     ASAP-destruction discussion in ``flare/tls/stream.mojo`` for why the
     borrow is required.
     """
-    var fn_nb = lib.get_function[c_int]("flare_set_nonblocking")
+    var fn_nb = _cfn[c_int](lib, "flare_set_nonblocking")
     return fn_nb(fd, enable)
 
 
@@ -396,9 +398,9 @@ struct RawSocket(Movable):
         """
         var buf = stack_allocation[28, UInt8]()
         for i in range(28):
-            (buf + i).init_pointee_copy(0)
+            (buf.unsafe_offset(i)).unsafe_write(0)
         var len_ptr = stack_allocation[1, c_uint]()
-        len_ptr.init_pointee_copy(c_uint(28))
+        len_ptr.unsafe_write(c_uint(28))
         var rc = _getpeername(self.fd, buf, len_ptr)
         if rc < 0:
             var e = get_errno()
@@ -463,7 +465,7 @@ struct RawSocket(Movable):
 
 def _build_sockaddr_in(
     addr: SocketAddr,
-) raises -> Tuple[type_of(alloc[UInt8](0)), c_uint]:
+) raises -> Tuple[type_of(unsafe_alloc[UInt8](0)), c_uint]:
     """Allocate and populate a heap ``sockaddr_in`` or ``sockaddr_in6`` buffer.
 
     Branches on ``addr.ip.is_v6()`` to build the correct sockaddr type.
@@ -478,28 +480,28 @@ def _build_sockaddr_in(
         AddressParseError: If the IP string is not a valid address.
     """
     if addr.ip.is_v6():
-        var ip_buf = alloc[UInt8](16)
+        var ip_buf = unsafe_alloc[UInt8](16)
         for i in range(16):
             (ip_buf.unsafe_offset(i)).unsafe_write(0)
         var rc = _inet_pton(AF_INET6, String(addr.ip), ip_buf)
         if rc != 1:
             ip_buf.unsafe_free()
             raise AddressParseError(String(addr.ip))
-        var sa = alloc[UInt8](28)
+        var sa = unsafe_alloc[UInt8](28)
         for i in range(28):
             (sa.unsafe_offset(i)).unsafe_write(0)
         _fill_sockaddr_in6(sa, addr.port, ip_buf)
         ip_buf.unsafe_free()
         return Tuple(sa, SOCKADDR_IN6_SIZE)
     else:
-        var ip_buf = alloc[UInt8](4)
+        var ip_buf = unsafe_alloc[UInt8](4)
         for i in range(4):
             (ip_buf.unsafe_offset(i)).unsafe_write(0)
         var rc = _inet_pton(AF_INET, String(addr.ip), ip_buf)
         if rc != 1:
             ip_buf.unsafe_free()
             raise AddressParseError(String(addr.ip))
-        var sa = alloc[UInt8](16)
+        var sa = unsafe_alloc[UInt8](16)
         for i in range(16):
             (sa.unsafe_offset(i)).unsafe_write(0)
         _fill_sockaddr_in(sa, addr.port, ip_buf)
@@ -507,7 +509,7 @@ def _build_sockaddr_in(
         return Tuple(sa, SOCKADDR_IN_SIZE)
 
 
-def _sockaddr_to_socket_addr(buf: UnsafePointer[UInt8, _]) raises -> SocketAddr:
+def _sockaddr_to_socket_addr(buf: Pointer[UInt8, _]) raises -> SocketAddr:
     """Extract a ``SocketAddr`` from a ``sockaddr_in`` or ``sockaddr_in6`` buffer.
 
     Reads the address family from the buffer to determine the format.

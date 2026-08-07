@@ -30,6 +30,7 @@ This file is *internal* — it is used by
 ``flare.runtime.scheduler`` and nothing else.
 """
 
+from std.memory.alloc import unsafe_alloc
 from std.ffi import (
     external_call,
     c_int,
@@ -37,7 +38,7 @@ from std.ffi import (
     OwnedDLHandle,
     get_errno,
 )
-from std.memory import UnsafePointer, alloc, unsafe_memset_zero
+from std.memory import UnsafePointer, memcpy, unsafe_memset_zero
 from std.sys.info import CompilationTarget
 
 
@@ -49,7 +50,7 @@ from std.sys.info import CompilationTarget
 # is ABI-compatible with what pthread expects. The function must not
 # raise (pthread has no exception channel); convert any error to a
 # sentinel pointer value before returning.
-comptime _OpaquePtr = UnsafePointer[UInt8, MutUntrackedOrigin]
+comptime _OpaquePtr = Pointer[UInt8, MutUntrackedOrigin]
 
 
 # Shortcut for making a NULL pointer of the flavour we use throughout.
@@ -115,8 +116,8 @@ struct ThreadHandle(Movable):
                 human-readable message).
         """
         var tid = UInt64(0)
-        var tid_addr = Int(UnsafePointer[UInt64, _](to=tid))
-        var tid_ptr = UnsafePointer[UInt64, MutUntrackedOrigin](
+        var tid_addr = Int(Pointer[UInt64, _](to=tid))
+        var tid_ptr = Pointer[UInt64, MutUntrackedOrigin](
             unsafe_from_address=tid_addr
         )
 
@@ -126,7 +127,7 @@ struct ThreadHandle(Movable):
         var rc = external_call[
             "pthread_create",
             c_int,
-            UnsafePointer[UInt64, MutUntrackedOrigin],  # thread*
+            Pointer[UInt64, MutUntrackedOrigin],  # thread*
             _OpaquePtr,  # attr*
             def(_OpaquePtr) thin -> _OpaquePtr,  # start routine
             _OpaquePtr,  # arg
@@ -218,7 +219,7 @@ struct ThreadHandle(Movable):
             # own ``free`` declaration at MLIR legalization time when
             # this module is pulled into a fuzz-environment compile
             # (mozz harness).
-            var cpuset_ptr = alloc[UInt8](_CPUSET_SIZE)
+            var cpuset_ptr = unsafe_alloc[UInt8](_CPUSET_SIZE)
             unsafe_memset_zero(cpuset_ptr, _CPUSET_SIZE)
             var byte_idx = cpu // 8
             var bit_idx = cpu % 8

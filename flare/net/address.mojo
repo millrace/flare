@@ -100,9 +100,7 @@ struct IpAddr(Copyable, Equatable, ImplicitlyCopyable, Movable, Writable):
             var ntop = stack_allocation[64, UInt8]()
             for i in range(64):
                 (ntop.unsafe_offset(i)).unsafe_write(0)
-            _ = external_call[
-                "inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]
-            ](
+            _ = external_call["inet_ntop", Pointer[UInt8, MutUntrackedOrigin]](
                 AF_INET,
                 ip4.unsafe_bitcast[NoneType](),
                 ntop.unsafe_bitcast[c_char](),
@@ -129,9 +127,7 @@ struct IpAddr(Copyable, Equatable, ImplicitlyCopyable, Movable, Writable):
             var ntop = stack_allocation[64, UInt8]()
             for i in range(64):
                 (ntop.unsafe_offset(i)).unsafe_write(0)
-            _ = external_call[
-                "inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]
-            ](
+            _ = external_call["inet_ntop", Pointer[UInt8, MutUntrackedOrigin]](
                 AF_INET6,
                 ip6.unsafe_bitcast[NoneType](),
                 ntop.unsafe_bitcast[c_char](),

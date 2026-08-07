@@ -22,6 +22,7 @@ stays monomorphised — no virtual dispatch, no allocation per
 request.
 """
 
+from ..runtime.cfn import _CFn, _cfn
 from std.ffi import OwnedDLHandle, c_int
 from std.os import getenv
 from std.time import perf_counter_ns
@@ -283,7 +284,7 @@ def _brotli_available() -> Bool:
     return _file_exists(find_flare_lib("brotli"))
 
 
-def _flare_fs_access(imm lib: OwnedDLHandle, addr: Int) raises -> c_int:
+def _flare_fs_access(imm lib: OwnedDLHandle, addr: Int) -> c_int:
     """Invoke ``flare_fs_access`` while ``lib`` is borrowed by the caller.
 
     Taking ``lib`` as ``read`` ties the dylib's lifetime to the caller's
@@ -295,7 +296,7 @@ def _flare_fs_access(imm lib: OwnedDLHandle, addr: Int) raises -> c_int:
     and the cached pointer dangles into unmapped memory by the time we
     call it.
     """
-    var fn_access = lib.get_function[c_int]("flare_fs_access")
+    var fn_access = _cfn[c_int](lib, "flare_fs_access")
     return fn_access(addr)
 
 

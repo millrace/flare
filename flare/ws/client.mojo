@@ -17,6 +17,7 @@ of truth (closes critique register §C1: this used to ship as
 three near-identical private encoders).
 """
 
+from ..runtime.cfn import _CFn, _cfn
 from std.ffi import OwnedDLHandle, c_int
 from .frame import (
     WsFrame,
@@ -65,9 +66,7 @@ struct WsHandshakeError(Copyable, Movable, Writable):
 # the server side in ``flare/ws/server.mojo``.
 
 
-def _do_sha1(
-    imm lib: OwnedDLHandle, data_bytes: Span[UInt8, _]
-) raises -> List[UInt8]:
+def _do_sha1(imm lib: OwnedDLHandle, data_bytes: Span[UInt8, _]) -> List[UInt8]:
     """Invoke SHA-1 with ``lib`` borrowed across both ``get_function``
     and the call.
 
@@ -79,7 +78,7 @@ def _do_sha1(
         20-byte SHA-1 digest.
     """
     # SHA1(const unsigned char *d, size_t n, unsigned char *md) -> unsigned char*
-    var fn_sha1 = lib.get_function[Int]("SHA1")
+    var fn_sha1 = _cfn[Int](lib, "SHA1")
     var digest_buf = List[UInt8](capacity=_SHA1_LEN)
     digest_buf.resize(_SHA1_LEN, 0)
     _ = fn_sha1(
@@ -299,7 +298,7 @@ struct _WsStream(Movable):
         else:
             self._tcp.write_all(data)
 
-    def read(mut self, buf: UnsafePointer[UInt8, _], size: Int) raises -> Int:
+    def read(mut self, buf: Pointer[UInt8, _], size: Int) raises -> Int:
         """Read up to ``size`` bytes from the underlying stream.
 
         Args:

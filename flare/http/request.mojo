@@ -1,7 +1,8 @@
 """HTTP request type."""
 
+from std.memory.alloc import unsafe_alloc
 from std.collections import Dict, Optional
-from std.memory import UnsafePointer, alloc
+from std.memory import UnsafePointer
 from json import loads, Value
 from .headers import HeaderMap
 from .cookie import Cookie, CookieJar, parse_cookie_header
@@ -82,9 +83,7 @@ struct Request(Movable):
     Default False; the reactor copies
     ``ServerConfig.expose_error_messages`` onto every parsed request.
     See struct docstring."""
-    var _params: Optional[
-        UnsafePointer[Dict[String, String], MutUntrackedOrigin]
-    ]
+    var _params: Optional[Pointer[Dict[String, String], MutUntrackedOrigin]]
     """Lazily-allocated path-params table. ``None`` by default; ``Router``
     allocates the underlying ``Dict`` on the first path-parameter
     extraction via ``params_mut()``. The plaintext-bench fast path
@@ -224,7 +223,7 @@ struct Request(Movable):
             # conflicts with the stdlib's own ``free`` declaration at
             # MLIR legalization time when this module is pulled into a
             # fuzz-environment compile (mozz harness).
-            var ptr = alloc[Dict[String, String]](1)
+            var ptr = unsafe_alloc[Dict[String, String]](1)
             ptr.unsafe_write(Dict[String, String]())
             self._params = ptr
         return self._params.value()[]

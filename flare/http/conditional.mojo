@@ -201,7 +201,7 @@ def _any_etag_matches(csv: String, server_etag: String, strong: Bool) -> Bool:
 # ── HTTP-date comparator ────────────────────────────────────────────────────
 
 
-def _parse_int_at(p: UnsafePointer[UInt8, _], off: Int, length: Int) -> Int:
+def _parse_int_at(p: Pointer[UInt8, _], off: Int, length: Int) -> Int:
     """Read ``length`` decimal digits at ``p[off:off+length]``.
     Returns -1 on a non-digit byte."""
     var v = 0
@@ -213,7 +213,7 @@ def _parse_int_at(p: UnsafePointer[UInt8, _], off: Int, length: Int) -> Int:
     return v
 
 
-def _month_index_at(p: UnsafePointer[UInt8, _], off: Int) -> Int:
+def _month_index_at(p: Pointer[UInt8, _], off: Int) -> Int:
     """Match a 3-byte month abbreviation at ``p[off:off+3]``
     against ``"JanFebMarAprMayJunJulAugSepOctNovDec"``. Returns
     -1 on a non-match."""
