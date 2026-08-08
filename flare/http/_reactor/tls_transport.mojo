@@ -89,6 +89,36 @@ struct TlsTransport(Movable):
         self._lib = OwnedDLHandle(_find_flare_lib())
         self.phase = TLS_HANDSHAKE
 
+    @staticmethod
+    def adopt(ssl_addr: Int, phase: Int = TLS_ESTABLISHED) raises -> Self:
+        """Take ownership of an ``SSL*`` released by another transport.
+
+        The reactor cannot ``^``-move a transport out of an
+        ``UnsafePointer`` deref (no tracked origin), so promotion from
+        the handshake handle to the protocol handle goes through
+        :meth:`release` + ``adopt``, mirroring how the fd is detached
+        and rewrapped as a ``RawSocket``. The fresh ``OwnedDLHandle``
+        is a refcount bump on an already-mapped library.
+        """
+        var out = Self(ssl_addr, phase, OwnedDLHandle(_find_flare_lib()))
+        return out^
+
+    def __init__(out self, ssl_addr: Int, phase: Int, var lib: OwnedDLHandle):
+        """Raw field-wise init used by :meth:`adopt`."""
+        self.ssl_addr = ssl_addr
+        self.phase = phase
+        self._lib = lib^
+
+    def release(mut self) -> Int:
+        """Surrender the ``SSL*`` without freeing it.
+
+        Zeroes the field so this transport's ``__del__`` becomes a
+        no-op; the caller must hand the address to :meth:`adopt`.
+        """
+        var out = self.ssl_addr
+        self.ssl_addr = 0
+        return out
+
     def __del__(deinit self):
         """Free the ``SSL``. The fd belongs to whoever owns the stream."""
         if self.ssl_addr != 0:

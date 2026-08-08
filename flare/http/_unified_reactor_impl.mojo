@@ -123,10 +123,19 @@ from ._reactor.tagged_dispatch import (
     KIND_PENDING,
     KIND_H1,
     KIND_H2,
+    KIND_TLS,
     _pack,
     _kind,
     _addr,
 )
+from ._reactor.tls_conn_handle import (
+    TlsConnHandle,
+    _tls_conn_alloc_addr,
+    _tls_conn_free_addr,
+    _tls_conn_ptr_from_int,
+)
+from ._reactor.tls_transport import TlsTransport
+from flare.tls._server_ffi import ServerCtx
 
 
 # ── Per-conn dispatch helpers ──────────────────────────────────────────────
@@ -359,6 +368,8 @@ def _cleanup_conn_unified(
             _conn_free_addr(a)
         elif k == KIND_H2:
             _h2_conn_free_addr(a)
+        elif k == KIND_TLS:
+            _tls_conn_free_addr(a)
     except:
         pass
 
@@ -430,6 +441,92 @@ def _migrate_h1_to_h2(
             stream^, h2_config.copy(), req, settings_payload^, ws_hooks.copy()
         )
         conns[fd] = _pack(KIND_H2, addr)
+        return True
+    except:
+        try:
+            _ = conns.pop(fd)
+        except:
+            pass
+        return False
+
+
+def _migrate_tls(
+    fd: Int,
+    h2_config: Http2Config,
+    mut conns: Dict[Int, Int],
+    ws_hooks: Optional[WsH2Hooks] = None,
+) raises -> Bool:
+    """Promote a handshaken ``TlsConnHandle`` to h1 or h2 by ALPN.
+
+    The TLS twin of :func:`_migrate_pending`. Where the cleartext path
+    peeks 24 bytes for the HTTP/2 preface, here the protocol was already
+    settled during the handshake, so the negotiated ALPN decides: ``h2``
+    goes to :class:`Http2ConnHandle`, anything else (including a client
+    that offered no ALPN) goes to h1.
+
+    Both halves of the connection move: the fd is detached and rewrapped
+    exactly as ``_migrate_pending`` does, and the ``SSL*`` is passed via
+    ``TlsTransport.release`` / ``adopt`` because an ``UnsafePointer``
+    deref has no tracked origin to ``^``-move a field out of.
+
+    Returns ``True`` on success; ``False`` means the entry was already
+    removed and the caller must not clean up again.
+    """
+    if fd not in conns:
+        return False
+    var packed = conns[fd]
+    debug_assert[assert_mode="safe"](
+        _kind(packed) == KIND_TLS,
+        "_migrate_tls: entry is not KIND_TLS; kind=",
+        _kind(packed),
+    )
+    var tls_addr = _addr(packed)
+    debug_assert[assert_mode="safe"](
+        tls_addr != 0,
+        "_migrate_tls: conns[fd] returned null addr; fd=",
+        fd,
+    )
+    var tls_ptr = _tls_conn_ptr_from_int(tls_addr)
+    var alpn = tls_ptr[].alpn
+    var inherited_fd = tls_ptr[]._stream._socket.fd
+    debug_assert[assert_mode="safe"](
+        Int(inherited_fd) == fd,
+        "_migrate_tls: tls fd does not match dispatch fd; got ",
+        Int(inherited_fd),
+        " vs ",
+        fd,
+    )
+    var inherited_peer = tls_ptr[].peer
+    # Detach both owned resources before freeing the handshake handle:
+    # zero the fd so its stream destructor is a no-op, and release the
+    # SSL* so its transport destructor is a no-op.
+    var ssl_addr = tls_ptr[].transport.release()
+    tls_ptr[]._stream._socket.fd = c_int(-1)
+    _tls_conn_free_addr(tls_addr)
+
+    var raw = RawSocket(inherited_fd, AF_INET, SOCK_STREAM, _wrap=True)
+    var stream = TcpStream(raw^, inherited_peer)
+
+    if alpn == "h2":
+        try:
+            var addr = _h2_conn_alloc_addr(
+                stream^, h2_config.copy(), ws_hooks.copy()
+            )
+            conns[fd] = _pack(KIND_H2, addr)
+            var h2_ptr = _h2_conn_ptr_from_int(addr)
+            h2_ptr[].attach_tls(TlsTransport.adopt(ssl_addr))
+            return True
+        except:
+            try:
+                _ = conns.pop(fd)
+            except:
+                pass
+            return False
+    try:
+        var addr = _conn_alloc_addr(stream^)
+        conns[fd] = _pack(KIND_H1, addr)
+        var ch_ptr = _conn_ptr_from_int(addr)
+        ch_ptr[].attach_tls(TlsTransport.adopt(ssl_addr))
         return True
     except:
         try:
@@ -542,10 +639,16 @@ def _accept_loop_unified_fd(
     mut reactor: Reactor,
     mut conns: Dict[Int, Int],
     max_connections: Int = 0,
+    tls_ctx_addr: Int = 0,
 ):
     """Accept every available connection on ``listener_fd`` and
-    register it as a KIND_PENDING-tagged
-    :class:`PendingConnHandle` in the shared ``conns`` table.
+    register it in the shared ``conns`` table.
+
+    Cleartext listeners produce a KIND_PENDING
+    :class:`PendingConnHandle` that peeks for the HTTP/2 preface. When
+    ``tls_ctx_addr`` is non-zero the listener is TLS-terminating, so the
+    connection starts as a KIND_TLS :class:`TlsConnHandle` instead and
+    the protocol is settled by ALPN at the end of the handshake.
 
     Used by every single-listener unified loop variant (dedicated,
     shared/EPOLLEXCLUSIVE, multi-listener); the dedicated variant
@@ -571,15 +674,30 @@ def _accept_loop_unified_fd(
             pass
         var client_fd = Int(stream._socket.fd)
         var addr: Int
-        try:
-            addr = _pending_conn_alloc_addr(stream^)
-        except:
-            continue
-        conns[client_fd] = _pack(KIND_PENDING, addr)
+        var kind: Int
+        if tls_ctx_addr != 0:
+            var ctx_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
+                unsafe_from_address=tls_ctx_addr
+            ).bitcast[ServerCtx]()
+            try:
+                addr = _tls_conn_alloc_addr(stream^, ctx_ptr[])
+            except:
+                continue
+            kind = KIND_TLS
+        else:
+            try:
+                addr = _pending_conn_alloc_addr(stream^)
+            except:
+                continue
+            kind = KIND_PENDING
+        conns[client_fd] = _pack(kind, addr)
         try:
             reactor.register(c_int(client_fd), UInt64(client_fd), INTEREST_READ)
         except:
-            _pending_conn_free_addr(addr)
+            if kind == KIND_TLS:
+                _tls_conn_free_addr(addr)
+            else:
+                _pending_conn_free_addr(addr)
             try:
                 _ = conns.pop(client_fd)
             except:
@@ -654,7 +772,16 @@ def _unified_handle_conn_event[
     # the success case.
     if k == KIND_H1:
         var done3 = False
-        if is_readable:
+        # A TLS session that asked for the opposite readiness gets
+        # routed to the *read* driver on a writable edge: SSL_read
+        # returning WANT_WRITE only clears once the socket drains, and
+        # only _drive_h1 carries the handler needed to finish the
+        # request. Cleartext never sets the flag.
+        var h1_ptr = _conn_ptr_from_int(_addr(packed))
+        var tls_cross = h1_ptr[].tls_cross_interest
+        if tls_cross:
+            h1_ptr[].tls_cross_interest = False
+        if is_readable or (tls_cross and is_writable):
             done3 = _drive_h1(
                 fd,
                 _addr(packed),
@@ -693,6 +820,65 @@ def _unified_handle_conn_event[
         )
         if done4:
             _cleanup_conn_unified(fd, conns, timers, reactor)
+        return
+
+    if k == KIND_TLS:
+        var tls_ptr = _tls_conn_ptr_from_int(_addr(packed))
+        var hs: StepResult
+        try:
+            hs = tls_ptr[].drive_handshake()
+        except:
+            _cleanup_conn_unified(fd, conns, timers, reactor)
+            return
+        if hs.done:
+            _cleanup_conn_unified(fd, conns, timers, reactor)
+            return
+        if not tls_ptr[].handshake_done():
+            # Still negotiating: re-arm whichever direction OpenSSL
+            # asked for and wait for the next edge.
+            var want = INTEREST_READ if hs.want_read else INTEREST_WRITE
+            if want != tls_ptr[].last_interest:
+                try:
+                    reactor.modify(c_int(fd), want)
+                    tls_ptr[].last_interest = want
+                except:
+                    _cleanup_conn_unified(fd, conns, timers, reactor)
+            return
+        # Handshake complete: ALPN decides the protocol handle.
+        if not _migrate_tls(fd, h2_config, conns, ws_hooks.copy()):
+            _cleanup_conn_unified(fd, conns, timers, reactor)
+            return
+        # Drive once so the first application record (which OpenSSL may
+        # already hold buffered) is consumed without another wakeup.
+        if fd not in conns:
+            return
+        var tpacked = conns[fd]
+        if _kind(tpacked) == KIND_H2:
+            if _drive_h2(
+                fd,
+                _addr(tpacked),
+                handler,
+                config,
+                True,
+                reactor,
+                wheel,
+                timers,
+            ):
+                _cleanup_conn_unified(fd, conns, timers, reactor)
+        else:
+            if _drive_h1(
+                fd,
+                _addr(tpacked),
+                handler,
+                config,
+                h2_config,
+                conns,
+                reactor,
+                wheel,
+                timers,
+                ws_hooks.copy(),
+            ):
+                _cleanup_conn_unified(fd, conns, timers, reactor)
         return
 
     # Cold path: protocol-undecided (PendingConnHandle). Runs at
@@ -782,6 +968,7 @@ def _run_unified_loop_for_fd[
     ref stopping: Bool,
     stats_addr: Int = 0,
     ws_hooks: Optional[WsH2Hooks] = None,
+    tls_ctx_addr: Int = 0,
 ) raises:
     """Shared body for the single-listener unified reactor loops.
 
@@ -827,7 +1014,11 @@ def _run_unified_loop_for_fd[
                 continue
             if evt.token == UInt64(0):
                 _accept_loop_unified_fd(
-                    listener_fd, reactor, conns, config.max_connections
+                    listener_fd,
+                    reactor,
+                    conns,
+                    config.max_connections,
+                    tls_ctx_addr,
                 )
                 continue
             var fd = Int(evt.token)
@@ -862,6 +1053,7 @@ def run_unified_reactor_loop[
     ref handler: H,
     ref stopping: Bool,
     ws_hooks: Optional[WsH2Hooks] = None,
+    tls_ctx_addr: Int = 0,
 ) raises:
     """Single-threaded reactor loop that auto-dispatches HTTP/1.1 vs
     HTTP/2 per connection.
@@ -893,6 +1085,7 @@ def run_unified_reactor_loop[
         stopping,
         0,
         ws_hooks,
+        tls_ctx_addr,
     )
 
 
@@ -1022,6 +1215,7 @@ def run_unified_reactor_loop_shared[
     ref handler: H,
     ref stopping: Bool,
     stats_addr: Int = 0,
+    tls_ctx_addr: Int = 0,
 ) raises:
     """Multi-worker variant of :func:`run_unified_reactor_loop`.
 
@@ -1041,4 +1235,6 @@ def run_unified_reactor_loop_shared[
         handler,
         stopping,
         stats_addr,
+        None,
+        tls_ctx_addr,
     )

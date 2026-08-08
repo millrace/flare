@@ -34,10 +34,13 @@ pump and the h2 DATA pump already emit on writable edges -- they simply
 write their bytes through :meth:`send` (ciphertext) instead of ``_send``.
 """
 
+from std.builtin.debug_assert import debug_assert
 from std.ffi import c_int
 from std.collections import List
+from std.memory import UnsafePointer
 
 from flare.net import SocketAddr
+from flare.runtime import Pool
 from flare.tcp import TcpStream
 from flare.tls._server_ffi import ServerCtx
 
@@ -73,6 +76,10 @@ struct TlsConnHandle(Movable):
     """Negotiated ALPN protocol (``""`` until handshake completes / none)."""
     var sni: String
     """Client-supplied SNI host (``""`` if absent)."""
+    var last_interest: Int
+    """Last reactor interest bits armed for this fd, so a handshake that
+    keeps asking for the same direction does not re-issue ``epoll_ctl``
+    on every edge."""
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -99,6 +106,7 @@ struct TlsConnHandle(Movable):
         self.transport = TlsTransport(ctx, fd)
         self.alpn = ""
         self.sni = ""
+        self.last_interest = 1  # INTEREST_READ, matching accept-time arm
 
     @always_inline
     def fd(self) -> c_int:
@@ -181,3 +189,34 @@ struct TlsConnHandle(Movable):
     def close(mut self) -> None:
         """Explicitly close the underlying stream. Idempotent."""
         self._stream.close()
+
+
+# ── Heap boxing for the reactor's tagged-pointer conn table ───────────────
+
+
+def _tls_conn_alloc_addr(var stream: TcpStream, ctx: ServerCtx) raises -> Int:
+    """Heap-allocate a :class:`TlsConnHandle` and return its address."""
+    var addr = Pool[TlsConnHandle].alloc_move(TlsConnHandle(stream^, ctx))
+    debug_assert[assert_mode="safe"](
+        addr != 0,
+        "_tls_conn_alloc_addr: Pool returned 0",
+    )
+    return addr
+
+
+def _tls_conn_free_addr(addr: Int):
+    """Destroy + free a :class:`TlsConnHandle`."""
+    debug_assert[assert_mode="safe"](
+        addr != 0,
+        "_tls_conn_free_addr: addr must be non-zero (double-free?)",
+    )
+    Pool[TlsConnHandle].free(addr)
+
+
+def _tls_conn_ptr_from_int(
+    addr: Int,
+) -> UnsafePointer[TlsConnHandle, MutUntrackedOrigin]:
+    """Reverse of :func:`_tls_conn_alloc_addr`: rebuild a typed pointer."""
+    return UnsafePointer[UInt8, MutUntrackedOrigin](
+        unsafe_from_address=addr
+    ).bitcast[TlsConnHandle]()

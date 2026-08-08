@@ -146,6 +146,20 @@ struct HttpServer(Movable):
     :class:`flare.http._reactor.tls_conn_handle.TlsConnHandle`. Kept
     ``Optional`` so the plaintext server carries no TLS/OpenSSL cost."""
 
+    @always_inline
+    def _tls_ctx_addr(self) -> Int:
+        """Address of the shared ``SSL_CTX``, or 0 when plaintext.
+
+        The reactor takes the context by address rather than by value:
+        OpenSSL designs ``SSL_CTX*`` for shared read-only use across
+        threads (each connection gets its own ``SSL`` via ``SSL_new``),
+        and ``ServerCtx`` is move-only, so every worker borrows the one
+        the server owns instead of cloning it.
+        """
+        if self._tls_ctx:
+            return Int(UnsafePointer(to=self._tls_ctx.value()))
+        return 0
+
     def __init__(
         out self,
         var listener: TcpListener,
@@ -688,6 +702,7 @@ struct HttpServer(Movable):
                     use_uring_backend()
                     and self.config.use_bufring
                     and len(self._extra_listener_fds) == 0
+                    and not self._tls_ctx
                 ):
                     run_uring_bufring_reactor_loop(
                         self._listener, self.config, h, self._stopping
@@ -713,6 +728,8 @@ struct HttpServer(Movable):
                     self.h2_config.copy(),
                     h,
                     self._stopping,
+                    None,
+                    self._tls_ctx_addr(),
                 )
         else:
             if len(self._extra_listener_fds) > 0:
@@ -765,6 +782,7 @@ struct HttpServer(Movable):
                 use_uring_backend()
                 and self.config.use_bufring
                 and len(self._extra_listener_fds) == 0
+                and not self._tls_ctx
             ):
                 run_uring_bufring_reactor_loop[H](
                     self._listener, self.config, handler, self._stopping
@@ -786,6 +804,8 @@ struct HttpServer(Movable):
                 self.h2_config.copy(),
                 handler,
                 self._stopping,
+                None,
+                self._tls_ctx_addr(),
             )
 
     def serve_tls[H: Handler](mut self, var handler: H) raises:
@@ -1125,6 +1145,7 @@ struct HttpServer(Movable):
             self.config.copy(),
             self.h2_config.copy(),
             auto_protocol=True,
+            tls_ctx_addr=self._tls_ctx_addr(),
         )
         var scheduler = Scheduler[HttpFrontend[H]].start(
             addr=addr,

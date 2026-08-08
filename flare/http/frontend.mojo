@@ -70,6 +70,15 @@ struct HttpFrontend[H: Handler & Copyable](Copyable, Frontend, Movable):
     var config: ServerConfig
     var h2_config: Http2Config
     var auto_protocol: Bool
+    var tls_ctx_addr: Int
+    """Address of the server's shared ``SSL_CTX``, or 0 for cleartext.
+
+    Carried as an address rather than a value because ``ServerCtx`` is
+    move-only and OpenSSL intends ``SSL_CTX*`` to be shared read-only
+    across threads (each connection makes its own ``SSL`` via
+    ``SSL_new``). Every worker borrows the one the server owns, so
+    cloning the frontend per worker stays cheap and there is a single
+    context to reload certificates into."""
 
     def __init__(
         out self,
@@ -77,6 +86,7 @@ struct HttpFrontend[H: Handler & Copyable](Copyable, Frontend, Movable):
         var config: ServerConfig,
         var h2_config: Http2Config = Http2Config(),
         auto_protocol: Bool = False,
+        tls_ctx_addr: Int = 0,
     ):
         """Build a frontend with the given handler + config combo.
 
@@ -90,11 +100,16 @@ struct HttpFrontend[H: Handler & Copyable](Copyable, Frontend, Movable):
                 state machine via the RFC 9113 §3.4 preface peek.
                 When ``False`` (default), the worker speaks
                 HTTP/1.1 exclusively.
+            tls_ctx_addr: Address of the shared server ``SSL_CTX``;
+                0 (default) serves cleartext. When set, each accepted
+                connection starts as a TLS handshake and its protocol
+                is chosen by ALPN.
         """
         self.handler = handler^
         self.config = config^
         self.h2_config = h2_config^
         self.auto_protocol = auto_protocol
+        self.tls_ctx_addr = tls_ctx_addr
 
     def requires_per_worker_listener(self) -> Bool:
         """The io_uring buffer-ring path needs per-worker listeners.
@@ -109,7 +124,11 @@ struct HttpFrontend[H: Handler & Copyable](Copyable, Frontend, Movable):
         unified paths).
         """
         comptime if CompilationTarget.is_linux():
-            if use_uring_backend() and self.config.use_bufring:
+            if (
+                use_uring_backend()
+                and self.config.use_bufring
+                and self.tls_ctx_addr == 0
+            ):
                 return True
         return False
 
@@ -119,7 +138,11 @@ struct HttpFrontend[H: Handler & Copyable](Copyable, Frontend, Movable):
         """Pick the reactor entry point and run it until ``stopping`` flips."""
         try:
             comptime if CompilationTarget.is_linux():
-                if use_uring_backend() and self.config.use_bufring:
+                if (
+                    use_uring_backend()
+                    and self.config.use_bufring
+                    and self.tls_ctx_addr == 0
+                ):
                     run_uring_bufring_reactor_loop_shared[Self.H](
                         listener_fd,
                         self.config,
@@ -128,7 +151,7 @@ struct HttpFrontend[H: Handler & Copyable](Copyable, Frontend, Movable):
                         stats_addr,
                     )
                     return
-            if self.auto_protocol:
+            if self.auto_protocol or self.tls_ctx_addr != 0:
                 run_unified_reactor_loop_shared[Self.H](
                     listener_fd,
                     self.config,
@@ -136,6 +159,7 @@ struct HttpFrontend[H: Handler & Copyable](Copyable, Frontend, Movable):
                     self.handler,
                     stopping,
                     stats_addr,
+                    self.tls_ctx_addr,
                 )
             else:
                 run_reactor_loop_shared[Self.H](
