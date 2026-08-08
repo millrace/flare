@@ -473,6 +473,48 @@ about.
 
 ---
 
+## Two handler shapes, and why the split is permanent
+
+flare has two ways to write a server, and the difference is not
+historical accident or an unfinished migration:
+
+- **`Handler`** — `serve(req) -> Response`. Synchronous, one-shot, and
+  monomorphised into the reactor loop. The request is fully parsed and
+  buffered before `serve` is called; the response is a value the
+  reactor then writes. This is the right shape for essentially every
+  endpoint.
+- **`StreamHandler`** — `on_open` / `on_upstream` / `on_writable` /
+  `on_close` against a framework-owned `StreamConn`. Edge-driven: the
+  front is re-entered each time the connection is readable or writable
+  and pulls with `StreamConn.read_body()`.
+
+Outbound streaming needs no such split. A `Handler` returns a
+`Response` carrying a `body_stream`, and the reactor pulls one chunk
+per writable edge — the handler has already returned, so nothing
+blocks.
+
+**Inbound** streaming is the asymmetric case. To hand a handler a body
+that is still arriving, the handler must be able to wait for more
+bytes *inside* `serve`. With a synchronous contract that means blocking
+the worker, which head-of-line blocks every other keep-alive connection
+hashed to it, and Mojo has no async to escape with. So a genuinely
+unbounded upload belongs on `StreamHandler`, where the framework does
+the waiting and calls the front back.
+
+`RequestChunkSource` bounds what a `Handler` materialises at once, but
+the reactor has already buffered the body by then — it is a handler-side
+convenience, not a memory bound on the server. `ServerConfig.max_body_size`
+is what protects the server.
+
+The practical rule: reach for `Handler` unless the request body can
+exceed what you are willing to buffer per connection, then reach for
+`StreamHandler`.
+
+Known asymmetry: `StreamConn` frames HTTP/1.x only and has no TLS
+integration, so the streaming path is currently narrower than the
+`Handler` path, which serves h1, h2, h3 and TLS. Closing that gap is
+tracked work, not a design position.
+
 ## What stays out of the reactor
 
 flare deliberately keeps a few things on the application thread, not

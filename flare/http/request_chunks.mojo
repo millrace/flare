@@ -8,10 +8,9 @@ a 100MB upload allocates 100MB per concurrent client.
 ``RequestChunkSource`` lets handlers consume request bodies as
 a sequence of bounded-size chunks, mirroring the ``ChunkSource``
 shape used for outbound :class:`StreamingResponse` bodies.
-Today the source pulls from the pre-buffered ``Request.body``
-(so memory cost is unchanged); the ``ChunkSource`` shape is the
-**handler-side** API surface that a future streaming-reactor
-wire-in can pull through without changing handler code.
+The source pulls from the pre-buffered ``Request.body``, so the
+peak memory the *server* holds is unchanged; what it bounds is
+what the *handler* materializes at once.
 
 Symmetric to ``StreamingResponse[B]`` (outbound):
 
@@ -20,18 +19,30 @@ Symmetric to ``StreamingResponse[B]`` (outbound):
 - ``RequestChunkSource`` lets handlers pull request chunks via
   ``ChunkSource.next(cancel)`` — same trait, opposite direction.
 
-Why land the API surface now (not after the reactor wiring):
+What this does and does not buy you:
 
-- Handler authors who want to write code that uses request
-  chunking can do so today; their handlers will compile against
-  this surface unchanged when the reactor swaps in.
-- The cancellation discipline is already correct: every
-  ``next(cancel)`` call polls ``cancel.cancelled()`` so a
-  handler that loops over a large upload bails immediately on
-  client FIN / drain / deadline.
-- The future reactor adoption is a pure substitution at the
-  ``Request`` constructor — the ``RequestChunkSource``
-  surface stays byte-for-byte compatible.
+- It bounds the *handler's* working set: a handler that loops
+  ``next(cancel)`` never holds more than one chunk of its own,
+  and polls cancellation between chunks, so a large upload bails
+  immediately on client FIN / drain / deadline.
+- It does **not** bound the *reactor's* working set. The body is
+  already fully buffered by the time ``serve`` is called.
+
+An earlier version of this note claimed reactor adoption would be
+"a pure substitution at the ``Request`` constructor". That is not
+true, and the reason is worth stating so nobody re-attempts it:
+``Handler.serve(req) -> Response`` is synchronous and one-shot.
+Feeding it a body that is still arriving means the handler must
+block inside ``serve`` waiting for the socket, which stalls every
+other keep-alive connection multiplexed onto that worker. Mojo has
+no async to escape with.
+
+Genuinely unbounded inbound therefore lives on the edge-driven
+:trait:`flare.http.streaming_server.StreamHandler` path, where the
+front is re-entered per readable edge and pulls with
+``StreamConn.read_body()``. That is not a gap to be closed later;
+it is the shape the constraint forces. See
+``docs/architecture.md`` under "Two handler shapes".
 
 Configuration:
 
