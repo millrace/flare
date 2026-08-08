@@ -344,12 +344,11 @@ struct SseStreamingResponse(Movable):
     to the channel after the handler returns are flushed by the
     reactor on the next writable edge.
 
-    Reactor adoption (K1, landed for HTTP/1.1): a Router/Handler can
-    stream SSE by returning ``stream_response(channel)`` (the epoll
-    reactor pulls one framed chunk per writable edge via
-    ``Response.body_stream``). This ``SseStreamingResponse`` wrapper
-    remains for the ``serve_streaming`` entry point; HTTP/2 streaming
-    bodies are still a follow-up.
+    Reactor adoption: a Router/Handler can stream SSE by returning
+    ``stream_response(channel)`` -- the reactor pulls one framed chunk
+    per writable edge via ``Response.body_stream``, on HTTP/1.1,
+    HTTP/2, HTTP/3 and TLS alike. This ``SseStreamingResponse``
+    wrapper remains for the ``serve_streaming`` entry point.
     """
 
     var response: Response

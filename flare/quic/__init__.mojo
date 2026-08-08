@@ -46,10 +46,10 @@ Public re-exports:
   HKDF-Expand, HKDF-Expand-Label, RFC 9001 §5.2 initial-
   secret derivation, plus the :trait:`QuicCrypto` AEAD
   trait surface that the QUIC server reactor binds against.
-  The OpenSSL AEAD backend lands in a focused follow-up
-  commit; this module exposes :class:`StubQuicCrypto` as a
-  typed sentinel so the reactor wiring tests can pin the
-  trait boundary today.
+  :class:`OpenSslQuicCrypto` is the shipped backend;
+  :class:`StubQuicCrypto` remains as a typed sentinel that
+  raises, so tests can pin the trait boundary without
+  linking OpenSSL.
 - :mod:`.cc` — RFC 9002 §7 congestion control: the
   :trait:`CongestionController` contract plus :class:`RenoController`
   (RFC 9002 NewReno) and :class:`CubicController` (RFC 9438 CUBIC with

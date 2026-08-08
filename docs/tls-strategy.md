@@ -21,7 +21,7 @@ alongside the QUIC server.
 | Cert reload | ``TlsAcceptor.reload()`` atomic swap (no in-flight drop). |
 | Session resumption | RFC 5077 tickets + RFC 8446 §4.6.1 ``NewSessionTicket`` capture/replay. Server-side opt-in via ``TlsServerConfig.enable_session_tickets``; client-side opt-in via ``TlsConfig.enable_session_resumption``. |
 | mTLS | Construction-time CA chain validation; ``TlsAcceptor.with_client_cert_verification`` enforces presence + chain. |
-| HTTPS server termination | In-process, non-blocking. ``HttpServer.bind_tls`` / ``serve_tls`` terminate TLS on a ``TlsConnHandle`` and serve HTTP/1.1 (buffered + chunked-streaming) over ``SSL_read`` / ``SSL_write``. See below. |
+| HTTPS server termination | In-process, non-blocking, reactor-multiplexed. ``HttpServer.bind_tls`` / ``serve_tls`` terminate TLS on a ``TlsConnHandle`` and serve HTTP/1.1 or HTTP/2 by ALPN (buffered + chunked-streaming) over ``SSL_read`` / ``SSL_write``. See below. |
 | OCSP stapling | Not in-tree. Most production deployments terminate TLS at a proxy with stapling enabled. |
 | Encrypted ClientHello (ECH) | Not in-tree. The plan is to land it when OpenSSL stable carries it. |
 
@@ -63,12 +63,12 @@ wire is an implementation detail). See
 [`examples/advanced/https_server.mojo`](../examples/advanced/https_server.mojo)
 (`pixi run example-https`).
 
-Scope today: ``serve_tls`` is synchronous (one connection at a time on
-the calling thread, matching the original blocking ``HttpServer``
-semantics) and frames HTTP/1.1 only -- an ALPN-negotiated ``h2``
-connection is closed cleanly rather than mis-framed. Reactor-multiplexed
-TLS (many concurrent TLS connections on one event loop) and h2-over-TLS
-reuse this same ``TlsConnHandle`` state machine and are the follow-up.
+Scope today: TLS is terminated on the unified reactor. Many TLS
+connections are in flight on one event loop, ``num_workers > 1``
+scales them across cores, and the negotiated ALPN selects HTTP/1.1 or
+HTTP/2 -- an ``h2`` connection is served, not closed. ``serve_tls`` is
+a named alias for ``serve`` on a TLS-bound server; there is one TLS
+code path.
 
 ## Why OpenSSL + FFI rather than a Mojo-native stack
 

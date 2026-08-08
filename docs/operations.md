@@ -64,16 +64,19 @@ Two reasons for the explicit choice:
 
 ## Graceful shutdown
 
-`HttpServer.serve()` honours `SIGINT` and `SIGTERM`. On signal:
+flare does **not** install a signal handler -- Mojo does not yet allow
+the process-global mutable state an async-signal-safe handler needs, so
+the caller wires `signal(2)` and calls `drain`. See
+`examples/intermediate/drain.mojo`.
+
+On `HttpServer.drain(timeout_ms)`:
 
 1. The listener is closed (no new accepts).
-2. Active connections drain through `Cancel` cells: each handler
-   in flight receives a cooperative cancellation token and is
-   given up to `server_config.shutdown_grace_ms` (default 5 s)
-   to finish.
-3. Connections that exceed the grace window are RST'd; the
-   handler's `Cancel.is_cancelled()` will be `True` for the
-   final response.
+2. The reactor flips `Cancel.SHUTDOWN` on every live connection before
+   closing it, so cancel-aware handlers and streaming bodies observe
+   the shutdown at their next poll instead of losing the socket
+   mid-chunk.
+3. `ServerConfig.shutdown_timeout_ms` (default 5 s) bounds the wait.
 
 Multi-worker `Scheduler.drain(timeout_ms)` returns one
 `ShutdownReport` per worker. `in_flight_at_deadline` and `timed_out`
@@ -104,7 +107,7 @@ flare ships three layers, all opt-in. Mix them as needed.
 |---|---|---|
 | `RequestId[Inner]` | A per-request ID injected into every log line and echoed in `X-Request-Id` on the response. | [`flare.http.middleware`](../flare/http/middleware.mojo) |
 | `StructuredLogger[Inner]` | One JSON object per response on stdout (method, path, status, duration_us, request_id). Wire to your log shipper directly. | [`flare.http.structured_logger`](../flare/http/structured_logger.mojo) |
-| `MetricsCollector[Inner]` | Prometheus-format counters + histograms on `/metrics`. Cardinality is bounded by the router's route count, not by the URL path. | [`flare.http.metrics`](../flare/http/metrics.mojo) |
+| `Metrics[Inner]` | Prometheus-format counters + histograms on `/metrics`. Cardinality is bounded by the router's route count, not by the URL path. | [`flare.http.metrics`](../flare/http/metrics.mojo) |
 
 Recommended minimum: wire `RequestId[StructuredLogger[YourApp]]`
 on every server. A request-id-bearing log line is the difference

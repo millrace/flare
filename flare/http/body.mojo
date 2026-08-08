@@ -42,10 +42,14 @@ Pieces still open:
 - Making ``Response`` parametric over ``B: Body`` (so handlers can
   return ``Response[ChunkedBody[MySource]]``). Today's ``Response``
   keeps its concrete ``List[UInt8]`` body plus the optional
-  ``body_stream``; the parametric migration is a follow-up.
-- HTTP/2 streaming response bodies: the h2 server still emits one
-  buffered DATA frame per stream; ``body_stream`` is H1-only for now.
-- Multi-worker ``serve_streaming`` (single-listener only today).
+  ``body_stream``; ``ResponseImpl[B]`` exists as an additive
+  authoring type, but migrating the hot-path alias is a follow-up.
+- ``serve_streaming`` across multiple listeners (multi-worker works;
+  ``bind_many`` extras do not).
+
+``body_stream`` itself is served on every wire: HTTP/1.1 chunked,
+HTTP/2 incremental DATA frames, HTTP/3 over QUIC, and the same h1
+chunked framing as ciphertext once the reactor has terminated TLS.
 
 The shape and public API of ``ChunkSource`` / ``Body`` /
 ``InlineBody`` / ``ChunkedBody`` are stable.
