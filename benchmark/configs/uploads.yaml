@@ -12,6 +12,7 @@
 # runs against the v0.4.x copy path and serves as the regression
 # baseline that the post-adoption numbers improve against.
 name: uploads
+url_path: /upload
 tool: wrk
 wrk_threads: 1
 wrk_connections: 16

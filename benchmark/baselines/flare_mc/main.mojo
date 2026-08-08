@@ -24,8 +24,41 @@ from flare.http import (
     Status,
     ok,
 )
+from flare.http.body import ChunkSource
+from flare.http.cancel import Cancel
 from flare.http.request import Request
+from flare.http.response import stream_response
 from flare.net import SocketAddr
+
+
+comptime _STREAM_CHUNKS: Int = 16
+comptime _STREAM_CHUNK_BYTES: Int = 256
+"""16 x 256 B = 4096 B, matching ``/4kb`` exactly, so streaming can be
+measured against the buffered path at identical payload."""
+
+
+def _payload(n: Int) -> List[UInt8]:
+    var out = List[UInt8](capacity=n)
+    for i in range(n):
+        out.append(UInt8(97 + (i % 26)))
+    return out^
+
+
+@fieldwise_init
+struct _FixedChunks(ChunkSource, Copyable, Movable):
+    var remaining: Int
+
+    def next(mut self, cancel: Cancel) raises -> Optional[List[UInt8]]:
+        if cancel.cancelled() or self.remaining <= 0:
+            return None
+        self.remaining -= 1
+        return _payload(_STREAM_CHUNK_BYTES)
+
+
+def _download(n: Int) raises -> Response:
+    var r = Response(Status.OK, body=_payload(n))
+    r.headers.set("content-type", "application/octet-stream")
+    return r^
 
 
 def handler(req: Request) raises -> Response:
@@ -38,6 +71,20 @@ def handler(req: Request) raises -> Response:
     # path.
     if req.url == "/plaintext":
         return ok("Hello, World!")
+    if req.url == "/stream":
+        var s = stream_response(_FixedChunks(_STREAM_CHUNKS))
+        s.headers.set("content-type", "application/octet-stream")
+        return s^
+    if req.url == "/4kb":
+        return _download(4 * 1024)
+    if req.url == "/64kb":
+        return _download(64 * 1024)
+    if req.url == "/1mb":
+        return _download(1024 * 1024)
+    if req.url == "/16mb":
+        return _download(16 * 1024 * 1024)
+    if req.url == "/upload":
+        return ok(String(len(req.body)))
     return Response(status=404, reason="Not Found")
 
 
@@ -53,6 +100,10 @@ comptime BENCH_CONFIG = ServerConfig(
     write_timeout_ms=0,
     max_keepalive_requests=100_000,
     skip_header_decode_for_short_requests=True,
+    # The uploads workload posts up to 16 MiB; the 10 MiB default would
+    # 413 it. Body framing is unaffected by the minimal parser -- it
+    # still scans Content-Length raw.
+    max_body_size=32 * 1024 * 1024,
 )
 
 

@@ -121,6 +121,17 @@ read_config() {
     if [ -z "$WRK_RATE" ]; then
         WRK_RATE=10000000
     fi
+    # Request path. Configs that exercise something other than the
+    # 13-byte plaintext response set ``url_path``; without this the
+    # harness drove every config at /plaintext and the download,
+    # upload and streaming configs silently measured plaintext with
+    # different connection counts.
+    URL_PATH=$(awk '/^url_path:/ {print $2}' "$f")
+    if [ -z "$URL_PATH" ]; then
+        URL_PATH=/plaintext
+    fi
+    # Optional POST body size in bytes (upload workloads).
+    WRK_POST_BYTES=$(awk '/^wrk_post_bytes:/ {print $2}' "$f")
 }
 
 # ── Main sweep ────────────────────────────────────────────────────────────────
@@ -139,7 +150,7 @@ for target_dir in "$BASELINES_DIR"/*/; do
             config=$(basename "$config_file" .yaml)
             matches "$config" "$ONLY_CONFIGS" || continue
             read_config "$config_file"
-            URL="http://127.0.0.1:$PORT/plaintext"
+            URL="http://127.0.0.1:$PORT$URL_PATH"
 
             echo ""
             echo "─── $target / $workload / $config ───"

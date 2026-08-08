@@ -1,0 +1,19 @@
+# buffered_4kb -- the denominator for sse_stream (v0.10 P4).
+#
+# Identical knobs to sse_stream.yaml, pointed at /4kb instead of
+# /stream. Same 4096 bytes, Content-Length instead of chunked. The
+# pair exists so the streaming number can be quoted as a ratio against
+# the buffered path at equal payload rather than as a bare figure with
+# nothing to compare it to.
+#
+# Run both, then report streaming req/s as a fraction of buffered.
+name: buffered_4kb
+tool: wrk
+url_path: /4kb
+wrk_threads: 4
+wrk_connections: 64
+wrk_duration_seconds: 30
+warmup_seconds: 10
+runs: 5
+quiet_seconds: 5
+stdev_pct_gate: 5.0

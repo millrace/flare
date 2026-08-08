@@ -1,0 +1,31 @@
+# sse_stream -- chunked streaming response throughput (v0.10 P4).
+#
+# This is the workload the v0.10 bar is about. Every other config in
+# this directory measures a buffered response; none of them touch the
+# streaming write path, which is why "can flare front a production
+# streaming workload" had no number attached to it.
+#
+# Design: /stream returns 4096 bytes as 16 chunked writes of 256 B.
+# /4kb returns the same 4096 bytes with Content-Length. Running the two
+# under identical knobs isolates the cost of the streaming machinery
+# (per-chunk pull, chunk framing, one writable edge per chunk) from the
+# cost of moving the payload, which a single streaming number alone
+# cannot separate.
+#
+# So the headline is a ratio, not an absolute: streaming req/s as a
+# fraction of buffered req/s at equal bytes. Pair this run with
+# ``downloads`` restricted to the 4 KB script for the denominator.
+#
+# The Rust baselines have no /stream route yet, so this is flare-vs-
+# flare until one is added. That is worth saying out loud rather than
+# publishing a cross-framework table with an empty column.
+name: sse_stream
+tool: wrk
+url_path: /stream
+wrk_threads: 4
+wrk_connections: 64
+wrk_duration_seconds: 30
+warmup_seconds: 10
+runs: 5
+quiet_seconds: 5
+stdev_pct_gate: 5.0
