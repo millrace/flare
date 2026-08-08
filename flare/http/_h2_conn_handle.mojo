@@ -52,7 +52,10 @@ from flare.net import IpAddr, SocketAddr
 from flare.net._libc import _recv, _send, MSG_NOSIGNAL
 from flare.runtime import Pool
 from flare.tcp import TcpStream
+from flare.tls._server_ffi import SSL_IO_WANT_READ, SSL_IO_WANT_WRITE
 from flare.ws.server_h2 import WsH2Hooks, WsOverH2ServerStream
+
+from ._reactor.tls_transport import TlsTransport
 
 from ._server_reactor_impl import (
     StepResult,
@@ -225,6 +228,18 @@ struct Http2ConnHandle(Movable):
     """Per-connection accepted WS tunnels keyed on stream id. Each carries
     its own inbound decode buffer."""
 
+    # ── TLS termination (h2 over TLS) ──────────────────────────────────────
+    var tls: Optional[TlsTransport]
+    """``SSL*`` for an ALPN-negotiated ``h2`` connection, moved in from
+    the ``TlsConnHandle`` that ran the handshake; ``None`` for h2c.
+    When set, the frame reader and the write pump go through
+    ``SSL_read`` / ``SSL_write``."""
+
+    var tls_cross_interest: Bool
+    """``SSL_read`` wanted writability, or ``SSL_write`` wanted
+    readability (renegotiation / KeyUpdate). The step arms both
+    interests; the reactor re-enters the other drive path."""
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def __init__(
@@ -259,6 +274,8 @@ struct Http2ConnHandle(Movable):
         self._stream_out = Dict[Int, Int]()
         self._ws_hooks = ws_hooks^
         self._ws_tunnels = Dict[Int, WsOverH2ServerStream]()
+        self.tls = Optional[TlsTransport]()
+        self.tls_cross_interest = False
 
     def __init__(
         out self,
@@ -324,11 +341,65 @@ struct Http2ConnHandle(Movable):
         self._stream_out = Dict[Int, Int]()
         self._ws_hooks = ws_hooks^
         self._ws_tunnels = Dict[Int, WsOverH2ServerStream]()
+        self.tls = Optional[TlsTransport]()
+        self.tls_cross_interest = False
+
+    def attach_tls(mut self, var transport: TlsTransport):
+        """Adopt the ``SSL*`` of a connection whose ALPN selected ``h2``."""
+        self.tls = Optional[TlsTransport](transport^)
+
+    @always_inline
+    def is_tls(self) -> Bool:
+        """True when this connection is TLS-terminated."""
+        return Bool(self.tls)
 
     @always_inline
     def fd(self) -> c_int:
         """Return the underlying fd (fast accessor)."""
         return self._stream._socket.fd
+
+    def _tls_fill_inbound(mut self, mut inbound: List[UInt8]) raises -> Int:
+        """Pull plaintext frames into ``inbound`` through ``SSL_read``.
+
+        Returns ``TLS_FILL_DRAINED`` when the record layer needs more
+        ciphertext (the normal EAGAIN-equivalent stop),
+        ``TLS_FILL_CROSS`` when the session needs socket writability
+        first, or ``TLS_FILL_CLOSED`` on ``close_notify`` / fatal --
+        which callers treat exactly like a cleartext peer FIN.
+        """
+        while True:
+            var got = self.tls.value().recv(inbound, 8192)
+            if got > 0:
+                continue
+            if got == SSL_IO_WANT_READ:
+                return TLS_FILL_DRAINED
+            if got == SSL_IO_WANT_WRITE:
+                self.tls_cross_interest = True
+                return TLS_FILL_CROSS
+            return TLS_FILL_CLOSED
+
+    def _flush_write_buf_tls(mut self) raises -> Optional[StepResult]:
+        """TLS twin of the ``on_writable`` send loop; see the h1
+        ``ConnHandle._flush_write_buf_tls`` for the contract."""
+        while self.write_pos < len(self.write_buf):
+            var n = self.tls.value().send(
+                Span[UInt8, _](self.write_buf), self.write_pos
+            )
+            if n > 0:
+                self.write_pos += n
+                continue
+            if n == SSL_IO_WANT_WRITE:
+                break
+            if n == SSL_IO_WANT_READ:
+                self.tls_cross_interest = True
+                return Optional[StepResult](
+                    StepResult(want_read=True, want_write=True)
+                )
+            self.should_close = True
+            return Optional[StepResult](
+                StepResult(want_read=False, want_write=False, done=True)
+            )
+        return Optional[StepResult]()
 
     # ── Pre-buffered preface bytes (for the unified server's peek path)
 
@@ -379,36 +450,50 @@ struct Http2ConnHandle(Movable):
         )
         var chunk = stack_allocation[8192, UInt8]()
         var inbound = List[UInt8]()
-        while True:
-            var got = _recv(self.fd(), chunk, c_size_t(8192), c_int(0))
-            if got > 0:
-                var got_int = Int(got)
-                debug_assert[assert_mode="safe"](
-                    got_int <= 8192,
-                    "Http2ConnHandle._recv: returned > buf size; got ",
-                    got_int,
-                )
-                for i in range(got_int):
-                    inbound.append(chunk[i])
-            elif got == 0:
-                # Peer FIN observed mid-connection. Mark closed
-                # so the reactor unregisters the fd after any
-                # remaining write_buf flushes.
+        if self.tls:
+            var fill = self._tls_fill_inbound(inbound)
+            if fill == TLS_FILL_CROSS:
+                return StepResult(want_read=True, want_write=True)
+            if fill == TLS_FILL_CLOSED:
                 self.should_close = True
                 return StepResult(
                     want_read=False,
                     want_write=len(self.write_buf) > self.write_pos,
                     done=len(self.write_buf) == self.write_pos,
                 )
-            else:
-                var e = get_errno()
-                if e == ErrNo.EINTR:
-                    continue
-                if e == ErrNo.EAGAIN or e == ErrNo.EWOULDBLOCK:
-                    break
-                # Hard read error -- close.
-                self.should_close = True
-                return StepResult(want_read=False, want_write=False, done=True)
+        else:
+            while True:
+                var got = _recv(self.fd(), chunk, c_size_t(8192), c_int(0))
+                if got > 0:
+                    var got_int = Int(got)
+                    debug_assert[assert_mode="safe"](
+                        got_int <= 8192,
+                        "Http2ConnHandle._recv: returned > buf size; got ",
+                        got_int,
+                    )
+                    for i in range(got_int):
+                        inbound.append(chunk[i])
+                elif got == 0:
+                    # Peer FIN observed mid-connection. Mark closed
+                    # so the reactor unregisters the fd after any
+                    # remaining write_buf flushes.
+                    self.should_close = True
+                    return StepResult(
+                        want_read=False,
+                        want_write=len(self.write_buf) > self.write_pos,
+                        done=len(self.write_buf) == self.write_pos,
+                    )
+                else:
+                    var e = get_errno()
+                    if e == ErrNo.EINTR:
+                        continue
+                    if e == ErrNo.EAGAIN or e == ErrNo.EWOULDBLOCK:
+                        break
+                    # Hard read error -- close.
+                    self.should_close = True
+                    return StepResult(
+                        want_read=False, want_write=False, done=True
+                    )
         # Push everything we just read into the h2 driver. ``feed``
         # auto-handles the connection preface (24 bytes) the first
         # time it's called and queues a SETTINGS_ACK / PING_ACK /
@@ -762,15 +847,11 @@ struct Http2ConnHandle(Movable):
         )
         var chunk = stack_allocation[8192, UInt8]()
         var inbound = List[UInt8]()
-        while True:
-            var got = _recv(self.fd(), chunk, c_size_t(8192), c_int(0))
-            if got > 0:
-                var got_int = Int(got)
-                for i in range(got_int):
-                    inbound.append(chunk[i])
-            elif got == 0:
-                # Peer FIN -- flip every live cell so in-flight
-                # handlers short-circuit cooperatively.
+        if self.tls:
+            var fill = self._tls_fill_inbound(inbound)
+            if fill == TLS_FILL_CROSS:
+                return StepResult(want_read=True, want_write=True)
+            if fill == TLS_FILL_CLOSED:
                 self._flip_all_stream_cells(CancelReason.PEER_CLOSED)
                 self.should_close = True
                 return StepResult(
@@ -778,15 +859,34 @@ struct Http2ConnHandle(Movable):
                     want_write=len(self.write_buf) > self.write_pos,
                     done=len(self.write_buf) == self.write_pos,
                 )
-            else:
-                var e = get_errno()
-                if e == ErrNo.EINTR:
-                    continue
-                if e == ErrNo.EAGAIN or e == ErrNo.EWOULDBLOCK:
-                    break
-                self._flip_all_stream_cells(CancelReason.PEER_CLOSED)
-                self.should_close = True
-                return StepResult(want_read=False, want_write=False, done=True)
+        else:
+            while True:
+                var got = _recv(self.fd(), chunk, c_size_t(8192), c_int(0))
+                if got > 0:
+                    var got_int = Int(got)
+                    for i in range(got_int):
+                        inbound.append(chunk[i])
+                elif got == 0:
+                    # Peer FIN -- flip every live cell so in-flight
+                    # handlers short-circuit cooperatively.
+                    self._flip_all_stream_cells(CancelReason.PEER_CLOSED)
+                    self.should_close = True
+                    return StepResult(
+                        want_read=False,
+                        want_write=len(self.write_buf) > self.write_pos,
+                        done=len(self.write_buf) == self.write_pos,
+                    )
+                else:
+                    var e = get_errno()
+                    if e == ErrNo.EINTR:
+                        continue
+                    if e == ErrNo.EAGAIN or e == ErrNo.EWOULDBLOCK:
+                        break
+                    self._flip_all_stream_cells(CancelReason.PEER_CLOSED)
+                    self.should_close = True
+                    return StepResult(
+                        want_read=False, want_write=False, done=True
+                    )
         if len(inbound) > 0:
             self.h2.feed(Span[UInt8, _](inbound))
         # RST_STREAM -> per-stream cell flip. Drain the list so
@@ -893,29 +993,36 @@ struct Http2ConnHandle(Movable):
             "Http2ConnHandle.on_writable: write_pos out of range; got ",
             self.write_pos,
         )
-        while self.write_pos < len(self.write_buf):
-            var remaining = len(self.write_buf) - self.write_pos
-            var ptr = self.write_buf.unsafe_ptr() + self.write_pos
-            debug_assert[assert_mode="safe"](
-                remaining > 0 and Int(ptr) != 0,
-                (
-                    "Http2ConnHandle._send: buf must be non-NULL when"
-                    " remaining > 0"
-                ),
-            )
-            var n = _send(
-                self.fd(), ptr, c_size_t(remaining), c_int(MSG_NOSIGNAL)
-            )
-            if n > 0:
-                self.write_pos += Int(n)
-            else:
-                var e = get_errno()
-                if e == ErrNo.EINTR:
-                    continue
-                if e == ErrNo.EAGAIN or e == ErrNo.EWOULDBLOCK:
-                    break
-                self.should_close = True
-                return StepResult(want_read=False, want_write=False, done=True)
+        if self.tls:
+            var tls_step = self._flush_write_buf_tls()
+            if tls_step:
+                return tls_step.value()
+        else:
+            while self.write_pos < len(self.write_buf):
+                var remaining = len(self.write_buf) - self.write_pos
+                var ptr = self.write_buf.unsafe_ptr() + self.write_pos
+                debug_assert[assert_mode="safe"](
+                    remaining > 0 and Int(ptr) != 0,
+                    (
+                        "Http2ConnHandle._send: buf must be non-NULL when"
+                        " remaining > 0"
+                    ),
+                )
+                var n = _send(
+                    self.fd(), ptr, c_size_t(remaining), c_int(MSG_NOSIGNAL)
+                )
+                if n > 0:
+                    self.write_pos += Int(n)
+                else:
+                    var e = get_errno()
+                    if e == ErrNo.EINTR:
+                        continue
+                    if e == ErrNo.EAGAIN or e == ErrNo.EWOULDBLOCK:
+                        break
+                    self.should_close = True
+                    return StepResult(
+                        want_read=False, want_write=False, done=True
+                    )
         if self.write_pos < len(self.write_buf):
             # Partial write -- come back when the kernel has more
             # space. Re-arm the write idle timer so a slow client
@@ -1033,6 +1140,14 @@ def _h2_conn_ptr_from_int(
 comptime _H2_PREFACE_BYTES_LEN: Int = 24
 """Length in bytes of the RFC 9113 §3.4 ``PRI * HTTP/2.0\\r\\n\\r\\nSM\\r\\n\\r\\n``
 client connection preface."""
+
+
+comptime TLS_FILL_DRAINED: Int = 0
+"""``_tls_fill_inbound``: record layer wants more ciphertext (EAGAIN)."""
+comptime TLS_FILL_CROSS: Int = 1
+"""``_tls_fill_inbound``: session needs socket writability first."""
+comptime TLS_FILL_CLOSED: Int = 2
+"""``_tls_fill_inbound``: ``close_notify`` or fatal -- treat as peer FIN."""
 
 
 comptime PROTO_NEED_MORE: Int = 0

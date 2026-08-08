@@ -90,12 +90,17 @@ from .keepalive_scan import (
     _monotonic_ms,
     _wants_close,
 )
+from .tls_transport import TlsTransport
 from .write_path import (
     build_error_response,
     queue_h2c_upgrade_101,
     serialize_response_into,
     serialize_response_headers_chunked_into,
     serialize_static_into,
+)
+from flare.tls._server_ffi import (
+    SSL_IO_WANT_READ,
+    SSL_IO_WANT_WRITE,
 )
 
 
@@ -207,6 +212,22 @@ struct ConnHandle(Movable):
     the terminator flushes. Freed with the ConnHandle if the peer
     disconnects mid-stream."""
 
+    var tls: Optional[TlsTransport]
+    """``SSL*`` for a TLS-terminated connection, moved in from the
+    ``TlsConnHandle`` that ran the handshake; ``None`` for cleartext.
+    When set, the recv / send loops go through ``SSL_read`` /
+    ``SSL_write`` instead of the raw ``_recv`` / ``_send`` syscalls.
+    A single ``Optional`` test guards each -- the cleartext path is
+    one predictable branch away from what it was."""
+
+    var tls_cross_interest: Bool
+    """Set when the TLS session asked for the *opposite* readiness to
+    the direction being driven -- ``SSL_read`` returning ``WANT_WRITE``
+    or ``SSL_write`` returning ``WANT_READ``, which OpenSSL does during
+    a TLS 1.2 renegotiation or a TLS 1.3 KeyUpdate. The step arms both
+    interests and the reactor re-enters the *other* drive function on
+    the next edge. Always False for cleartext."""
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def __init__(
@@ -244,6 +265,22 @@ struct ConnHandle(Movable):
         self._h2c_upgrade_settings = List[UInt8]()
         self._date_cache = DateCache()
         self.body_src = Optional[ChunkSourceBox]()
+        self.tls = Optional[TlsTransport]()
+        self.tls_cross_interest = False
+
+    def attach_tls(mut self, var transport: TlsTransport):
+        """Adopt the ``SSL*`` of an already-handshaken connection.
+
+        Called by the reactor when a ``TlsConnHandle`` promotes to h1
+        after ALPN selected ``http/1.1`` (or offered nothing). From
+        here on every read and write on this connection is ciphertext.
+        """
+        self.tls = Optional[TlsTransport](transport^)
+
+    @always_inline
+    def is_tls(self) -> Bool:
+        """True when this connection is TLS-terminated."""
+        return Bool(self.tls)
 
     @always_inline
     def fd(self) -> c_int:
@@ -268,6 +305,8 @@ struct ConnHandle(Movable):
         done-result; only the cancel- and view-aware reader paths
         request the flip.
         """
+        if self.tls:
+            return self._drain_recv_tls[flips_cancel_on_close](config)
         var chunk = stack_allocation[8192, UInt8]()
         while True:
             var got = _recv(self.fd(), chunk, c_size_t(8192), c_int(0))
@@ -300,6 +339,44 @@ struct ConnHandle(Movable):
                 return Optional[StepResult](
                     StepResult(want_read=False, want_write=False, done=True)
                 )
+        return Optional[StepResult]()
+
+    def _drain_recv_tls[
+        flips_cancel_on_close: Bool
+    ](mut self, config: ServerConfig) raises -> Optional[StepResult]:
+        """TLS twin of :meth:`_drain_recv`: pull plaintext through
+        ``SSL_read`` until the record layer needs more ciphertext.
+
+        Same return contract. ``SSL_IO_CLOSED`` is a ``close_notify``
+        and is treated exactly like a cleartext peer FIN, so keep-alive
+        teardown and cancel semantics are identical on both transports.
+        """
+        while True:
+            var got = self.tls.value().recv(self.read_buf, 8192)
+            if got > 0:
+                if (
+                    len(self.read_buf)
+                    > config.max_header_size + config.max_body_size
+                ):
+                    self._queue_error(413, "Content Too Large")
+                    return Optional[StepResult](self._transition_to_writing())
+                continue
+            if got == SSL_IO_WANT_READ:
+                break
+            if got == SSL_IO_WANT_WRITE:
+                # Renegotiation / KeyUpdate: no more plaintext until the
+                # session gets to write. Arm both; the reactor re-enters
+                # the read path on the writable edge.
+                self.tls_cross_interest = True
+                return Optional[StepResult](
+                    StepResult(want_read=True, want_write=True)
+                )
+            comptime if flips_cancel_on_close:
+                self.cancel_cell.flip(CancelReason.PEER_CLOSED)
+            self.should_close = True
+            return Optional[StepResult](
+                StepResult(want_read=False, want_write=False, done=True)
+            )
         return Optional[StepResult]()
 
     @always_inline
@@ -776,6 +853,35 @@ struct ConnHandle(Movable):
         self._serialize_static(resp, not final_close)
         return self._transition_to_writing()
 
+    def _flush_write_buf_tls(mut self) raises -> Optional[StepResult]:
+        """TLS twin of the ``on_writable`` send loop.
+
+        Returns ``Some(StepResult)`` when the caller must bail (fatal
+        error, or the session needs readability to make progress);
+        ``None`` when ``write_pos`` is as far along as the socket
+        allows and the caller should fall through to its normal
+        flushed / partial-write handling.
+        """
+        while self.write_pos < len(self.write_buf):
+            var n = self.tls.value().send(
+                Span[UInt8, _](self.write_buf), self.write_pos
+            )
+            if n > 0:
+                self.write_pos += n
+                continue
+            if n == SSL_IO_WANT_WRITE:
+                break
+            if n == SSL_IO_WANT_READ:
+                self.tls_cross_interest = True
+                return Optional[StepResult](
+                    StepResult(want_read=True, want_write=True)
+                )
+            self.should_close = True
+            return Optional[StepResult](
+                StepResult(want_read=False, want_write=False, done=True)
+            )
+        return Optional[StepResult]()
+
     def on_writable(mut self, config: ServerConfig) raises -> StepResult:
         """Drive the state machine on a writable event.
 
@@ -796,23 +902,30 @@ struct ConnHandle(Movable):
                 want_read=self.state == STATE_READING, want_write=False
             )
 
-        while self.write_pos < len(self.write_buf):
-            var remaining = len(self.write_buf) - self.write_pos
-            var ptr = self.write_buf.unsafe_ptr() + self.write_pos
-            var n = _send(
-                self.fd(), ptr, c_size_t(remaining), c_int(MSG_NOSIGNAL)
-            )
-            if n > 0:
-                self.write_pos += Int(n)
-            else:
-                var e = get_errno()
-                if e == ErrNo.EINTR:
-                    continue
-                if e == ErrNo.EAGAIN or e == ErrNo.EWOULDBLOCK:
-                    break
-                # Hard write error — close.
-                self.should_close = True
-                return StepResult(want_read=False, want_write=False, done=True)
+        if self.tls:
+            var tls_step = self._flush_write_buf_tls()
+            if tls_step:
+                return tls_step.value()
+        else:
+            while self.write_pos < len(self.write_buf):
+                var remaining = len(self.write_buf) - self.write_pos
+                var ptr = self.write_buf.unsafe_ptr() + self.write_pos
+                var n = _send(
+                    self.fd(), ptr, c_size_t(remaining), c_int(MSG_NOSIGNAL)
+                )
+                if n > 0:
+                    self.write_pos += Int(n)
+                else:
+                    var e = get_errno()
+                    if e == ErrNo.EINTR:
+                        continue
+                    if e == ErrNo.EAGAIN or e == ErrNo.EWOULDBLOCK:
+                        break
+                    # Hard write error — close.
+                    self.should_close = True
+                    return StepResult(
+                        want_read=False, want_write=False, done=True
+                    )
 
         if self.write_pos < len(self.write_buf):
             # Partial write — re-arm on writable.
