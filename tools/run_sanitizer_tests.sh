@@ -377,8 +377,39 @@ fi
 
 mkdir -p target/sanitize
 
+# Tests that fork a loopback server (sometimes two) and wait a fixed
+# grace period for it to come up. Under a sanitizer every process is
+# several times slower, and eighty of these run back to back, so the
+# grace period is occasionally too short and the parent connects before
+# the child is listening. The failures are timing, not memory: ASan
+# itself reports nothing, and each of these passes on its own at both
+# the current commit and the previous one.
+#
+# Retry twice before believing a failure, and say so in the output --
+# a flake stays visible as "PASS (retry N)" instead of being silently
+# smoothed over. The real fix is for these tests to poll for readiness
+# instead of sleeping a fixed interval; that is a per-test change
+# tracked as v0.10 S8.
+FLAKY_FORKED=(
+  test_h3_0rtt_e2e
+  test_tls_acceptor
+  test_tls_server_ffi
+  test_https_reactor
+  test_h3_live_dial
+  test_h3_client_e2e
+)
+
+is_flaky_forked() {
+  local needle="$1"
+  for f in "${FLAKY_FORKED[@]}"; do
+    [[ "${f}" == "${needle}" ]] && return 0
+  done
+  return 1
+}
+
 PASS=0
 FAIL=0
+FLAKED=0
 START_NS=$(date +%s%N)
 
 for test_file in "${TESTS[@]}"; do
@@ -399,12 +430,33 @@ for test_file in "${TESTS[@]}"; do
   echo "ok"
 
   printf '   %-44s run   (%s) … ' "${base}" "${KIND}"
-  if env ${SAN_ENV} "./${out}" > "target/sanitize/${base}${SUFFIX}.run.log" 2>&1; then
-    summary=$(grep -E '^Summary' "target/sanitize/${base}${SUFFIX}.run.log" | tail -1 || true)
-    echo "PASS — ${summary:-no summary}"
+  attempts=1
+  is_flaky_forked "${base}" && attempts=3
+  ok=0
+  for try in $(seq 1 "${attempts}"); do
+    if env ${SAN_ENV} "./${out}" \
+         > "target/sanitize/${base}${SUFFIX}.run.log" 2>&1; then
+      summary=$(grep -E '^Summary' \
+        "target/sanitize/${base}${SUFFIX}.run.log" | tail -1 || true)
+      if [[ ${try} -gt 1 ]]; then
+        echo "PASS (retry ${try}) — ${summary:-no summary}"
+        FLAKED=$((FLAKED + 1))
+      else
+        echo "PASS — ${summary:-no summary}"
+      fi
+      ok=1
+      break
+    fi
+    [[ ${try} -lt ${attempts} ]] && sleep 2
+  done
+  if [[ ${ok} -eq 1 ]]; then
     PASS=$((PASS + 1))
   else
-    echo "FAILED"
+    if [[ ${attempts} -gt 1 ]]; then
+      echo "FAILED (${attempts} attempts)"
+    else
+      echo "FAILED"
+    fi
     tail -40 "target/sanitize/${base}${SUFFIX}.run.log"
     FAIL=$((FAIL + 1))
   fi
@@ -415,6 +467,9 @@ ELAPSED_S=$(( (END_NS - START_NS) / 1000000000 ))
 
 echo
 echo "── ${KIND^^} summary: ${PASS} passed, ${FAIL} failed in ${ELAPSED_S}s"
+if [[ ${FLAKED} -gt 0 ]]; then
+  echo "── ${FLAKED} forked-loopback test(s) needed a retry (see S8)"
+fi
 
 if [[ ${FAIL} -gt 0 ]]; then
   exit 1
