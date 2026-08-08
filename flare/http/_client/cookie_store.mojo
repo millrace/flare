@@ -7,7 +7,7 @@ read-``self`` :meth:`flare.http.client.HttpClient.send` path can capture
 header without forcing ``mut self`` onto ``get`` / ``post`` / ``send``.
 
 The owner (an :class:`HttpClient`) allocates via :meth:`new` (opted in
-through ``with_cookies``) and frees via :meth:`free` in ``__del__``. The
+through ``with_cookies``) and frees via :meth:`free` in ``__deinit__``. The
 empty handle (:meth:`disabled`, ``_addr == 0``) is the never-allocated /
 moved-from state: every method is a no-op on it, so a client that did not
 opt into cookies pays nothing and behaves exactly as before.

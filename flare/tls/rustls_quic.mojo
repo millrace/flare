@@ -262,7 +262,7 @@ struct RustlsQuicAcceptor(Movable):
       handle as a configuration error and bounce every
       connection immediately, surfacing the rustls last-error
       message via ``RustlsQuicError``.
-    - ``__del__`` calls ``flare_rustls_quic_acceptor_free``
+    - ``__deinit__`` calls ``flare_rustls_quic_acceptor_free``
       to release the Rust-side ``Box<Acceptor>`` (no-op on a
       0 handle).
     - ``accept(dcid)`` calls ``flare_rustls_quic_accept`` to
@@ -319,7 +319,7 @@ struct RustlsQuicAcceptor(Movable):
         self._opaque_handle = handle
         self.config = config^
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if self._opaque_handle != 0:
             try:
                 _do_acceptor_free(self._lib, self._opaque_handle)
@@ -398,7 +398,7 @@ struct RustlsQuicConnector(Movable):
 
     Lifecycle mirrors the acceptor: ``__init__`` ->
     ``flare_rustls_quic_connector_new`` (0 handle on PEM/ALPN
-    failure, surfaced by :meth:`connect`); ``__del__`` ->
+    failure, surfaced by :meth:`connect`); ``__deinit__`` ->
     ``flare_rustls_quic_connector_free``; :meth:`connect` ->
     ``flare_rustls_quic_connect`` returning a
     :class:`RustlsQuicSession` (role-agnostic on the Mojo side).
@@ -472,7 +472,7 @@ struct RustlsQuicConnector(Movable):
         factory for an ergonomic call site."""
         return RustlsQuicConnector(alpn_protocols^, use_system_roots=True)
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if self._opaque_handle != 0:
             try:
                 _do_connector_free(self._lib, self._opaque_handle)
@@ -621,7 +621,7 @@ struct RustlsQuicSession(Movable):
         """
         return Self(lib^, handle, dst_cid^)
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if self._opaque_session_handle != 0:
             try:
                 _do_session_free(self._lib, self._opaque_session_handle)

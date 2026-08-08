@@ -441,7 +441,7 @@ def test_retransmit_does_not_grow_session_slab() raises:
 
 def test_listener_teardown_no_leak() raises:
     """Drop the listener after accepting connections; the slab's
-    __del__ calls :meth:`RustlsQuicAcceptor.free_session` on
+    __deinit__ calls :meth:`RustlsQuicAcceptor.free_session` on
     every non-zero handle exactly once. ASan-clean.
     """
     var listener = _bind_real_pem()
@@ -469,7 +469,7 @@ def test_listener_teardown_no_leak() raises:
         )
     listener.shutdown()
     listener.close()
-    # listener goes out of scope here; __del__ must free three
+    # listener goes out of scope here; __deinit__ must free three
     # session handles cleanly. ASan would catch a double-free or
     # use-after-free.
 

@@ -11,7 +11,7 @@ against a forked HTTP/1.1 server and verifies:
   semantics (``idle_count() == 0`` always).
 * A pooled fd that the server closed via ``Connection: close``
   is dropped from the pool (no stale reuse).
-* ``HttpClient.__del__`` releases pool fds cleanly (no fd leak when
+* ``HttpClient.__deinit__`` releases pool fds cleanly (no fd leak when
   the test exits).
 
 The framed reader path is exercised by every successful round-trip

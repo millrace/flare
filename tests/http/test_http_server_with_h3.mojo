@@ -21,7 +21,7 @@ Properties covered:
    returns the live-connection count (zero, because no peer
    has dialled).
 7. ``tick_http3_once`` on a TCP-only server raises.
-8. ``__del__`` cleans up both listeners (a second bind to the
+8. ``__deinit__`` cleans up both listeners (a second bind to the
    same UDP port succeeds after the server is dropped).
 """
 
@@ -136,13 +136,13 @@ def test_tick_http3_once_raises_on_tcp_only_server() raises:
 
 def test_close_releases_udp_port_for_rebind() raises:
     """Drop one h3 server and bind a new one on a fresh
-    ephemeral port. Proves the ``__del__`` path doesn't leak
+    ephemeral port. Proves the ``__deinit__`` path doesn't leak
     the UDP fd or the QUIC connection slab."""
     var cfg1 = _local_quic_cfg()
     var srv1 = HttpServer.bind_with_http3(_local_tcp(), cfg1^)
     var _bound_port = srv1.local_http3_addr().port
     # Drop ``srv1`` -- the move out of scope here invokes the
-    # ``HttpServer.__del__`` we wired to close both listeners.
+    # ``HttpServer.__deinit__`` we wired to close both listeners.
     _ = srv1^
     # Re-binding succeeds (proves no fd leak; we'd hit EADDRINUSE
     # if the prior fd was still alive AND we re-used the port).

@@ -95,7 +95,7 @@ struct HttpServer(Movable):
     single-listener behaviour byte-for-byte).
 
     These fds are owned by the ``HttpServer`` -- they're closed
-    via libc ``close(2)`` in ``HttpServer.__del__`` (see
+    via libc ``close(2)`` in ``HttpServer.__deinit__`` (see
     :meth:`_close_extras`). Stored as raw fds rather than
     ``TcpListener`` because ``TcpListener`` is not ``Copyable``
     and ``List[T]`` requires ``Copyable``; the multi-listener
@@ -175,12 +175,12 @@ struct HttpServer(Movable):
         self._http3_listener = None
         self._tls_ctx = None
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._listener.close()
         self._close_extras()
         # The Optional[QuicListener] field's destructor closes
         # the UDP fd + tears down the QUIC connection slab + the
-        # timer wheel via QuicListener.__del__. No-op when no h3
+        # timer wheel via QuicListener.__deinit__. No-op when no h3
         # listener is bound.
         _ = self._http3_listener^
         # The Optional[ServerCtx] destructor runs flare_ssl_ctx_free
@@ -189,7 +189,7 @@ struct HttpServer(Movable):
 
     def _close_extras(mut self):
         """Close every fd in :attr:`_extra_listener_fds` via
-        libc ``close(2)``. Safe to call from ``__del__``; idempotent
+        libc ``close(2)``. Safe to call from ``__deinit__``; idempotent
         because cleared after closing.
         """
         for i in range(len(self._extra_listener_fds)):
@@ -251,7 +251,7 @@ struct HttpServer(Movable):
         extras. All addresses bind in order before any returns,
         so a partial-bind failure leaves no half-bound state
         (already-bound listeners are dropped + closed by the
-        ``TcpListener.__del__``).
+        ``TcpListener.__deinit__``).
 
         Multi-listener mode is **single-worker only** today.
         ``HttpServer.serve(handler, num_workers=N)`` with
@@ -293,14 +293,14 @@ struct HttpServer(Movable):
         var primary = TcpListener.bind(addrs[0])
         # Bind extras up-front; if any fails, the partially-bound
         # ``TcpListener`` instances we already moved to ``primary``
-        # / consumed in this loop close themselves via __del__.
+        # / consumed in this loop close themselves via __deinit__.
         var extra_fds = List[Int]()
         var extra_addrs = List[SocketAddr]()
         for i in range(1, len(addrs)):
             var l = TcpListener.bind(addrs[i])
             extra_fds.append(Int(l._socket.fd))
             extra_addrs.append(l._socket.local_addr())
-            # Detach the fd from ``l`` so its __del__ doesn't close
+            # Detach the fd from ``l`` so its __deinit__ doesn't close
             # what HttpServer now owns. RawSocket lacks an explicit
             # ``release_fd()``; setting ``fd = INVALID_FD`` is the
             # equivalent contract used elsewhere (e.g. the move
@@ -351,7 +351,7 @@ struct HttpServer(Movable):
         is also reachable via :meth:`local_http3_addr` /
         :meth:`tick_http3_once` for tests that want to drive the
         h3 path without spinning up the full reactor. Closing
-        the server (via :meth:`close` or ``__del__``) closes
+        the server (via :meth:`close` or ``__deinit__``) closes
         both listeners.
 
         Args:

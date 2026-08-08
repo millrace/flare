@@ -342,7 +342,7 @@ struct WsConnection(Movable):
         self._stream = stream^
         self._peer = peer
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._stream.close()
 
     def send_text(self, msg: String) raises:
@@ -522,7 +522,7 @@ struct WsServer(Movable):
     def __init__(out self, var listener: TcpListener):
         self._listener = listener^
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._listener.close()
 
     @staticmethod

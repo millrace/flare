@@ -559,13 +559,13 @@ struct PermessageDeflateContext(Movable):
         self._window_bits = take._window_bits
         self._lib = take._lib^
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Release both z_streams through the FFI; safe to call
         on a moved-from instance (handles are zero)."""
         if self._comp_handle == 0 and self._decomp_handle == 0:
             return
         # Best-effort cleanup; surfaces of failures are limited
-        # to log lines (Error in __del__ would propagate badly).
+        # to log lines (Error in __deinit__ would propagate badly).
         try:
             if self._comp_handle != 0:
                 _do_pmd_compressor_free(self._lib, self._comp_handle)

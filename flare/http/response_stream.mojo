@@ -74,11 +74,11 @@ struct ChunkSourceBox(Movable):
 
     # Move is memberwise (Mojo-synthesised): the boxed-source address +
     # thunks transfer to the new owner and ``existing`` is moved-from, so
-    # its ``__del__`` does not run -- the box is freed exactly once by the
+    # its ``__deinit__`` does not run -- the box is freed exactly once by the
     # final owner. An explicit ``__moveinit__`` here tripped ``mojo doc``
     # ('None has no attributes'); the synthesised move is identical.
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if self.addr != 0:
             self._destroy(self.addr)
 

@@ -122,7 +122,7 @@ def test_unified_drain_reports_in_flight_and_empties_table() raises:
     tail now flips first and returns the live count.
 
     The flip itself is not asserted here: the same call frees the
-    handle, and ``CancelCell.__del__`` frees the cell, so reading the
+    handle, and ``CancelCell.__deinit__`` frees the cell, so reading the
     ``Cancel`` afterwards would be a use-after-free. That
     ``signal_drain`` flips every stream cell is covered directly by
     tests/http2/test_h2_per_stream_cancel.mojo; this pins the count

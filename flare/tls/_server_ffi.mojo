@@ -249,7 +249,7 @@ struct ServerCtx(Movable):
         self._lib = lib^
         self._addr = addr
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if self._addr != 0:
             try:
                 _do_ssl_ctx_free(self._lib, self._addr)

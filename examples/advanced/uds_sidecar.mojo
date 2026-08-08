@@ -68,4 +68,4 @@ def main() raises:
     client.close()
     server.close()
     listener.close()
-    print("[example 38] done; socket file unlinked on listener __del__.")
+    print("[example 38] done; socket file unlinked on listener __deinit__.")

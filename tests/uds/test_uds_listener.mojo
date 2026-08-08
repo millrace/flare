@@ -85,7 +85,7 @@ def test_bind_unlinks_stale_socket_by_default() raises:
     var p = _tmp_uds_path("unlink_stale")
     _maybe_unlink(p)
     var first = UnixListener.bind(p)
-    # Close + drop first; __del__ unlinks (cleanup_path=True default).
+    # Close + drop first; __deinit__ unlinks (cleanup_path=True default).
     first.close()
     # Re-bind: should find a fresh path. Even if cleanup ran, the
     # bind path also unlinks-existing by default, so this is a

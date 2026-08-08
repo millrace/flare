@@ -201,7 +201,7 @@ struct BatchReceiver(Movable):
             _poke_u64(hdr, _OFF_IOV, UInt64(Int(self._iov) + i * _IOVEC))
             _poke_u64(hdr, _OFF_IOVLEN, UInt64(1))
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if Int(self._mmsg) != 0:
             self._mmsg.free()
         if Int(self._iov) != 0:

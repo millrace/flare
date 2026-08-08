@@ -489,9 +489,9 @@ struct IoUringDriver(Movable):
         # (typically 0 on a fresh ring).
         self._sq_local_tail = _atomic_load_u32_relaxed(self._sq_tail_ptr)
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Unmap the three ring regions; the embedded
-        ``IoUringRing.__del__`` then closes the ring fd."""
+        ``IoUringRing.__deinit__`` then closes the ring fd."""
         if Int(self._sqes_ptr) != 0:
             _ = libc_munmap(self._sqes_ptr, self._sqes_len)
         if Int(self._cq_ring_ptr) != 0:

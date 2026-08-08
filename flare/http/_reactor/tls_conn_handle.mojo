@@ -17,7 +17,7 @@ Design (additive; the plaintext hot path is untouched):
   (``SSL_new`` + ``SSL_set_fd`` + ``SSL_set_accept_state`` via
   ``server_ssl_new_accept``) and keeps its **own** pinned
   ``OwnedDLHandle`` to ``libflare_tls.so`` so post-accept I/O and the
-  ``__del__`` free path never depend on the ``ServerCtx`` outliving the
+  ``__deinit__`` free path never depend on the ``ServerCtx`` outliving the
   connection or on being threaded back in by the caller. (dlopen of an
   already-mapped .so only bumps a refcount.)
 - :meth:`drive_handshake` maps OpenSSL's ``WANT_READ`` / ``WANT_WRITE`` /

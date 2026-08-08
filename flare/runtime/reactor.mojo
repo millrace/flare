@@ -254,10 +254,10 @@ struct Reactor(Movable):
                 raise e^
 
     # No custom __moveinit__ needed: Mojo's default move for Movable
-    # transfers the bytes and declares the source dead, so __del__ is not
+    # transfers the bytes and declares the source dead, so __deinit__ is not
     # called on the moved-from Reactor. Double-close is impossible.
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Close the reactor fd and the wakeup fds."""
         if (
             self._wake_write != INVALID_FD

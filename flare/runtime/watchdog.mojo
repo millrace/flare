@@ -100,7 +100,7 @@ def spawn_leaked_watchdog(poll_ms: Int = 1) raises -> Int:
     the returned address with ``watchdog_arm`` / ``watchdog_disarm``."""
     var wd = DeadlineWatchdog(poll_ms)
     var block = wd._block
-    # Drop ``wd`` without ``stop()``: no __del__ joins/frees, so the
+    # Drop ``wd`` without ``stop()``: no __deinit__ joins/frees, so the
     # thread keeps running and the block stays live for the process.
     return block
 

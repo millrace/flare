@@ -81,7 +81,7 @@ struct _TlsTestServer:
         if self._ptr == 0:
             raise Error("flare_test_server_new failed")
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if self._ptr != 0:
             try:
                 var fn_free = dl_sym[def(Int) thin abi("C") -> None](

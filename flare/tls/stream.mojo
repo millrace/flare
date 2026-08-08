@@ -421,7 +421,7 @@ struct TlsSession(Movable):
         self._lib = lib^
         self._addr = addr
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if self._addr != 0:
             try:
                 _do_ssl_session_free(self._lib, self._addr)
@@ -497,12 +497,12 @@ struct TlsStream(Movable, Readable):
         self._ssl = ssl
         self._lib = OwnedDLHandle(_find_flare_lib())
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Send ``close_notify`` and free OpenSSL objects (best-effort)."""
         if self._ssl != 0:
             # Best-effort; the cached lib handle is valid for the
             # stream's lifetime, so these no longer open (and cannot
-            # fail on) a per-call handle. tcp fd closed by _tcp.__del__.
+            # fail on) a per-call handle. tcp fd closed by _tcp.__deinit__.
             try:
                 _ = _do_ssl_shutdown(self._lib, self._ssl)
                 _do_ssl_free(self._lib, self._ssl)

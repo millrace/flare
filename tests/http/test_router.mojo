@@ -310,7 +310,7 @@ def test_router_is_handler() raises:
 # Tiny stateful Handler used by the struct-handler tests below.
 # The Router's `get[H]` / `post[H]` / etc. heap-allocate `H`,
 # capture monomorphised serve / destroy thunks, and free in
-# Router.__del__. Each test exercises a different facet of the
+# Router.__deinit__. Each test exercises a different facet of the
 # new dispatch path.
 
 
@@ -430,7 +430,7 @@ def test_router_drops_struct_handlers_cleanly() raises:
             r.get[_StatefulGreeter](
                 "/p" + String(i), _StatefulGreeter("g" + String(i))
             )
-        # ``r`` drops here; Router.__del__ runs every destroy_thunk.
+        # ``r`` drops here; Router.__deinit__ runs every destroy_thunk.
 
 
 # ── OPTIONS / TRACE / CONNECT + fallback ────────────────────────────────────

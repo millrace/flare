@@ -218,7 +218,7 @@ struct IoUringSqe(Movable):
             unsafe_from_address=Int(raw)
         )
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free the 64-byte buffer."""
         if Int(self._buf) != 0:
             self._buf.free()

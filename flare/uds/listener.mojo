@@ -9,7 +9,7 @@ scheduler. The differences:
 - ``bind`` takes a filesystem path, not a :class:`SocketAddr`.
 - A previous socket file at the same path is unlinked before
   ``bind(2)`` (controllable via ``unlink_existing=False``).
-- ``UnixListener.__del__`` unlinks the socket file on destruction
+- ``UnixListener.__deinit__`` unlinks the socket file on destruction
   by default — opt out via ``cleanup_path=False`` for the
   shared-listener case where one fd is being passed to many
   workers and the path lifecycle is owned externally.
@@ -77,7 +77,7 @@ struct UnixListener(Movable):
         self._path = path
         self._cleanup_path = cleanup_path
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Close the socket. If ``cleanup_path`` is ``True`` (the
         :meth:`bind` default), also ``unlink(2)`` the socket file
         so the next ``bind(path)`` doesn't have to fight a stale
@@ -216,7 +216,7 @@ struct UnixListener(Movable):
         """Close the listening socket. Idempotent.
 
         Does **not** unlink the path; that happens in
-        :meth:`__del__` if ``cleanup_path`` was set."""
+        :meth:`__deinit__` if ``cleanup_path`` was set."""
         self._socket.close()
 
 

@@ -36,7 +36,7 @@ The ``ClientPool`` struct itself is a thin handle holding the
 heap address of an internal ``_ClientPoolState`` (mirrors the
 Cancel / Pool ownership patterns used elsewhere in the codebase).
 ``HttpClient`` stores the address and re-materialises a typed
-pointer on every access; on ``HttpClient.__del__`` the state is
+pointer on every access; on ``HttpClient.__deinit__`` the state is
 freed and any remaining fds are closed.
 """
 
@@ -301,7 +301,7 @@ struct ClientPool(Copyable, Movable):
 
         Idempotent on ``_addr == 0``: a no-op on a moved-from /
         disabled handle. After ``free`` returns, ``_addr`` is set
-        to ``0`` so subsequent ``__del__`` calls (e.g. from a
+        to ``0`` so subsequent ``__deinit__`` calls (e.g. from a
         moved-from copy) are no-ops.
         """
         if self._addr == 0:

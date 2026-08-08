@@ -18,7 +18,7 @@ idle stream lives in its own heap cell via
 (with a parallel ``addr -> insertion-ms`` map for idle-timeout
 eviction, mirroring the h1 pool's per-fd timestamp map). ``acquire``
 moves the stream out of its cell; ``release`` moves a stream into a
-fresh cell. Dropping a cell runs ``TlsStream.__del__`` which sends
+fresh cell. Dropping a cell runs ``TlsStream.__deinit__`` which sends
 ``close_notify`` and frees the OpenSSL objects.
 
 The pool is keyed on ``scheme://host:port`` (port always explicit so a
@@ -72,7 +72,7 @@ struct TlsConnectionPool(Copyable, Movable):
 
     ``Copyable`` because the wrapped state is heap-allocated and every
     copy points to the same ``_TlsPoolState``. The OWNER (the
-    :class:`HttpClient`) frees the state in ``__del__``; copies made
+    :class:`HttpClient`) frees the state in ``__deinit__``; copies made
     during normal use must not.
     """
 
@@ -146,7 +146,7 @@ struct TlsConnectionPool(Copyable, Movable):
                 sp[].idle_timeout_ms > 0
                 and (now_ms - inserted) > sp[].idle_timeout_ms
             ):
-                # Stale: drop the cell (TlsStream.__del__ closes it).
+                # Stale: drop the cell (TlsStream.__deinit__ closes it).
                 Pool[TlsStream].free(addr)
                 continue
             var cell = Pool[TlsStream].get_ptr(addr)
@@ -193,7 +193,7 @@ struct TlsConnectionPool(Copyable, Movable):
         return total
 
     def free(mut self) raises -> None:
-        """Drop every idle stream (each ``__del__`` sends close_notify)
+        """Drop every idle stream (each ``__deinit__`` sends close_notify)
         and free the state. Idempotent on a disabled / moved-from
         handle."""
         if self._addr == 0:

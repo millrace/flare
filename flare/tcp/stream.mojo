@@ -137,7 +137,7 @@ struct TcpStream(Movable, Readable):
         self._socket = socket^
         self._peer = peer
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._socket.close()
 
     # ── Factory ───────────────────────────────────────────────────────────────

@@ -276,7 +276,7 @@ struct QuicListener(Movable):
     :class:`_SessionSlot` holds the raw rustls
     ``Box<Session>*`` (or 0 for the NULL-PEM sentinel) plus the
     current outbound encryption level. The slab owns the
-    handles; :meth:`__del__` walks every non-zero handle through
+    handles; :meth:`__deinit__` walks every non-zero handle through
     :func:`flare.tls._rustls_quic_ffi._do_session_free` exactly
     once at listener teardown. The shared FFI library handle for
     every per-slot call is borrowed from
@@ -490,7 +490,7 @@ struct QuicListener(Movable):
             getenv("FLARE_QUIC_NO_BATCH", "0") != "1"
         )
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Drop the listener: release every rustls session in
         the slab exactly once.
 

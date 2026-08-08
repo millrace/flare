@@ -282,7 +282,7 @@ struct AltSvcStore(Copyable, Movable):
     ``mut self`` onto ``get`` / ``post`` / ``send``).
 
     The owner (an :class:`HttpClient`) eagerly allocates via
-    :meth:`new` and frees via :meth:`free` in ``__del__``. The empty
+    :meth:`new` and frees via :meth:`free` in ``__deinit__``. The empty
     handle (:meth:`disabled`, ``_addr == 0``) is the moved-from /
     never-allocated state: every method is a no-op on it.
 

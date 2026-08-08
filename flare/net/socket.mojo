@@ -4,7 +4,7 @@ Every higher-level type (``TcpStream``, ``UdpSocket``, etc.) is built on
 top of ``RawSocket``. No module above ``flare.net`` calls libc directly.
 
 Safety contracts for this module:
-1. ``fd >= 0`` iff the socket is open. After ``close()`` or ``__del__``
+1. ``fd >= 0`` iff the socket is open. After ``close()`` or ``__deinit__``
    sets ``fd = INVALID_FD``.
 2. Every libc call that returns -1 reads ``errno`` immediately (before any
    subsequent libc call) and maps it to a typed error.
@@ -117,7 +117,7 @@ struct RawSocket(Movable):
 
     Lifecycle:
     - ``__init__``: calls ``socket(2)``; raises on failure.
-    - ``__del__``: calls ``close(2)`` when ``fd >= 0``.
+    - ``__deinit__``: calls ``close(2)`` when ``fd >= 0``.
     - ``__moveinit__``: transfers ownership; source ``fd`` becomes ``INVALID_FD``.
     - ``close()``: explicit, idempotent close.
 
@@ -189,14 +189,14 @@ struct RawSocket(Movable):
 
         Safety:
             ``fd`` must be a valid, open file descriptor. The caller
-            transfers ownership — ``RawSocket.__del__`` will call
+            transfers ownership — ``RawSocket.__deinit__`` will call
             ``close(fd)`` exactly once.
         """
         self.fd = fd
         self.family = family
         self.kind = kind
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Close the file descriptor if it is open.
 
         Safety: safe to call even after a move because ``fd`` is set to

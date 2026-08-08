@@ -12,7 +12,7 @@ exactly one owner (this struct).
 
 The handle keeps its own ``OwnedDLHandle`` rather than borrowing the
 ``ServerCtx``'s so post-handshake I/O and the ``SSL_free`` in
-``__del__`` never depend on the ``ServerCtx`` outliving the connection.
+``__deinit__`` never depend on the ``ServerCtx`` outliving the connection.
 ``dlopen`` of an already-mapped ``.so`` only bumps a refcount.
 
 Return contract for :meth:`recv` / :meth:`send`: a positive value is a
@@ -67,7 +67,7 @@ struct TlsTransport(Movable):
 
     var _lib: OwnedDLHandle
     """Pinned ``libflare_tls.so`` handle used for every FFI call and the
-    ``SSL_free`` in ``__del__``."""
+    ``SSL_free`` in ``__deinit__``."""
     var ssl_addr: Int
     """Raw ``SSL*`` as an Int. Zero once freed."""
     var phase: Int
@@ -112,14 +112,14 @@ struct TlsTransport(Movable):
     def release(mut self) -> Int:
         """Surrender the ``SSL*`` without freeing it.
 
-        Zeroes the field so this transport's ``__del__`` becomes a
+        Zeroes the field so this transport's ``__deinit__`` becomes a
         no-op; the caller must hand the address to :meth:`adopt`.
         """
         var out = self.ssl_addr
         self.ssl_addr = 0
         return out
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free the ``SSL``. The fd belongs to whoever owns the stream."""
         if self.ssl_addr != 0:
             try:

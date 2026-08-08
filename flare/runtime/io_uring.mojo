@@ -477,7 +477,7 @@ struct IoUringRing(Movable):
             unsafe_from_address=Int(raw)
         )
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Close the ring fd + free the params buffer."""
         if self._fd >= 0:
             _ = external_call["close", c_int](c_int(self._fd))

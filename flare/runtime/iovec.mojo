@@ -144,7 +144,7 @@ struct IoVecBuf(Movable):
         )
         self._n = n
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free the underlying buffer."""
         if Int(self._buf) != 0:
             self._buf.free()

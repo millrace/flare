@@ -295,7 +295,7 @@ struct UringReactor(Movable):
         else:
             # No-wakeup mode: skip the eventfd + buffer alloc
             # entirely. _wake_fd = INVALID_FD and _wake_buf =
-            # NULL match the __del__ guards (skip close() /
+            # NULL match the __deinit__ guards (skip close() /
             # free() when these are sentinel) so the no-wakeup
             # mode is fully no-op on shutdown too.
             self._wake_fd = INVALID_FD
@@ -306,7 +306,7 @@ struct UringReactor(Movable):
             )
         self._wake_armed = False
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free the wakeup buffer + close the wakeup fd; the
         ``IoUringDriver`` destructor handles ring teardown."""
         if Int(self._wake_buf) != 0:

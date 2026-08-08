@@ -128,7 +128,7 @@ struct CancelCell(Movable):
 
     var _addr: Int
     """Heap address of the cell ``Int``. Stable for the lifetime of
-    the cell. Freed in ``__del__``."""
+    the cell. Freed in ``__deinit__``."""
 
     def __init__(out self) raises:
         """Allocate a fresh cell initialised to ``NONE``."""
@@ -136,7 +136,7 @@ struct CancelCell(Movable):
         p.unsafe_write(CancelReason.NONE)
         self._addr = Int(p)
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if self._addr != 0:
             var p = UnsafePointer[Int, MutUntrackedOrigin](
                 unsafe_from_address=self._addr

@@ -17,7 +17,7 @@ The pool mirrors :class:`flare.http.client_pool.ClientPool`:
   ``_QuicPoolState`` (pointer-backed interior mutability) so the
   owning ``HttpClient`` can acquire / release from a ``read self``
   method (``_send_http3`` stays read-self, like the Alt-Svc store). The
-  OWNER frees the state in ``__del__``; copies must not.
+  OWNER frees the state in ``__deinit__``; copies must not.
 
 Unlike the h1 pool -- which stores raw fds (``Int``) -- this pool
 stores whole ``Http3ClientConnection`` values. They are ``Movable`` (a
@@ -27,7 +27,7 @@ and the deque holds the cell addresses (with a parallel
 ``addr -> insertion-ms`` map for idle-timeout eviction, mirroring the
 h1 pool's per-fd timestamp map). ``acquire`` moves the connection out
 of its cell; ``release`` moves a connection into a fresh cell.
-Dropping a cell runs ``UdpSocket.__del__`` which closes the fd;
+Dropping a cell runs ``UdpSocket.__deinit__`` which closes the fd;
 :meth:`free` first sends a graceful CONNECTION_CLOSE.
 
 A ``dials`` counter records how many times the owner had to open a
@@ -168,7 +168,7 @@ struct QuicConnectionPool(Copyable, Movable):
                 sp[].idle_timeout_ms > 0
                 and (now_ms - inserted) > sp[].idle_timeout_ms
             ):
-                # Stale: drop the cell (UdpSocket.__del__ closes fd).
+                # Stale: drop the cell (UdpSocket.__deinit__ closes fd).
                 Pool[Http3ClientConnection].free(addr)
                 continue
             var cell = Pool[Http3ClientConnection].get_ptr(addr)
@@ -225,7 +225,7 @@ struct QuicConnectionPool(Copyable, Movable):
             for i in range(len(entry.value)):
                 var addr = entry.value[i]
                 # Graceful CONNECTION_CLOSE in place, then destroy the
-                # cell (UdpSocket.__del__ closes the fd idempotently).
+                # cell (UdpSocket.__deinit__ closes the fd idempotently).
                 Pool[Http3ClientConnection].get_ptr(addr)[].quic.shutdown()
                 Pool[Http3ClientConnection].free(addr)
         sp.unsafe_deinit_pointee()

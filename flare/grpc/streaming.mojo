@@ -65,7 +65,7 @@ struct _H2Transport(Movable):
         self._tcp_addr = tcp_addr
         self._tls_addr = tls_addr
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         Pool[TcpStream].free(self._tcp_addr)
         Pool[TlsStream].free(self._tls_addr)
 

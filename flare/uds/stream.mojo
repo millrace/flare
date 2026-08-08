@@ -88,7 +88,7 @@ struct UnixStream(Movable):
         self._socket = socket^
         self._peer_path = peer_path
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._socket.close()
 
     # ── Factory ───────────────────────────────────────────────────────────

@@ -246,7 +246,7 @@ struct BufferPool(Movable):
             self._buckets.append(List[Int]())
         self._class_capacity = 8
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free every retained cell across every bucket."""
         for ci in range(_NUM_SIZE_CLASSES):
             for j in range(len(self._buckets[ci])):

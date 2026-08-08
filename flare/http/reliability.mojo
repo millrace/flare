@@ -53,7 +53,7 @@ def _alloc_cell(n: Int) -> Int:
     """Allocate an ``n``-slot ``Int`` cell zeroed; return its address.
 
     Leaked on purpose: the middleware structs are ``Copyable`` and a
-    default copy shares the address, so freeing on ``__del__`` would
+    default copy shares the address, so freeing on ``__deinit__`` would
     double-free across worker copies. One small cell per middleware
     instance (created once at setup) is a negligible, bounded leak.
     """

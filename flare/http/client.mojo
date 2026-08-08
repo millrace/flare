@@ -248,14 +248,14 @@ struct HttpClient(Movable):
     headers in :meth:`send` (and via :meth:`record_alt_svc`);     consulted
     by :meth:`http3_wire_choice` so an origin that advertised an h3
     endpoint upgrades transparently on the next request. Freed in
-    :meth:`__del__`."""
+    :meth:`__deinit__`."""
     var _quic_pool: QuicConnectionPool
     """Idle HTTP/3 (QUIC) connection pool keyed on ``host:port``,
     behind a pointer-backed interior-mutable handle so the read-``self``
     :meth:`_send_http3` can acquire / release. Enabled by default (an
     established QUIC connection is expensive, so reuse is the right
     default), so consecutive h3 requests to one origin amortise the
-    handshake. Freed in :meth:`__del__`."""
+    handshake. Freed in :meth:`__deinit__`."""
     var _tls_pool: TlsConnectionPool
     """Idle HTTPS (TLS HTTP/1.1) connection pool keyed on
     ``scheme://host:port``, behind a pointer-backed interior-mutable
@@ -264,7 +264,7 @@ struct HttpClient(Movable):
     close-after-each-request behaviour; :meth:`with_pool` opts in
     alongside the cleartext pool. Only the ``http/1.1`` ALPN result is
     pooled (an ``h2`` connection is multiplexed on the h2 path). Freed
-    in :meth:`__del__`."""
+    in :meth:`__deinit__`."""
     var _redirect_policy: RedirectPolicy
     """Redirect-following policy (RFC 9110 sec 15.4). Defaults to
     :meth:`RedirectPolicy.follow_all` with the constructor's
@@ -304,7 +304,7 @@ struct HttpClient(Movable):
     handle (mirrors :attr:`_alt_svc`). Disabled (no-op) by default;
     :meth:`with_cookies` opts in. When enabled, :meth:`_send_once`
     captures ``Set-Cookie`` response headers and replays them as a
-    ``Cookie`` request header. Freed in :meth:`__del__`."""
+    ``Cookie`` request header. Freed in :meth:`__deinit__`."""
 
     def __init__(
         out self,
@@ -470,7 +470,7 @@ struct HttpClient(Movable):
         self._cookies = CookieStore.disabled()
         self._proxy = String("")
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free the pooled fds + the ``Alt-Svc`` store owned by this
         client.
 

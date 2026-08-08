@@ -216,7 +216,7 @@ struct Http2ConnHandle(Movable):
     move-only so it can't be a ``Dict`` value directly, exactly like the
     :attr:`stream_cells` cancel-cell addresses. Entries are added by
     :meth:`_begin_stream`, drained by :meth:`_stream_pump`, and freed +
-    removed when the source reaches end-of-stream (or in :meth:`__del__`
+    removed when the source reaches end-of-stream (or in :meth:`__deinit__`
     if the connection tears down mid-stream)."""
 
     # ── WebSocket-over-HTTP/2 sidecar (RFC 8441) ───────────────────────────
@@ -715,7 +715,7 @@ struct Http2ConnHandle(Movable):
 
     # ── Per-stream Cancel propagation ────────────────────────────────────────
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Free any per-stream cell heap addresses that outlived
         their dispatch (e.g. because the connection was torn down
         before the handler returned), plus any streaming-response boxes

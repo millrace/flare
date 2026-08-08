@@ -48,7 +48,7 @@ from std.memory import UnsafePointer, alloc as _raw_alloc
 struct _Counted(Deinitable, Movable):
     """Test harness: holds a value + an external counter address.
     The destructor bumps the counter so tests can verify free()
-    actually called __del__."""
+    actually called __deinit__."""
 
     var value: Int
     var counter_addr: Int
@@ -57,7 +57,7 @@ struct _Counted(Deinitable, Movable):
         self.value = value
         self.counter_addr = counter_addr
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if self.counter_addr == 0:
             return
         var p = UnsafePointer[Int, MutUntrackedOrigin](

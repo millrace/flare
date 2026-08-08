@@ -75,7 +75,7 @@ struct TcpListener(Movable):
         self._socket = socket^
         self._local = local
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self._socket.close()
 
     # ── Factory ───────────────────────────────────────────────────────────────

@@ -1163,7 +1163,7 @@ def run_unified_reactor_loop_multi[
         extra_fds: Raw fds for the additional listeners attached
             via :meth:`HttpServer.bind_many`. Owned by the caller
             (typically ``HttpServer._extra_listener_fds``); closed
-            by ``HttpServer.__del__``. The loop only borrows them
+            by ``HttpServer.__deinit__``. The loop only borrows them
             for ``accept(2)``.
         config: HTTP/1.1 server configuration.
         h2_config: HTTP/2 SETTINGS for h2 peers.
@@ -1242,7 +1242,7 @@ def run_unified_reactor_loop_multi[
             )
 
     # Graceful shutdown: flip Cancel.SHUTDOWN, then close all live
-    # conns. Listener fds are closed by ``HttpServer.__del__`` -- the
+    # conns. Listener fds are closed by ``HttpServer.__deinit__`` -- the
     # loop only borrows.
     _ = _drain_remaining_conns_unified(conns, timers, reactor)
 

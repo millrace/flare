@@ -317,7 +317,7 @@ struct _SessionSlot(Copyable, Movable):
     :class:`flare.tls.rustls_quic.RustlsQuicSession` because the
     latter is ``Movable``-only and ``List[T]`` requires
     ``T: Copyable``. Carrier copy is safe: the integer ``handle``
-    is a non-owning view, and the slab's :meth:`QuicListener.__del__`
+    is a non-owning view, and the slab's :meth:`QuicListener.__deinit__`
     is the unique site that calls
     :func:`flare.tls._rustls_quic_ffi._do_session_free` -- never
     a slot's destructor.

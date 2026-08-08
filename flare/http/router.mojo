@@ -253,7 +253,7 @@ def _struct_serve_thunk[
 
 def _struct_destroy_thunk[H: Handler & Copyable & Movable](addr: Int) -> None:
     """Thunk that destroys + frees the heap-allocated ``H`` at
-    ``addr``. Called once per route from ``Router.__del__`` via
+    ``addr``. Called once per route from ``Router.__deinit__`` via
     the parallel ``_struct_destroy_thunks`` list.
     """
     Pool[H].free(addr)
@@ -320,7 +320,7 @@ struct _StructHandlerRegistry(Movable):
         self.serve_thunks = List[def(Int, Request) raises thin -> Response]()
         self.destroy_thunks = List[def(Int) thin -> None]()
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Run every destroy thunk and free the boxed handlers.
 
         Called once -- by the last ``ArcPointer`` drop -- so the

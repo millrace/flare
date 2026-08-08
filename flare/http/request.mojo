@@ -136,7 +136,7 @@ struct Request(Movable):
         self.expose_errors = expose_errors
         self._params = None
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if self._params:
             var p = self._params.value()
             p.unsafe_deinit_pointee()
