@@ -34,37 +34,23 @@ pump and the h2 DATA pump already emit on writable edges -- they simply
 write their bytes through :meth:`send` (ciphertext) instead of ``_send``.
 """
 
-from std.ffi import c_int, OwnedDLHandle
+from std.ffi import c_int
 from std.collections import List
 
-from flare.net import SocketAddr, _find_flare_lib
+from flare.net import SocketAddr
 from flare.tcp import TcpStream
-from flare.tls._server_ffi import (
-    ServerCtx,
-    server_ssl_new_accept,
-    SSL_IO_WANT_READ,
-    SSL_IO_WANT_WRITE,
-    SSL_IO_CLOSED,
-    SSL_IO_FATAL,
-    _do_ssl_do_handshake,
-    _do_ssl_read_ex,
-    _do_ssl_write_ex,
-    _do_ssl_get_alpn_selected,
-    _do_ssl_get_sni_host,
-    _do_ssl_free,
-)
+from flare.tls._server_ffi import ServerCtx
 
 from .keepalive_scan import StepResult
-
-
-# ── TLS phase tags ─────────────────────────────────────────────────────────
-
-comptime TLS_HANDSHAKE: Int = 0
-"""``SSL_accept`` is still negotiating; drive it on each edge."""
-comptime TLS_ESTABLISHED: Int = 1
-"""Handshake complete; ``recv`` / ``send`` carry application bytes."""
-comptime TLS_CLOSED: Int = 2
-"""Fatal error or clean shutdown observed; the fd should be torn down."""
+from .tls_transport import (
+    TlsTransport,
+    TLS_HANDSHAKE,
+    TLS_ESTABLISHED,
+    TLS_CLOSED,
+    HS_DONE,
+    HS_WANT_READ,
+    HS_WANT_WRITE,
+)
 
 
 struct TlsConnHandle(Movable):
@@ -80,14 +66,9 @@ struct TlsConnHandle(Movable):
     """Underlying connection; sole owner of the fd."""
     var peer: SocketAddr
     """Kernel-reported peer address, captured before the stream moves in."""
-    var _lib: OwnedDLHandle
-    """Pinned ``libflare_tls.so`` handle used for every post-accept FFI
-    call and the ``SSL_free`` in ``__del__``. Independent of the
-    ``ServerCtx`` lifetime."""
-    var ssl_addr: Int
-    """Raw ``SSL*`` as an Int. Zero once freed."""
-    var phase: Int
-    """One of ``TLS_HANDSHAKE`` / ``TLS_ESTABLISHED`` / ``TLS_CLOSED``."""
+    var transport: TlsTransport
+    """The ``SSL*`` half. Moved out alongside ``_stream`` when the
+    connection is promoted to an h1 / h2 handle after ALPN."""
     var alpn: String
     """Negotiated ALPN protocol (``""`` until handshake completes / none)."""
     var sni: String
@@ -115,30 +96,31 @@ struct TlsConnHandle(Movable):
         stream._socket.set_nonblocking(True)
         var fd = Int(stream._socket.fd)
         self._stream = stream^
-        self.ssl_addr = server_ssl_new_accept(ctx, fd)
-        if self.ssl_addr == 0:
-            raise Error("TlsConnHandle: server_ssl_new_accept returned null")
-        self._lib = OwnedDLHandle(_find_flare_lib())
-        self.phase = TLS_HANDSHAKE
+        self.transport = TlsTransport(ctx, fd)
         self.alpn = ""
         self.sni = ""
-
-    def __del__(deinit self):
-        """Free the ``SSL`` (fd close is the moved-in stream's job)."""
-        if self.ssl_addr != 0:
-            try:
-                _do_ssl_free(self._lib, self.ssl_addr)
-            except:
-                pass
 
     @always_inline
     def fd(self) -> c_int:
         """Underlying fd. Fast accessor; does not check phase."""
         return self._stream._socket.fd
 
+    @always_inline
+    def phase(self) -> Int:
+        """Current TLS phase; see the ``TLS_*`` tags."""
+        return self.transport.phase
+
     def handshake_done(self) -> Bool:
         """True once the handshake has completed successfully."""
-        return self.phase == TLS_ESTABLISHED
+        return self.transport.established()
+
+    # Promotion note: once ALPN has selected h1 or h2 the reactor moves
+    # ``_stream`` and ``transport`` out of this handle with regular field
+    # moves (``var s = h._stream^; var t = h.transport^``) and hands both
+    # to the protocol handle, mirroring how ``PendingConnHandle`` releases
+    # its stream. Mojo suppresses the moved-from fields' destructors, so
+    # the fd is closed once (by the new owner) and the ``SSL*`` freed once
+    # (by the moved transport).
 
     # ── State machine ──────────────────────────────────────────────────────
 
@@ -157,23 +139,21 @@ struct TlsConnHandle(Movable):
         Idempotent once established: returns the ready-to-read result
         without re-driving the handshake.
         """
-        if self.phase == TLS_ESTABLISHED:
+        if self.transport.established():
             return StepResult(want_read=True, want_write=False)
-        if self.phase == TLS_CLOSED:
+        if self.transport.closed():
             return StepResult(want_read=False, want_write=False, done=True)
 
-        var rc = _do_ssl_do_handshake(self._lib, self.ssl_addr)
-        if rc == 0:
-            self.phase = TLS_ESTABLISHED
-            self.alpn = _do_ssl_get_alpn_selected(self._lib, self.ssl_addr)
-            self.sni = _do_ssl_get_sni_host(self._lib, self.ssl_addr)
+        var rc = self.transport.do_handshake()
+        if rc == HS_DONE:
+            self.alpn = self.transport.read_alpn()
+            self.sni = self.transport.read_sni()
             return StepResult(want_read=True, want_write=False)
-        elif rc == 1:
+        elif rc == HS_WANT_READ:
             return StepResult(want_read=True, want_write=False)
-        elif rc == 2:
+        elif rc == HS_WANT_WRITE:
             return StepResult(want_read=False, want_write=True)
         else:
-            self.phase = TLS_CLOSED
             return StepResult(want_read=False, want_write=False, done=True)
 
     def recv(mut self, mut buf: List[UInt8], max_bytes: Int) raises -> Int:
@@ -186,19 +166,7 @@ struct TlsConnHandle(Movable):
         ``SSL_IO_FATAL``. On CLOSED/FATAL the phase moves to
         ``TLS_CLOSED``. ``max_bytes`` bounds one read.
         """
-        if max_bytes <= 0:
-            return 0
-        var old_len = len(buf)
-        buf.resize(old_len + max_bytes, UInt8(0))
-        var dst = Int(buf.unsafe_ptr()) + old_len
-        var n = _do_ssl_read_ex(self._lib, self.ssl_addr, dst, max_bytes)
-        if n > 0:
-            buf.resize(old_len + n, UInt8(0))
-            return n
-        buf.resize(old_len, UInt8(0))
-        if n == SSL_IO_CLOSED or n == SSL_IO_FATAL:
-            self.phase = TLS_CLOSED
-        return n
+        return self.transport.recv(buf, max_bytes)
 
     def send(mut self, bytes: Span[UInt8, _], off: Int = 0) raises -> Int:
         """Non-blocking ``SSL_write`` of ``bytes[off:]``.
@@ -208,14 +176,7 @@ struct TlsConnHandle(Movable):
         (advance ``off`` by the return value). On CLOSED/FATAL the phase
         moves to ``TLS_CLOSED``.
         """
-        var n = len(bytes) - off
-        if n <= 0:
-            return 0
-        var ptr = Int(bytes.unsafe_ptr()) + off
-        var rc = _do_ssl_write_ex(self._lib, self.ssl_addr, ptr, n)
-        if rc <= 0 and (rc == SSL_IO_CLOSED or rc == SSL_IO_FATAL):
-            self.phase = TLS_CLOSED
-        return rc
+        return self.transport.send(bytes, off)
 
     def close(mut self) -> None:
         """Explicitly close the underlying stream. Idempotent."""
