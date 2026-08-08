@@ -1,34 +1,35 @@
 """Tests for ``HttpServer.drain`` and ``ShutdownReport``.
 
-only had
-``HttpServer.close()`` (a hard stop that cuts in-flight handlers
-mid-write) and a ``ServerConfig.shutdown_timeout_ms`` field that
-was never wired to a wait-for-drain loop. adds
-``HttpServer.drain(timeout_ms) -> ShutdownReport`` as the
+``HttpServer.close()`` is a hard stop that cuts in-flight handlers
+mid-write; ``HttpServer.drain(timeout_ms) -> ShutdownReport`` is the
 recommended graceful shutdown.
 
 Covers:
 
-- ``ShutdownReport`` is a value type with the documented three
-  fields and a working constructor.
-- ``HttpServer.drain(0)`` is a hard stop equivalent to
-  ``close()``: ``_stopping`` becomes ``True`` and the listener
-  closes; the report records a non-success outcome.
-- ``HttpServer.drain(timeout_ms > 0)`` returns a ``ShutdownReport``
-  with non-negative counts.
+- ``ShutdownReport`` is a value type with the documented four fields
+  and a working constructor.
+- ``HttpServer.drain(0)`` is a hard stop equivalent to ``close()``:
+  ``_stopping`` becomes ``True`` and the listener closes.
+- ``HttpServer.drain(timeout_ms > 0)`` returns a report with
+  non-negative counts.
 - A negative ``timeout_ms`` is clamped to ``0``.
 - Re-exports from ``flare.http`` and the root ``flare`` package
   resolve.
-
-Multi-worker drain coordination through ``Scheduler.drain`` lands
-in ; this commit covers the single-threaded path.
+- The unified reactor's shutdown tail flips ``Cancel.SHUTDOWN`` on
+  live connections before closing them, and reports how many were
+  still in flight.
 """
 
 from std.testing import assert_equal, assert_true, assert_false, TestSuite
 
 from flare import ShutdownReport as RootShutdownReport
 from flare.http import HttpServer, ServerConfig, ShutdownReport
+from flare.http._reactor.tagged_dispatch import KIND_H1, _pack
+from flare.http._server_reactor_epoll import _conn_alloc_addr
+from flare.http._unified_reactor_impl import _drain_remaining_conns_unified
 from flare.net import SocketAddr
+from flare.runtime import Reactor
+from flare.tcp import TcpListener, TcpStream
 
 
 # ── ShutdownReport struct ────────────────────────────────────────────────────
@@ -106,6 +107,44 @@ def test_root_package_re_exports_shutdown_report() raises:
         drained=2, timed_out=0, in_flight_at_deadline=0, crashed=0
     )
     assert_equal(r.drained, 2)
+
+
+# ── Reactor shutdown tail flips Cancel.SHUTDOWN ─────────────────────────────
+
+
+def test_unified_drain_reports_in_flight_and_empties_table() raises:
+    """The unified reactor's shutdown tail reports what it closed.
+
+    The legacy epoll loop always flipped ``Cancel.SHUTDOWN`` on live
+    connections at shutdown; the unified loop that ``serve()`` actually
+    runs used to free them outright, so a cancel-aware handler or a
+    streaming body got the socket pulled mid-chunk with no signal. The
+    tail now flips first and returns the live count.
+
+    The flip itself is not asserted here: the same call frees the
+    handle, and ``CancelCell.__del__`` frees the cell, so reading the
+    ``Cancel`` afterwards would be a use-after-free. That
+    ``signal_drain`` flips every stream cell is covered directly by
+    tests/http2/test_h2_per_stream_cancel.mojo; this pins the count
+    and the table teardown, which are what the caller observes.
+    """
+    var listener = TcpListener.bind(SocketAddr.localhost(0))
+    var client = TcpStream.connect(listener.local_addr())
+    var accepted = listener.accept()
+
+    var reactor = Reactor()
+    var conns = Dict[Int, Int]()
+    var timers = Dict[Int, UInt64]()
+
+    var fd = Int(accepted._socket.fd)
+    conns[fd] = _pack(KIND_H1, _conn_alloc_addr(accepted^))
+
+    var still_live = _drain_remaining_conns_unified(conns, timers, reactor)
+
+    assert_equal(still_live, 1, "drain must report the live connection")
+    assert_equal(len(conns), 0, "drain must empty the conn table")
+    client.close()
+    listener.close()
 
 
 def main() raises:

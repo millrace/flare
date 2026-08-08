@@ -1508,12 +1508,12 @@ struct HttpServer(Movable):
                 clamped to ``0``.
 
         Returns:
-            A ``ShutdownReport`` recording how many connections
-            drained cleanly and how many were forced closed at the
-            deadline. The single-threaded reactor returns
-            best-effort counts derived from listener state; the
-            multi-threaded variant on ``Scheduler``
-            returns one report per worker.
+            A ``ShutdownReport``. On this single-threaded path the
+            counts are all zero: ``serve()`` owns the calling thread,
+            so ``drain`` can only signal the loop and return -- it has
+            no vantage point from which to observe per-connection
+            progress. ``Scheduler.drain`` (multi-worker) joins its
+            workers and reports measured counts per worker.
 
         Raises:
             NetworkError: If the listener cannot be closed.
@@ -1541,51 +1541,18 @@ struct HttpServer(Movable):
         # sit waiting on an empty event queue.
         self._stopping = True
 
-        # Step 3: yield to give the reactor cycle a chance to flush
-        # in-flight writes, then return. Polling for "all
-        # connections done" requires per-conn observability the
-        # single-threaded reactor doesn't expose to the caller —
-        # the multi-threaded ``Scheduler.drain`` variant landing in
-        # returns a richer ``ShutdownReport`` per
-        # worker. For the single-threaded path we report best
-        # effort: drain succeeded (no forced close visible from
-        # this caller's vantage point) iff the timeout was
-        # non-zero.
+        # Step 3: yield so the reactor observes ``_stopping`` on its
+        # next poll cycle, where it flips Cancel.SHUTDOWN on every live
+        # connection before closing it.
         #
-        # Sleep up to ``deadline_ms`` to give the reactor loop a
-        # chance to observe ``_stopping`` on its next
-        # ``poll(100, ...)`` cycle. We cap at 100ms so the
-        # ``test_drain_*`` battery stays fast — the reactor's poll
-        # interval is also 100ms so a longer cap doesn't help on
-        # the single-threaded path. Production callers wanting a
-        # multi-second drain should use the ``Scheduler.drain``
-        # multi-worker entry point.
-        #
-        # Yield 1ms to the reactor for cooperative cycle observation.
-        # The reactor's poll interval is also 100ms, so for the
-        # single-threaded drain path we just need any positive
-        # yield — the ``timeout_ms`` semantics are advisory because
-        # this thread cannot observe per-conn drain progress.
-        # Production callers who want a real multi-ms drain budget
-        # use the multi-worker ``Scheduler.drain``.
-        #
-        # Routed through ``libc_nanosleep_ms`` (the rolled-own
-        # FFI) but capped at 1ms because larger budgets exhibit
-        # the same 1000x wall-clock multiplier the original
-        # ``usleep`` had — the standalone tests of
-        # ``libc_nanosleep_ms(50)`` measure 52ms correctly, but
-        # invoking it inside ``HttpServer.drain``'s context
-        # regresses to ~60s. Same root cause as the
-        # ``Scheduler.drain`` deferral. Tracked for the next Mojo
-        # nightly bump.
-        if deadline_ms > 0:
-            _ = libc_nanosleep_ms(1)
-
+        # Capped at 1ms deliberately: larger budgets hit the documented
+        # wall-clock multiplier that ``libc_nanosleep_ms`` exhibits in
+        # this call context (a 50ms sleep measures ~60s here, while the
+        # same call standalone measures 52ms). ``timeout_ms`` is
+        # therefore advisory on this path; callers who need a real
+        # multi-second budget use the multi-worker ``Scheduler.drain``.
         return ShutdownReport(
-            drained=1 if deadline_ms > 0 else 0,
-            timed_out=0,
-            in_flight_at_deadline=0,
-            crashed=0,
+            drained=0, timed_out=0, in_flight_at_deadline=0, crashed=0
         )
 
 

@@ -949,18 +949,48 @@ def _drain_remaining_conns_unified(
     mut conns: Dict[Int, Int],
     mut timers: Dict[Int, UInt64],
     mut reactor: Reactor,
-) raises:
-    """Close every connection still in ``conns``.
+) raises -> Int:
+    """Flip ``Cancel.SHUTDOWN`` on every live connection, then close it.
 
-    Called from the shutdown tail of each loop variant.
-    Listener fds (when applicable) are not in ``conns`` and are
-    closed by the caller; the loop only borrows them.
+    Called from the shutdown tail of each loop variant. Listener fds
+    (when applicable) are not in ``conns`` and are closed by the caller;
+    the loop only borrows them.
+
+    The flip is what the legacy epoll loop always did and the unified
+    loop never did: cancel-aware handlers (``CancelHandler`` /
+    ``ViewHandler``) and streaming bodies poll the cell and can stop
+    producing, instead of having the socket yanked mid-chunk. Plain
+    ``Handler``s ignore Cancel and run to completion, unchanged.
+
+    Returns the number of connections that were still live, which the
+    caller reports as ``in_flight_at_deadline``.
     """
     var leftover = List[Int]()
     for kv in conns.items():
         leftover.append(kv.key)
     for i in range(len(leftover)):
-        _cleanup_conn_unified(leftover[i], conns, timers, reactor)
+        var fd = leftover[i]
+        # Resolve the entry first: the dict lookup raises DictKeyError
+        # while signal_drain raises Error, and one `try` cannot cover
+        # both error types.
+        var packed = 0
+        try:
+            packed = conns[fd]
+        except:
+            packed = 0
+        if packed != 0:
+            var k = _kind(packed)
+            if k == KIND_H1:
+                _conn_ptr_from_int(_addr(packed))[].cancel_cell.flip(
+                    CancelReason.SHUTDOWN
+                )
+            elif k == KIND_H2:
+                try:
+                    _h2_conn_ptr_from_int(_addr(packed))[].signal_drain()
+                except:
+                    pass
+        _cleanup_conn_unified(fd, conns, timers, reactor)
+    return len(leftover)
 
 
 # ── Unified reactor loop -- single listener (single-worker) ────────────────
@@ -1050,7 +1080,11 @@ def _run_unified_loop_for_fd[
             )
 
     store_worker_stat(stats_addr, WORKER_STAT_STATUS, exit_status)
-    _drain_remaining_conns_unified(conns, timers, reactor)
+    # Publish what was actually still in flight when the loop stopped,
+    # so Scheduler.drain reports a measured number rather than the
+    # count from whichever iteration happened to run last.
+    var still_live = _drain_remaining_conns_unified(conns, timers, reactor)
+    store_worker_stat(stats_addr, WORKER_STAT_INFLIGHT, still_live)
 
 
 def run_unified_reactor_loop[
@@ -1207,9 +1241,10 @@ def run_unified_reactor_loop_multi[
                 timers,
             )
 
-    # Graceful shutdown: close all live conns. Listener fds are
-    # closed by ``HttpServer.__del__`` -- the loop only borrows.
-    _drain_remaining_conns_unified(conns, timers, reactor)
+    # Graceful shutdown: flip Cancel.SHUTDOWN, then close all live
+    # conns. Listener fds are closed by ``HttpServer.__del__`` -- the
+    # loop only borrows.
+    _ = _drain_remaining_conns_unified(conns, timers, reactor)
 
 
 # ── Unified reactor loop -- shared listener (multi-worker) ──────────────────
