@@ -90,6 +90,14 @@ from .keepalive_scan import (
     _monotonic_ms,
     _wants_close,
 )
+from flare.http.proto.chunked import (
+    CHUNKED_INCOMPLETE,
+    CHUNKED_MALFORMED,
+    decode_chunked_body,
+    header_says_chunked,
+    scan_chunked_end,
+)
+
 from .tls_transport import TlsTransport
 from .write_path import (
     build_error_response,
@@ -220,6 +228,11 @@ struct ConnHandle(Movable):
     A single ``Optional`` test guards each -- the cleartext path is
     one predictable branch away from what it was."""
 
+    var is_chunked: Bool
+    """The current request declared ``Transfer-Encoding: chunked``, so
+    its length comes from the chunk framing rather than
+    ``Content-Length`` and the body needs decoding before dispatch."""
+
     var tls_cross_interest: Bool
     """Set when the TLS session asked for the *opposite* readiness to
     the direction being driven -- ``SSL_read`` returning ``WANT_WRITE``
@@ -266,6 +279,7 @@ struct ConnHandle(Movable):
         self._date_cache = DateCache()
         self.body_src = Optional[ChunkSourceBox]()
         self.tls = Optional[TlsTransport]()
+        self.is_chunked = False
         self.tls_cross_interest = False
 
     def attach_tls(mut self, var transport: TlsTransport):
@@ -431,13 +445,47 @@ struct ConnHandle(Movable):
                     )
                 )
             self.headers_end = end
-            self.content_length = _scan_content_length(
-                self.read_buf, self.headers_end
+            self.is_chunked = header_says_chunked(
+                Span[UInt8, _](self.read_buf), self.headers_end
             )
-            if self.content_length > config.max_body_size:
-                self._queue_error(413, "Content Too Large")
+            if self.is_chunked:
+                # RFC 9112 sec 7.1: chunked framing supersedes any
+                # Content-Length. Length is not known up front, so the
+                # completeness signal is the terminating chunk. Without
+                # this the reactor sized the request at headers_end and
+                # dispatched a chunked upload as an empty body.
+                self.content_length = 0
+                self.body_total = -1
+            else:
+                self.content_length = _scan_content_length(
+                    self.read_buf, self.headers_end
+                )
+                if self.content_length > config.max_body_size:
+                    self._queue_error(413, "Content Too Large")
+                    return Optional[StepResult](self._transition_to_writing())
+                self.body_total = self.headers_end + self.content_length
+        if self.is_chunked and self.body_total < 0:
+            var cend = scan_chunked_end(
+                Span[UInt8, _](self.read_buf),
+                self.headers_end,
+                config.max_body_size,
+            )
+            if cend == CHUNKED_MALFORMED:
+                self._queue_error(400, "Bad Request")
                 return Optional[StepResult](self._transition_to_writing())
-            self.body_total = self.headers_end + self.content_length
+            if cend == CHUNKED_INCOMPLETE:
+                var t2 = (
+                    body_timeout_ms if body_timeout_ms
+                    > 0 else config.idle_timeout_ms
+                )
+                return Optional[StepResult](
+                    StepResult(
+                        want_read=True,
+                        want_write=False,
+                        idle_timeout_ms=t2,
+                    )
+                )
+            self.body_total = cend
         if len(self.read_buf) < self.body_total:
             var timeout = (
                 body_timeout_ms if body_timeout_ms
@@ -484,6 +532,7 @@ struct ConnHandle(Movable):
         self.headers_end = -1
         self.content_length = 0
         self.body_total = -1
+        self.is_chunked = False
         # Streaming path (K1): a handler that returned a streaming
         # Response carries a chunk source. Take it onto the connection,
         # emit chunked-framed headers, and let ``on_writable`` pull the
@@ -551,6 +600,17 @@ struct ConnHandle(Movable):
                     config.expose_error_messages,
                 )
                 close_after = _compute_close_after(req.headers, req.version)
+            if self.is_chunked:
+                # The parsers deliberately do not decode chunked bodies
+                # (they only use TE to resolve the CL/TE ambiguity), so
+                # the framed bytes are decoded here into the body the
+                # handler sees.
+                req.body = List[UInt8]()
+                _ = decode_chunked_body(
+                    Span[UInt8, _](self.read_buf)[: self.body_total],
+                    self.headers_end,
+                    req.body,
+                )
         except:
             self._queue_error(400, "Bad Request")
             return self._transition_to_writing()
@@ -579,6 +639,7 @@ struct ConnHandle(Movable):
                 self.headers_end = -1
                 self.content_length = 0
                 self.body_total = -1
+                self.is_chunked = False
                 self.state = STATE_WRITING
                 return StepResult(
                     want_read=False,
@@ -661,6 +722,17 @@ struct ConnHandle(Movable):
                     config.expose_error_messages,
                 )
                 close_after = _compute_close_after(req.headers, req.version)
+            if self.is_chunked:
+                # The parsers deliberately do not decode chunked bodies
+                # (they only use TE to resolve the CL/TE ambiguity), so
+                # the framed bytes are decoded here into the body the
+                # handler sees.
+                req.body = List[UInt8]()
+                _ = decode_chunked_body(
+                    Span[UInt8, _](self.read_buf)[: self.body_total],
+                    self.headers_end,
+                    req.body,
+                )
         except:
             self._queue_error(400, "Bad Request")
             return self._transition_to_writing()
@@ -849,6 +921,7 @@ struct ConnHandle(Movable):
         self.headers_end = -1
         self.content_length = 0
         self.body_total = -1
+        self.is_chunked = False
 
         self._serialize_static(resp, not final_close)
         return self._transition_to_writing()
