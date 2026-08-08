@@ -50,7 +50,7 @@ reference holder so the per-worker copy stays cheap.
 """
 
 
-trait Frontend(Copyable, ImplicitlyDestructible, Movable):
+trait Frontend(Copyable, Deinitable, Movable):
     """Multicore-scheduler worker-target trait.
 
     Implementations bridge the scheduler's lifecycle (pthread

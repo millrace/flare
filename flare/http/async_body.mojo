@@ -160,7 +160,7 @@ struct ChunkPoll(Movable):
 # ── AsyncChunkSource ─────────────────────────────────────────────────────────
 
 
-trait AsyncChunkSource(ImplicitlyDestructible, Movable):
+trait AsyncChunkSource(Deinitable, Movable):
     """A byte-chunk source whose chunks may arrive on a registered fd.
 
     The async sibling of ``ChunkSource``: instead of a blocking pull,

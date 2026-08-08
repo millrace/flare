@@ -186,7 +186,7 @@ def signed_cookie_decode_keys(
 # ── SessionCodec: payload <-> bytes ───────────────────────────────────────
 
 
-trait SessionCodec(Copyable, Defaultable, ImplicitlyDestructible, Movable):
+trait SessionCodec(Copyable, Defaultable, Deinitable, Movable):
     """Encode / decode a typed payload to/from raw bytes.
 
     Implementations live alongside the user's payload type; the
@@ -455,7 +455,7 @@ struct InMemorySessionStore(Copyable, Defaultable, Movable, SessionStore):
 # ── SessionBackend: pluggable server-side storage with TTL ────────────────
 
 
-trait SessionBackend(Copyable, ImplicitlyDestructible, Movable):
+trait SessionBackend(Copyable, Deinitable, Movable):
     """Storage abstraction behind :class:`BackedSessionStore`.
 
     A backend maps an opaque session id to its value with a TTL. The

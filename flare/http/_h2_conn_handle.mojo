@@ -68,7 +68,7 @@ from ._server_reactor_impl import (
 # ── Http2ConnHandle ────────────────────────────────────────────────────────────
 
 
-struct H2StreamOut(ImplicitlyDestructible, Movable):
+struct H2StreamOut(Deinitable, Movable):
     """Per-stream outbound state for one in-flight streaming response.
 
     HTTP/2 multiplexes: several handlers can each return a streaming

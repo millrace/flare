@@ -717,7 +717,7 @@ struct StreamConn(Movable):
 # ── StreamHandler ──────────────────────────────────────────────────────────
 
 
-trait StreamHandler(ImplicitlyDestructible, Movable):
+trait StreamHandler(Deinitable, Movable):
     """Lifecycle callbacks for one logical stream.
 
     The framework owns the reactor and the connection; the handler is a

@@ -81,7 +81,7 @@ comptime H3_REQUEST_STATE_DONE: Int = 3
 # ── Event-handler trait ────────────────────────────────────────────────────
 
 
-trait Http3RequestEventHandler(ImplicitlyDestructible, Movable):
+trait Http3RequestEventHandler(Deinitable, Movable):
     """Per-event callback contract :func:`feed_into` fires.
 
     The dispatcher reads one wire frame at the start of the

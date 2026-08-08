@@ -739,7 +739,7 @@ def _response_from_outcome(var outcome: GrpcCallOutcome) raises -> Response:
 
 
 @fieldwise_init
-struct GrpcService[H: Copyable & GrpcUnary & ImplicitlyDestructible](
+struct GrpcService[H: Copyable & GrpcUnary & Deinitable](
     Copyable, Handler, Movable
 ):
     """Adapt a :class:`GrpcUnary` handler into a plain :trait:`Handler`

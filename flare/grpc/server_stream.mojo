@@ -313,9 +313,9 @@ def _streaming_response_from_reply(
 
 
 @fieldwise_init
-struct GrpcStreamingService[
-    H: Copyable & GrpcServerStreaming & ImplicitlyDestructible
-](Copyable, Handler, Movable):
+struct GrpcStreamingService[H: Copyable & GrpcServerStreaming & Deinitable](
+    Copyable, Handler, Movable
+):
     """Adapt a :class:`GrpcServerStreaming` handler into a plain
     :trait:`Handler` so it serves over the unified
     :class:`flare.http.HttpServer` H2 reactor path.

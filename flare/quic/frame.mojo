@@ -330,7 +330,7 @@ struct HandshakeDoneFrame(Copyable, ImplicitlyCopyable, Movable):
 # ── Frame dispatch trait ─────────────────────────────────────────────────────
 
 
-trait FrameHandler(ImplicitlyDestructible, Movable):
+trait FrameHandler(Deinitable, Movable):
     """Per-type callback contract :func:`parse_frame_into` fires.
 
     The dispatcher reads one wire frame at the start of the input

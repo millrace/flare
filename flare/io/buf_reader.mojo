@@ -22,7 +22,7 @@ from ..net import NetworkError
 # ── Readable trait ────────────────────────────────────────────────────────────
 
 
-trait Readable(ImplicitlyDestructible, Movable):
+trait Readable(Deinitable, Movable):
     """A byte stream that can be read into a mutable buffer.
 
     Extends ``Movable`` so that streams can be transferred into ``BufReader``.

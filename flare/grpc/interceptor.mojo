@@ -54,8 +54,8 @@ trait GrpcInterceptor(Copyable, Movable):
 
 
 struct Intercepted[
-    I: Copyable & GrpcInterceptor & ImplicitlyDestructible,
-    H: Copyable & GrpcUnary & ImplicitlyDestructible,
+    I: Copyable & GrpcInterceptor & Deinitable,
+    H: Copyable & GrpcUnary & Deinitable,
 ](Copyable, GrpcUnary, Movable):
     """Wrap ``handler`` with ``interceptor`` to form a new
     :trait:`GrpcUnary`. Nest to chain multiple interceptors.

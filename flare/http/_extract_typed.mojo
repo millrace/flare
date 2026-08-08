@@ -137,7 +137,7 @@ struct OptionalPathBool[name: StaticString](
 # ── Typed JSON body extraction ──────────────────────────────────────────────
 
 
-trait FromJson(Copyable, Defaultable, ImplicitlyDestructible, Movable):
+trait FromJson(Copyable, Defaultable, Deinitable, Movable):
     """A type that can populate itself from a parsed JSON ``Value``.
 
     Implement ``parse_json`` to read the decoded document into ``self``

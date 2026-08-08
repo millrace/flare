@@ -473,7 +473,7 @@ struct WsConnection(Movable):
 # ── WsServer ──────────────────────────────────────────────────────────────────
 
 
-trait WsHandler(Copyable, ImplicitlyDestructible, Movable):
+trait WsHandler(Copyable, Deinitable, Movable):
     """Stateful per-connection WebSocket handler.
 
     The struct-handler counterpart to the ``def(mut WsConnection)``

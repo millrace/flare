@@ -149,7 +149,7 @@ def _drive_client_stream_reply[
 
 @fieldwise_init
 struct GrpcClientStreamingService[
-    H: Copyable & GrpcClientStreaming & ImplicitlyDestructible
+    H: Copyable & GrpcClientStreaming & Deinitable
 ](Copyable, Handler, Movable):
     """Adapt a :class:`GrpcClientStreaming` handler into a
     :trait:`Handler` for the unified H2 reactor. One H2 stream = one
@@ -240,9 +240,9 @@ def _drive_bidi_reply[
 
 
 @fieldwise_init
-struct GrpcBidiService[
-    H: Copyable & GrpcBidiStreaming & ImplicitlyDestructible
-](Copyable, Handler, Movable):
+struct GrpcBidiService[H: Copyable & GrpcBidiStreaming & Deinitable](
+    Copyable, Handler, Movable
+):
     """Adapt a :class:`GrpcBidiStreaming` handler into a
     :trait:`Handler`. Responses stream incrementally via the K1
     body-stream path (one DATA frame per reply message)."""

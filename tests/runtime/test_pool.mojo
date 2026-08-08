@@ -45,7 +45,7 @@ from flare.runtime import Pool
 from std.memory import UnsafePointer, alloc as _raw_alloc
 
 
-struct _Counted(ImplicitlyDestructible, Movable):
+struct _Counted(Deinitable, Movable):
     """Test harness: holds a value + an external counter address.
     The destructor bumps the counter so tests can verify free()
     actually called __del__."""
@@ -156,7 +156,7 @@ def test_thousand_cycles() raises:
 # ── Non-trivial T ──────────────────────────────────────────────────────────
 
 
-struct _Boxed(ImplicitlyDestructible, Movable):
+struct _Boxed(Deinitable, Movable):
     """Larger struct with a String field; tests Pool[T] handles
     non-POD types."""
 

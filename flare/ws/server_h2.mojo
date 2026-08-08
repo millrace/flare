@@ -103,7 +103,7 @@ struct WsOverH2ServerStream(Copyable, Movable):
 # handler never blocks -- it reacts to one edge and returns.
 
 
-trait WsH2Handler(Copyable, ImplicitlyDestructible, Movable):
+trait WsH2Handler(Copyable, Deinitable, Movable):
     """Edge-driven handler for WebSocket-over-HTTP/2 tunnels (RFC 8441).
 
     One handler instance is shared across every tunnel on the worker (like
