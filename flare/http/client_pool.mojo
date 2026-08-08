@@ -153,7 +153,7 @@ struct ClientPool(Copyable, Movable):
                 0 disables timeout eviction.
         """
         var p = alloc[_ClientPoolState](1)
-        p.init_pointee_move(
+        p.unsafe_write(
             _ClientPoolState(
                 Dict[String, List[Int]](),
                 Dict[Int, Int](),
@@ -310,7 +310,7 @@ struct ClientPool(Copyable, Movable):
         for entry in sp[].entries.items():
             for i in range(len(entry.value)):
                 _ = _close(c_int(entry.value[i]))
-        sp.destroy_pointee()
+        sp.unsafe_deinit_pointee()
         sp.free()
         self._addr = 0
 

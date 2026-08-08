@@ -136,16 +136,14 @@ def race_http3_h2_connect(
     import). Never raises for a failed connect -- the caller decides how
     to handle :data:`RACE_NONE`."""
     var h3_res = alloc[_RaceResult](1)
-    h3_res.init_pointee_move(_RaceResult())
+    h3_res.unsafe_write(_RaceResult())
     var h2_res = alloc[_RaceResult](1)
-    h2_res.init_pointee_move(_RaceResult())
+    h2_res.unsafe_write(_RaceResult())
 
     var h3_arg = alloc[_RaceArg](1)
-    h3_arg.init_pointee_move(_RaceArg(leg, client_addr, Int(h3_res), True, url))
+    h3_arg.unsafe_write(_RaceArg(leg, client_addr, Int(h3_res), True, url))
     var h2_arg = alloc[_RaceArg](1)
-    h2_arg.init_pointee_move(
-        _RaceArg(leg, client_addr, Int(h2_res), False, url)
-    )
+    h2_arg.unsafe_write(_RaceArg(leg, client_addr, Int(h2_res), False, url))
 
     var h3_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=Int(h3_arg)
@@ -169,13 +167,13 @@ def race_http3_h2_connect(
     elif h2_res[].ok:
         winner = RACE_H2
 
-    h3_arg.destroy_pointee()
+    h3_arg.unsafe_deinit_pointee()
     h3_arg.free()
-    h2_arg.destroy_pointee()
+    h2_arg.unsafe_deinit_pointee()
     h2_arg.free()
-    h3_res.destroy_pointee()
+    h3_res.unsafe_deinit_pointee()
     h3_res.free()
-    h2_res.destroy_pointee()
+    h2_res.unsafe_deinit_pointee()
     h2_res.free()
 
     return winner

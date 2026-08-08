@@ -100,7 +100,7 @@ struct QuicConnectionPool(Copyable, Movable):
         moves can't raise) so it can initialize a ``read self``
         ``HttpClient`` field eagerly, like the Alt-Svc store."""
         var p = alloc[_QuicPoolState](1)
-        p.init_pointee_move(
+        p.unsafe_write(
             _QuicPoolState(
                 Dict[String, List[Int]](),
                 Dict[Int, Int](),
@@ -228,7 +228,7 @@ struct QuicConnectionPool(Copyable, Movable):
                 # cell (UdpSocket.__del__ closes the fd idempotently).
                 Pool[Http3ClientConnection].get_ptr(addr)[].quic.shutdown()
                 Pool[Http3ClientConnection].free(addr)
-        sp.destroy_pointee()
+        sp.unsafe_deinit_pointee()
         sp.free()
         self._addr = 0
 

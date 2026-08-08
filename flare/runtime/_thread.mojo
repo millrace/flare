@@ -37,7 +37,7 @@ from std.ffi import (
     OwnedDLHandle,
     get_errno,
 )
-from std.memory import UnsafePointer, alloc, memcpy, memset_zero
+from std.memory import UnsafePointer, alloc, memcpy, unsafe_memset_zero
 from std.sys.info import CompilationTarget
 
 
@@ -202,7 +202,7 @@ struct ThreadHandle(Movable):
             # this module is pulled into a fuzz-environment compile
             # (mozz harness).
             var cpuset_ptr = alloc[UInt8](_CPUSET_SIZE)
-            memset_zero(cpuset_ptr, _CPUSET_SIZE)
+            unsafe_memset_zero(cpuset_ptr, _CPUSET_SIZE)
             var byte_idx = cpu // 8
             var bit_idx = cpu % 8
             if byte_idx < _CPUSET_SIZE:

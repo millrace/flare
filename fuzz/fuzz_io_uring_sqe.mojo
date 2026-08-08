@@ -199,7 +199,7 @@ def _fuzz_cqe_decode(data: List[UInt8]) raises:
         unsafe_from_address=Int(raw)
     )
     for i in range(IO_URING_CQE_BYTES):
-        (p + i).init_pointee_copy(data[i])
+        (p + i).unsafe_write(data[i])
     var cqe = decode_cqe_at(p)
     # Exercise every accessor so the optimiser can't elide the
     # decode -- the fuzzer wants the full code path covered.

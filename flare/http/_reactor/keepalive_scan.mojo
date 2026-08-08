@@ -140,7 +140,7 @@ def _monotonic_ms() -> Int:
     """
     var buf = stack_allocation[16, UInt8]()
     for i in range(16):
-        (buf + i).init_pointee_copy(UInt8(0))
+        (buf + i).unsafe_write(UInt8(0))
     _ = external_call["clock_gettime", c_int](
         _CLOCK_MONOTONIC, buf.bitcast[NoneType]()
     )

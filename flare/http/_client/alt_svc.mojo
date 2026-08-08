@@ -305,7 +305,7 @@ struct AltSvcStore(Copyable, Movable):
     def new() -> AltSvcStore:
         """Allocate a fresh, empty store."""
         var p = alloc[_AltSvcState](1)
-        p.init_pointee_move(_AltSvcState(AltSvcCache()))
+        p.unsafe_write(_AltSvcState(AltSvcCache()))
         return AltSvcStore(Int(p))
 
     @always_inline
@@ -354,7 +354,7 @@ struct AltSvcStore(Copyable, Movable):
         if self._addr == 0:
             return
         var sp = self._state()
-        sp.destroy_pointee()
+        sp.unsafe_deinit_pointee()
         sp.free()
         self._addr = 0
 

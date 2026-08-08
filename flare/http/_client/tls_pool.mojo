@@ -94,7 +94,7 @@ struct TlsConnectionPool(Copyable, Movable):
         ``read self`` ``HttpClient`` field eagerly, like the QUIC pool
         and the Alt-Svc store."""
         var p = alloc[_TlsPoolState](1)
-        p.init_pointee_move(
+        p.unsafe_write(
             _TlsPoolState(
                 Dict[String, List[Int]](),
                 Dict[Int, Int](),
@@ -202,7 +202,7 @@ struct TlsConnectionPool(Copyable, Movable):
         for entry in sp[].entries.items():
             for i in range(len(entry.value)):
                 Pool[TlsStream].free(entry.value[i])
-        sp.destroy_pointee()
+        sp.unsafe_deinit_pointee()
         sp.free()
         self._addr = 0
 

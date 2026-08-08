@@ -108,7 +108,7 @@ def resolve_async(host: String, cancel: Cancel) raises -> List[IpAddr]:
 
     var host_addr = Pool[String].alloc_move(host)
     var ctx_ptr = alloc[_ResolveCtx](1)
-    ctx_ptr.init_pointee_move(_ResolveCtx(host_addr, 0, 0, 0))
+    ctx_ptr.unsafe_write(_ResolveCtx(host_addr, 0, 0, 0))
     var ctx_opaque = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=Int(ctx_ptr)
     )
@@ -118,7 +118,7 @@ def resolve_async(host: String, cancel: Cancel) raises -> List[IpAddr]:
         handle.join()
     except e:
         Pool[String].free(host_addr)
-        ctx_ptr.destroy_pointee()
+        ctx_ptr.unsafe_deinit_pointee()
         ctx_ptr.free()
         _pool_release()
         raise e^
@@ -128,7 +128,7 @@ def resolve_async(host: String, cancel: Cancel) raises -> List[IpAddr]:
     var res_addr = ctx_ptr[].result_addr
     var err_addr = ctx_ptr[].err_addr
     Pool[String].free(host_addr)
-    ctx_ptr.destroy_pointee()
+    ctx_ptr.unsafe_deinit_pointee()
     ctx_ptr.free()
 
     if ok:

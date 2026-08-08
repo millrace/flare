@@ -71,7 +71,7 @@ def _new_counter() raises -> Int:
     var p = _raw_alloc[Int](1)
     if Int(p) == 0:
         raise Error("counter alloc failed")
-    p.init_pointee_copy(0)
+    p.unsafe_write(0)
     return Int(p)
 
 
@@ -82,7 +82,7 @@ def _read_counter(addr: Int) -> Int:
 
 def _free_counter(addr: Int):
     var p = UnsafePointer[Int, MutUntrackedOrigin](unsafe_from_address=addr)
-    p.destroy_pointee()
+    p.unsafe_deinit_pointee()
     p.free()
 
 

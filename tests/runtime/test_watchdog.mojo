@@ -10,7 +10,7 @@ from flare.runtime.watchdog import DeadlineWatchdog
 
 def _new_cell() -> Int:
     var p = alloc[Int64](1)
-    p.init_pointee_copy(Int64(0))
+    p.unsafe_write(Int64(0))
     return Int(p)
 
 

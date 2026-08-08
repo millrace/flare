@@ -291,9 +291,9 @@ struct TcpStream(Movable, Readable):
                 # 3. EINPROGRESS: wait for the socket to become writable.
                 var pfd = stack_allocation[Int(POLLFD_SIZE), UInt8]()
                 for i in range(Int(POLLFD_SIZE)):
-                    (pfd + i).init_pointee_copy(0)
-                pfd.bitcast[c_int]().init_pointee_copy(sock.fd)
-                (pfd + 4).bitcast[Int16]().init_pointee_copy(Int16(POLLOUT))
+                    (pfd + i).unsafe_write(0)
+                pfd.bitcast[c_int]().unsafe_write(sock.fd)
+                (pfd + 4).bitcast[Int16]().unsafe_write(Int16(POLLOUT))
 
                 var nready = _poll(pfd, c_uint(1), c_int(timeout_ms))
                 if nready == c_int(0):
@@ -308,9 +308,9 @@ struct TcpStream(Movable, Readable):
 
                 # 4. Check SO_ERROR for deferred connection errors.
                 var so_err = stack_allocation[1, c_int]()
-                so_err.init_pointee_copy(c_int(0))
+                so_err.unsafe_write(c_int(0))
                 var so_len = stack_allocation[1, c_uint]()
-                so_len.init_pointee_copy(c_uint(4))
+                so_len.unsafe_write(c_uint(4))
                 _ = _getsockopt(
                     sock.fd,
                     SOL_SOCKET,

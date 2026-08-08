@@ -91,17 +91,15 @@ def _pbuf_ring_add(
     )
     # addr (offset 0, u64 LE)
     for i in range(8):
-        (entry + i).init_pointee_copy(
-            UInt8(Int((buf_addr >> UInt64(8 * i)) & 0xFF))
-        )
+        (entry + i).unsafe_write(UInt8(Int((buf_addr >> UInt64(8 * i)) & 0xFF)))
     # len (offset 8, u32 LE)
     for i in range(4):
-        (entry + 8 + i).init_pointee_copy(
+        (entry + 8 + i).unsafe_write(
             UInt8(Int((buf_len >> UInt32(8 * i)) & 0xFF))
         )
     # bid (offset 12, u16 LE)
-    (entry + 12).init_pointee_copy(UInt8(Int(bid) & 0xFF))
-    (entry + 13).init_pointee_copy(UInt8((Int(bid) >> 8) & 0xFF))
+    (entry + 12).unsafe_write(UInt8(Int(bid) & 0xFF))
+    (entry + 13).unsafe_write(UInt8((Int(bid) >> 8) & 0xFF))
     # resv left as-is (overwritten by tail-advance for slot 0;
     # ignored by kernel for other slots).
 

@@ -121,25 +121,23 @@ def _epoll_event_set(
         Int(buf) != 0, "_epoll_event_set: null epoll_event buffer"
     )
     # events field is always at offset 0, little-endian UInt32.
-    (buf + 0).init_pointee_copy(UInt8(events & 0xFF))
-    (buf + 1).init_pointee_copy(UInt8((events >> 8) & 0xFF))
-    (buf + 2).init_pointee_copy(UInt8((events >> 16) & 0xFF))
-    (buf + 3).init_pointee_copy(UInt8((events >> 24) & 0xFF))
+    (buf + 0).unsafe_write(UInt8(events & 0xFF))
+    (buf + 1).unsafe_write(UInt8((events >> 8) & 0xFF))
+    (buf + 2).unsafe_write(UInt8((events >> 16) & 0xFF))
+    (buf + 3).unsafe_write(UInt8((events >> 24) & 0xFF))
 
     # x86_64 packs the struct: data starts at offset 4. aarch64 keeps natural
     # alignment: 4 bytes of padding then data at offset 8.
     comptime if not CompilationTarget.is_x86():
-        (buf + 4).init_pointee_copy(UInt8(0))
-        (buf + 5).init_pointee_copy(UInt8(0))
-        (buf + 6).init_pointee_copy(UInt8(0))
-        (buf + 7).init_pointee_copy(UInt8(0))
+        (buf + 4).unsafe_write(UInt8(0))
+        (buf + 5).unsafe_write(UInt8(0))
+        (buf + 6).unsafe_write(UInt8(0))
+        (buf + 7).unsafe_write(UInt8(0))
 
     # data.u64 is 8 bytes, little-endian.
     var off = EPOLL_EVENT_DATA_OFF
     for i in range(8):
-        (buf + off + i).init_pointee_copy(
-            UInt8((data_u64 >> UInt64(8 * i)) & 0xFF)
-        )
+        (buf + off + i).unsafe_write(UInt8((data_u64 >> UInt64(8 * i)) & 0xFF))
 
 
 @always_inline
@@ -198,33 +196,33 @@ def _kevent_set(
     """
     # ident: 8 bytes LE
     for i in range(8):
-        (buf + KEVENT_IDENT_OFF + i).init_pointee_copy(
+        (buf + KEVENT_IDENT_OFF + i).unsafe_write(
             UInt8((ident >> UInt64(8 * i)) & 0xFF)
         )
     # filter: 2 bytes LE (Int16 -> two's complement via UInt16 bit-cast)
     var f16 = UInt16(filter & 0xFFFF) if filter >= 0 else UInt16(
         (UInt32(Int32(filter)) & 0xFFFF)
     )
-    (buf + KEVENT_FILTER_OFF + 0).init_pointee_copy(UInt8(f16 & 0xFF))
-    (buf + KEVENT_FILTER_OFF + 1).init_pointee_copy(UInt8((f16 >> 8) & 0xFF))
+    (buf + KEVENT_FILTER_OFF + 0).unsafe_write(UInt8(f16 & 0xFF))
+    (buf + KEVENT_FILTER_OFF + 1).unsafe_write(UInt8((f16 >> 8) & 0xFF))
     # flags: 2 bytes LE
-    (buf + KEVENT_FLAGS_OFF + 0).init_pointee_copy(UInt8(flags & 0xFF))
-    (buf + KEVENT_FLAGS_OFF + 1).init_pointee_copy(UInt8((flags >> 8) & 0xFF))
+    (buf + KEVENT_FLAGS_OFF + 0).unsafe_write(UInt8(flags & 0xFF))
+    (buf + KEVENT_FLAGS_OFF + 1).unsafe_write(UInt8((flags >> 8) & 0xFF))
     # fflags: 4 bytes LE
     for i in range(4):
-        (buf + KEVENT_FFLAGS_OFF + i).init_pointee_copy(
+        (buf + KEVENT_FFLAGS_OFF + i).unsafe_write(
             UInt8((fflags >> UInt32(8 * i)) & 0xFF)
         )
     # data: 8 bytes LE (treat as bit pattern; caller supplies non-negative
     # values for our use-cases)
     var d64 = UInt64(data) if data >= 0 else UInt64(Int(data))
     for i in range(8):
-        (buf + KEVENT_DATA_OFF + i).init_pointee_copy(
+        (buf + KEVENT_DATA_OFF + i).unsafe_write(
             UInt8((d64 >> UInt64(8 * i)) & 0xFF)
         )
     # udata: 8 bytes LE
     for i in range(8):
-        (buf + KEVENT_UDATA_OFF + i).init_pointee_copy(
+        (buf + KEVENT_UDATA_OFF + i).unsafe_write(
             UInt8((udata >> UInt64(8 * i)) & 0xFF)
         )
 

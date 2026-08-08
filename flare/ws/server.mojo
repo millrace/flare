@@ -783,7 +783,7 @@ def _ws_serve_multicore(
             "_ws_serve_multicore: alloc[_WsWorkerCtx] returned NULL on worker ",
             i,
         )
-        ctx_ptr.init_pointee_move(ctx^)
+        ctx_ptr.unsafe_write(ctx^)
         var arg = ctx_ptr.bitcast[UInt8]()
         var addr_int = Int(arg)
         ctx_addrs.append(addr_int)
@@ -792,7 +792,7 @@ def _ws_serve_multicore(
                 unsafe_from_address=addr_int
             )
         )
-        (threads_ptr + i).init_pointee_move(th^)
+        (threads_ptr + i).unsafe_write(th^)
 
     # Workers run forever; this join blocks until each pthread
     # exits (normally never, since the per-worker listener
@@ -811,6 +811,6 @@ def _ws_serve_multicore(
         var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=ctx_addrs[i]
         )
-        raw.bitcast[_WsWorkerCtx]().destroy_pointee()
+        raw.bitcast[_WsWorkerCtx]().unsafe_deinit_pointee()
         raw.free()
     threads_ptr.free()

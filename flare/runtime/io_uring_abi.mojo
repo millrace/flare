@@ -387,7 +387,7 @@ def _store_u8(
         "_store_u8 offset out of SQE range; got ",
         offset,
     )
-    (buf + offset).init_pointee_copy(value)
+    (buf + offset).unsafe_write(value)
 
 
 @always_inline
@@ -404,8 +404,8 @@ def _store_u16_le(
         offset,
     )
     var v = Int(value)
-    (buf + offset).init_pointee_copy(UInt8(v & 0xFF))
-    (buf + offset + 1).init_pointee_copy(UInt8((v >> 8) & 0xFF))
+    (buf + offset).unsafe_write(UInt8(v & 0xFF))
+    (buf + offset + 1).unsafe_write(UInt8((v >> 8) & 0xFF))
 
 
 @always_inline
@@ -422,10 +422,10 @@ def _store_u32_le(
         offset,
     )
     var v = Int(value)
-    (buf + offset).init_pointee_copy(UInt8(v & 0xFF))
-    (buf + offset + 1).init_pointee_copy(UInt8((v >> 8) & 0xFF))
-    (buf + offset + 2).init_pointee_copy(UInt8((v >> 16) & 0xFF))
-    (buf + offset + 3).init_pointee_copy(UInt8((v >> 24) & 0xFF))
+    (buf + offset).unsafe_write(UInt8(v & 0xFF))
+    (buf + offset + 1).unsafe_write(UInt8((v >> 8) & 0xFF))
+    (buf + offset + 2).unsafe_write(UInt8((v >> 16) & 0xFF))
+    (buf + offset + 3).unsafe_write(UInt8((v >> 24) & 0xFF))
 
 
 @always_inline
@@ -443,7 +443,7 @@ def _store_u64_le(
     )
     var v = Int(value)
     for k in range(8):
-        (buf + offset + k).init_pointee_copy(UInt8((v >> (k * 8)) & 0xFF))
+        (buf + offset + k).unsafe_write(UInt8((v >> (k * 8)) & 0xFF))
 
 
 @always_inline

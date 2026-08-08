@@ -280,7 +280,7 @@ struct WorkerHandoffPool(Movable):
         self.num = num_workers
         self.queues = alloc[HandoffQueue](num_workers)
         for i in range(num_workers):
-            (self.queues + i).init_pointee_move(HandoffQueue(policy.capacity))
+            (self.queues + i).unsafe_write(HandoffQueue(policy.capacity))
         self.policy = policy^
 
     def size(self) -> Int:

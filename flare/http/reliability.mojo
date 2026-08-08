@@ -59,7 +59,7 @@ def _alloc_cell(n: Int) -> Int:
     """
     var p = alloc[Int](n)
     for i in range(n):
-        (p + i).init_pointee_copy(0)
+        (p + i).unsafe_write(0)
     return Int(p)
 
 

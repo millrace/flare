@@ -73,9 +73,9 @@ def _set_fd_recv_send_timeout(fd: Int, ms: Int):
         return
     var tv = stack_allocation[16, UInt8]()
     for i in range(16):
-        (tv + i).init_pointee_copy(0)
-    tv.bitcast[Int64]().init_pointee_copy(Int64(ms // 1000))
-    (tv + 8).bitcast[Int64]().init_pointee_copy(Int64((ms % 1000) * 1000))
+        (tv + i).unsafe_write(0)
+    tv.bitcast[Int64]().unsafe_write(Int64(ms // 1000))
+    (tv + 8).bitcast[Int64]().unsafe_write(Int64((ms % 1000) * 1000))
     _ = _setsockopt(c_int(fd), SOL_SOCKET, SO_RCVTIMEO, tv, c_uint(16))
     _ = _setsockopt(c_int(fd), SOL_SOCKET, SO_SNDTIMEO, tv, c_uint(16))
 

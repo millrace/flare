@@ -229,7 +229,7 @@ def _scheduler_free_ctxs[F: Frontend & Copyable](addrs: List[Int]):
     for i in range(len(addrs)):
         var raw = _OpaquePtr(unsafe_from_address=addrs[i])
         var typed = raw.bitcast[_WorkerCtx[F]]()
-        typed.destroy_pointee()
+        typed.unsafe_deinit_pointee()
         _scheduler_free_raw(raw)
 
 
@@ -527,7 +527,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
         # freed in ``shutdown()`` after every worker joins. Uses the
         # native Mojo allocator (see ``_scheduler_free_raw``).
         var stop_ptr = alloc[Bool](1)
-        stop_ptr.init_pointee_copy(False)
+        stop_ptr.unsafe_write(False)
         var stop_raw = stop_ptr.bitcast[UInt8]()
         var stopping_addr = Int(stop_ptr)
         s._stopping_addr = stopping_addr
@@ -617,7 +617,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
             # of this function. ``shutdown()`` destroys+frees this
             # allocation *after* joining every worker.
             var lp = alloc[TcpListener](1)
-            lp.init_pointee_move(bound^)
+            lp.unsafe_write(bound^)
             listener_ptr = lp
             s._shared_listener_addr = Int(lp)
             s._shared_listener_fd = listener_fd
@@ -655,7 +655,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                     var pwl = bind_reuseport(addr)
                     pwl._socket.set_nonblocking(True)
                     var ptr = alloc[TcpListener](1)
-                    ptr.init_pointee_move(pwl^)
+                    ptr.unsafe_write(pwl^)
                     s._per_worker_listener_addrs.append(Int(ptr))
                 except:
                     pass
@@ -685,7 +685,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
             )
             # Native Mojo allocator (see _scheduler_free_raw for why).
             var ctx_ptr = alloc[_WorkerCtx[Self.F]](1)
-            ctx_ptr.init_pointee_move(ctx^)
+            ctx_ptr.unsafe_write(ctx^)
             var arg = ctx_ptr.bitcast[UInt8]()
             var ctx_addr = Int(ctx_ptr)
 
@@ -694,7 +694,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 var th = ThreadHandle.spawn[_worker_entry[Self.F]](arg)
                 # Move the (non-Copyable) handle into the next slot
                 # of the worker array; bump the live-slot counter.
-                (s._workers_ptr + s._workers_len).init_pointee_move(th^)
+                (s._workers_ptr + s._workers_len).unsafe_write(th^)
                 s._workers_len += 1
                 s._ctx_addrs.append(ctx_addr)
                 spawned = True
@@ -709,7 +709,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                         (s._workers_ptr + j)[].join()
                     except:
                         pass
-                    (s._workers_ptr + j).destroy_pointee()
+                    (s._workers_ptr + j).unsafe_deinit_pointee()
                 _scheduler_free_raw(s._workers_ptr.bitcast[UInt8]())
                 # b2: UnsafePointer is non-nullable; C NULL from a runtime 0.
                 var null_addr = 0
@@ -721,7 +721,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 # + this one that never got claimed).
                 _scheduler_free_ctxs[Self.F](s._ctx_addrs)
                 s._ctx_addrs.clear()
-                ctx_ptr.destroy_pointee()
+                ctx_ptr.unsafe_deinit_pointee()
                 _scheduler_free_raw(ctx_ptr.bitcast[UInt8]())
                 # Free the pre-allocated per-worker stats cells.
                 for k in range(len(s._stats_addrs)):
@@ -734,7 +734,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 # if we owned one (paths that prebind per-worker
                 # listeners leave listener_ptr null).
                 if Int(listener_ptr) != 0:
-                    listener_ptr.destroy_pointee()
+                    listener_ptr.unsafe_deinit_pointee()
                     _scheduler_free_raw(listener_ptr.bitcast[UInt8]())
                 s._shared_listener_addr = 0
                 s._shared_listener_fd = -1
@@ -773,7 +773,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 (self._workers_ptr + i)[].join()
             except:
                 pass
-            (self._workers_ptr + i).destroy_pointee()
+            (self._workers_ptr + i).unsafe_deinit_pointee()
         if self._workers_len > 0:
             _scheduler_free_raw(self._workers_ptr.bitcast[UInt8]())
             var null_addr = 0
@@ -807,7 +807,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
         if self._shared_listener_addr != 0:
             var raw = _OpaquePtr(unsafe_from_address=self._shared_listener_addr)
             var typed = raw.bitcast[TcpListener]()
-            typed.destroy_pointee()
+            typed.unsafe_deinit_pointee()
             _scheduler_free_raw(raw)
             self._shared_listener_addr = 0
 
@@ -816,7 +816,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 unsafe_from_address=self._per_worker_listener_addrs[i]
             )
             var pwl_typed = pwl_raw.bitcast[TcpListener]()
-            pwl_typed.destroy_pointee()
+            pwl_typed.unsafe_deinit_pointee()
             _scheduler_free_raw(pwl_raw)
         self._per_worker_listener_addrs.clear()
 

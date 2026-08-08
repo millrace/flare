@@ -99,12 +99,12 @@ def _connect_loopback(port: UInt16) raises -> c_int:
     """
     var sa = stack_allocation[16, UInt8]()
     for i in range(16):
-        (sa + i).init_pointee_copy(UInt8(0))
+        (sa + i).unsafe_write(UInt8(0))
     var ip = stack_allocation[4, UInt8]()
-    (ip + 0).init_pointee_copy(UInt8(127))
-    (ip + 1).init_pointee_copy(UInt8(0))
-    (ip + 2).init_pointee_copy(UInt8(0))
-    (ip + 3).init_pointee_copy(UInt8(1))
+    (ip + 0).unsafe_write(UInt8(127))
+    (ip + 1).unsafe_write(UInt8(0))
+    (ip + 2).unsafe_write(UInt8(0))
+    (ip + 3).unsafe_write(UInt8(1))
     _fill_sockaddr_in(sa, port, ip)
     for _ in range(100):
         var c = _socket(AF_INET, SOCK_STREAM, c_int(0))

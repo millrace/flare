@@ -88,19 +88,19 @@ def fill_sockaddr_un(
     var path_offset: Int
     comptime if CompilationTarget.is_macos():
         # BSD: [0]=sun_len, [1]=sun_family, [2..]=sun_path
-        (buf + 0).init_pointee_copy(UInt8(Int(SOCKADDR_UN_SIZE)))  # sun_len
-        (buf + 1).init_pointee_copy(UInt8(Int(AF_UNIX)))  # sun_family
+        (buf + 0).unsafe_write(UInt8(Int(SOCKADDR_UN_SIZE)))  # sun_len
+        (buf + 1).unsafe_write(UInt8(Int(AF_UNIX)))  # sun_family
         path_offset = 2
     else:
         # Linux: sa_family_t is uint16 little-endian (AF_UNIX=1)
-        (buf + 0).init_pointee_copy(UInt8(1))
-        (buf + 1).init_pointee_copy(UInt8(0))
+        (buf + 0).unsafe_write(UInt8(1))
+        (buf + 1).unsafe_write(UInt8(0))
         path_offset = 2
 
     for i in range(path_bytes):
-        (buf + path_offset + i).init_pointee_copy(pp[i])
+        (buf + path_offset + i).unsafe_write(pp[i])
     # NUL terminator
-    (buf + path_offset + path_bytes).init_pointee_copy(UInt8(0))
+    (buf + path_offset + path_bytes).unsafe_write(UInt8(0))
 
     return c_uint(path_offset + path_bytes + 1)
 

@@ -12,13 +12,13 @@ Today's callers go through ``UnsafePointer[T].alloc(1)`` directly:
     var p = alloc[ConnHandle](1)
     if Int(p) == 0:
         raise Error("alloc failed")
-    p.init_pointee_move(ConnHandle(stream^))
+    p.unsafe_write(ConnHandle(stream^))
     var addr = Int(p)
     ...
     var ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=addr
     ).bitcast[ConnHandle]()
-    ptr.destroy_pointee()
+    ptr.unsafe_deinit_pointee()
     ptr.free()
 
 With ``Pool[T]``, the same flow reads:
@@ -95,7 +95,7 @@ struct Pool[T: Deinitable & Movable]:
 
         comptime if size_of[Self.T]() > 0:
             var p = alloc[Self.T](1)
-            p.init_pointee_move(value^)
+            p.unsafe_write(value^)
             return Int(p)
         else:
             # ZST path: alloc a single placeholder byte and
@@ -103,7 +103,7 @@ struct Pool[T: Deinitable & Movable]:
             # through the bitcast pointer; reads / dereferences
             # also touch 0 bytes.
             var raw = alloc[UInt8](1)
-            raw.bitcast[Self.T]().init_pointee_move(value^)
+            raw.bitcast[Self.T]().unsafe_write(value^)
             return Int(raw)
 
     @staticmethod
@@ -128,7 +128,7 @@ struct Pool[T: Deinitable & Movable]:
             var ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=addr
             ).bitcast[Self.T]()
-            ptr.destroy_pointee()
+            ptr.unsafe_deinit_pointee()
             ptr.free()
         else:
             # ZST path: free as UInt8 since that's what was
@@ -138,7 +138,7 @@ struct Pool[T: Deinitable & Movable]:
             var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=addr
             )
-            raw.bitcast[Self.T]().destroy_pointee()
+            raw.bitcast[Self.T]().unsafe_deinit_pointee()
             raw.free()
 
     @staticmethod

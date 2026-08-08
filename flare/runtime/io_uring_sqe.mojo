@@ -213,7 +213,7 @@ struct IoUringSqe(Movable):
         """Allocate a 64-byte SQE buffer, zero-initialised."""
         var raw = alloc[UInt8](IO_URING_SQE_BYTES)
         for i in range(IO_URING_SQE_BYTES):
-            (raw + i).init_pointee_copy(UInt8(0))
+            (raw + i).unsafe_write(UInt8(0))
         self._buf = UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=Int(raw)
         )
@@ -322,7 +322,7 @@ def encode_sqe_zero(buf: UnsafePointer[UInt8, MutUntrackedOrigin]) -> None:
         Int(buf) != 0, "encode_sqe_zero: buf must be non-NULL"
     )
     for i in range(IO_URING_SQE_BYTES):
-        (buf + i).init_pointee_copy(UInt8(0))
+        (buf + i).unsafe_write(UInt8(0))
 
 
 @always_inline

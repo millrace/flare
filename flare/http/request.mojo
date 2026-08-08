@@ -139,7 +139,7 @@ struct Request(Movable):
     def __del__(deinit self):
         if self._params:
             var p = self._params.value()
-            p.destroy_pointee()
+            p.unsafe_deinit_pointee()
             p.free()
 
     @staticmethod
@@ -225,7 +225,7 @@ struct Request(Movable):
             # MLIR legalization time when this module is pulled into a
             # fuzz-environment compile (mozz harness).
             var ptr = alloc[Dict[String, String]](1)
-            ptr.init_pointee_move(Dict[String, String]())
+            ptr.unsafe_write(Dict[String, String]())
             self._params = ptr
         return self._params.value()[]
 

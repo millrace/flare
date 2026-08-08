@@ -292,7 +292,7 @@ def _block_thunk[
 
     try:
         var result = task.work()
-        result_ptr.init_pointee_move(result^)
+        result_ptr.unsafe_write(result^)
         success_ptr[0] = UInt8(1)
         err_len_ptr[0] = 0
     except e:
@@ -404,7 +404,7 @@ def block_in_pool[
     success_ptr[0] = UInt8(0)
 
     var task_ptr = alloc[_Task[T]](1)
-    task_ptr.init_pointee_move(
+    task_ptr.unsafe_write(
         _Task[T](
             work=work,
             result_addr=Int(result_ptr),

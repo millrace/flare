@@ -121,19 +121,19 @@ struct UdpBatchUnsupported(Copyable, Movable, Writable):
 @always_inline
 def _poke_u64(p: UnsafePointer[UInt8, MutUntrackedOrigin], off: Int, v: UInt64):
     for k in range(8):
-        (p + off + k).init_pointee_copy(UInt8(Int((v >> UInt64(k * 8)) & 0xFF)))
+        (p + off + k).unsafe_write(UInt8(Int((v >> UInt64(k * 8)) & 0xFF)))
 
 
 @always_inline
 def _poke_u32(p: UnsafePointer[UInt8, MutUntrackedOrigin], off: Int, v: UInt32):
     for k in range(4):
-        (p + off + k).init_pointee_copy(UInt8(Int((v >> UInt32(k * 8)) & 0xFF)))
+        (p + off + k).unsafe_write(UInt8(Int((v >> UInt32(k * 8)) & 0xFF)))
 
 
 @always_inline
 def _poke_u16(p: UnsafePointer[UInt8, MutUntrackedOrigin], off: Int, v: UInt16):
-    (p + off).init_pointee_copy(UInt8(Int(v & 0xFF)))
-    (p + off + 1).init_pointee_copy(UInt8(Int((v >> 8) & 0xFF)))
+    (p + off).unsafe_write(UInt8(Int(v & 0xFF)))
+    (p + off + 1).unsafe_write(UInt8(Int((v >> 8) & 0xFF)))
 
 
 @always_inline
@@ -280,7 +280,7 @@ struct BatchReceiver(Movable):
 def _alloc_zeroed(n: Int) -> UnsafePointer[UInt8, MutUntrackedOrigin]:
     var raw = alloc[UInt8](n)
     for i in range(n):
-        (raw + i).init_pointee_copy(UInt8(0))
+        (raw + i).unsafe_write(UInt8(0))
     return UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=Int(raw)
     )

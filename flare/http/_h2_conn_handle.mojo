@@ -727,7 +727,7 @@ struct Http2ConnHandle(Movable):
                 var p = UnsafePointer[Int, MutUntrackedOrigin](
                     unsafe_from_address=addr
                 )
-                p.destroy_pointee()
+                p.unsafe_deinit_pointee()
                 p.free()
         for entry in self._stream_out.items():
             var addr = entry.value
@@ -744,7 +744,7 @@ struct Http2ConnHandle(Movable):
         if sid in self.stream_cells:
             return self.stream_cells[sid]
         var p = alloc[Int](1)
-        p.init_pointee_copy(CancelReason.NONE)
+        p.unsafe_write(CancelReason.NONE)
         var addr = Int(p)
         self.stream_cells[sid] = addr
         return addr
@@ -759,7 +759,7 @@ struct Http2ConnHandle(Movable):
             var p = UnsafePointer[Int, MutUntrackedOrigin](
                 unsafe_from_address=addr
             )
-            p.destroy_pointee()
+            p.unsafe_deinit_pointee()
             p.free()
 
     def _flip_all_stream_cells(mut self, reason: Int) raises -> None:

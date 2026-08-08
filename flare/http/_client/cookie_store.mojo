@@ -46,7 +46,7 @@ struct CookieStore(Copyable, Movable):
     def new() -> CookieStore:
         """Allocate a fresh, empty jar."""
         var p = alloc[_CookieState](1)
-        p.init_pointee_move(_CookieState(CookieJar()))
+        p.unsafe_write(_CookieState(CookieJar()))
         return CookieStore(Int(p))
 
     @always_inline
@@ -99,6 +99,6 @@ struct CookieStore(Copyable, Movable):
         if self._addr == 0:
             return
         var sp = self._state()
-        sp.destroy_pointee()
+        sp.unsafe_deinit_pointee()
         sp.free()
         self._addr = 0

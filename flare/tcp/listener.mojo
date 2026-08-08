@@ -183,9 +183,9 @@ struct TcpListener(Movable):
         """
         var peer_buf = stack_allocation[Int(SOCKADDR_IN6_SIZE), UInt8]()
         for i in range(Int(SOCKADDR_IN6_SIZE)):
-            (peer_buf + i).init_pointee_copy(0)
+            (peer_buf + i).unsafe_write(0)
         var peer_len = stack_allocation[1, c_uint]()
-        peer_len.init_pointee_copy(SOCKADDR_IN6_SIZE)
+        peer_len.unsafe_write(SOCKADDR_IN6_SIZE)
 
         var client_fd = _accept(self._socket.fd, peer_buf, peer_len)
         if client_fd < 0:
@@ -264,9 +264,9 @@ def accept_fd(listener_fd: c_int) raises -> TcpStream:
     """
     var peer_buf = stack_allocation[Int(SOCKADDR_IN6_SIZE), UInt8]()
     for i in range(Int(SOCKADDR_IN6_SIZE)):
-        (peer_buf + i).init_pointee_copy(0)
+        (peer_buf + i).unsafe_write(0)
     var peer_len = stack_allocation[1, c_uint]()
-    peer_len.init_pointee_copy(SOCKADDR_IN6_SIZE)
+    peer_len.unsafe_write(SOCKADDR_IN6_SIZE)
 
     var client_fd = _accept(listener_fd, peer_buf, peer_len)
     if client_fd < 0:

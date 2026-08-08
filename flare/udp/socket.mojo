@@ -271,9 +271,9 @@ struct UdpSocket(Movable):
         """
         var peer_buf = stack_allocation[Int(SOCKADDR_IN_SIZE), UInt8]()
         for i in range(Int(SOCKADDR_IN_SIZE)):
-            (peer_buf + i).init_pointee_copy(0)
+            (peer_buf + i).unsafe_write(0)
         var peer_len = stack_allocation[1, c_uint]()
-        peer_len.init_pointee_copy(SOCKADDR_IN_SIZE)
+        peer_len.unsafe_write(SOCKADDR_IN_SIZE)
 
         var got = _recvfrom(
             self._socket.fd,
@@ -322,9 +322,9 @@ struct UdpSocket(Movable):
         """
         var peer_buf = stack_allocation[Int(SOCKADDR_IN_SIZE), UInt8]()
         for i in range(Int(SOCKADDR_IN_SIZE)):
-            (peer_buf + i).init_pointee_copy(0)
+            (peer_buf + i).unsafe_write(0)
         var peer_len = stack_allocation[1, c_uint]()
-        peer_len.init_pointee_copy(SOCKADDR_IN_SIZE)
+        peer_len.unsafe_write(SOCKADDR_IN_SIZE)
 
         var got = _recvfrom(
             self._socket.fd,

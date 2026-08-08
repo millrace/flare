@@ -138,7 +138,7 @@ struct IoVecBuf(Movable):
         # Zero-init so an unset cell behaves as { NULL, 0 } —
         # writev(2) treats { ptr, 0 } as "skip this cell".
         for i in range(bytes):
-            (raw + i).init_pointee_copy(UInt8(0))
+            (raw + i).unsafe_write(UInt8(0))
         self._buf = UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=Int(raw)
         )
@@ -208,13 +208,13 @@ struct IoVecBuf(Movable):
         var p = self._buf + off
         var ptr_u64 = UInt64(ptr)
         for k in range(8):
-            (p + k).init_pointee_copy(
+            (p + k).unsafe_write(
                 UInt8(Int((ptr_u64 >> UInt64(k * 8)) & UInt64(0xFF)))
             )
         var len_u64 = UInt64(n)
         var q = self._buf + off + 8
         for k in range(8):
-            (q + k).init_pointee_copy(
+            (q + k).unsafe_write(
                 UInt8(Int((len_u64 >> UInt64(k * 8)) & UInt64(0xFF)))
             )
 

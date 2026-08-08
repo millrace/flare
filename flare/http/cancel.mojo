@@ -133,7 +133,7 @@ struct CancelCell(Movable):
     def __init__(out self) raises:
         """Allocate a fresh cell initialised to ``NONE``."""
         var p = alloc[Int](1)
-        p.init_pointee_copy(CancelReason.NONE)
+        p.unsafe_write(CancelReason.NONE)
         self._addr = Int(p)
 
     def __del__(deinit self):
@@ -141,7 +141,7 @@ struct CancelCell(Movable):
             var p = UnsafePointer[Int, MutUntrackedOrigin](
                 unsafe_from_address=self._addr
             )
-            p.destroy_pointee()
+            p.unsafe_deinit_pointee()
             p.free()
 
     def flip(mut self, reason: Int) -> None:

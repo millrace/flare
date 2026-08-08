@@ -525,7 +525,7 @@ def _alloc_recv_buffer_pool() raises -> Int:
     # slot (e.g. dump-on-error) shouldn't trip on uninitialised
     # memory.
     for i in range(size):
-        (raw + i).init_pointee_copy(UInt8(0))
+        (raw + i).unsafe_write(UInt8(0))
     return Int(raw)
 
 

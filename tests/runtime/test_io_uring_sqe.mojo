@@ -128,7 +128,7 @@ def test_encode_sqe_zero_clears_dirty_buffer() raises:
     """``encode_sqe_zero`` rewrites every byte to 0."""
     var raw = alloc[UInt8](IO_URING_SQE_BYTES)
     for i in range(IO_URING_SQE_BYTES):
-        (raw + i).init_pointee_copy(UInt8(0xAB))
+        (raw + i).unsafe_write(UInt8(0xAB))
     var p = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=Int(raw)
     )
@@ -340,19 +340,17 @@ def test_decode_cqe_at_round_trips_through_byte_buffer() raises:
     # user_data = 0x1122334455667788 (LE).
     var ud = UInt64(0x1122334455667788)
     for k in range(8):
-        (p + k).init_pointee_copy(
-            UInt8(Int((ud >> UInt64(k * 8)) & UInt64(0xFF)))
-        )
+        (p + k).unsafe_write(UInt8(Int((ud >> UInt64(k * 8)) & UInt64(0xFF))))
     # res = 1500 (LE 32-bit).
     var res_v = UInt32(1500)
     for k in range(4):
-        (p + 8 + k).init_pointee_copy(
+        (p + 8 + k).unsafe_write(
             UInt8(Int((res_v >> UInt32(k * 8)) & UInt32(0xFF)))
         )
     # flags = IORING_CQE_F_MORE | IORING_CQE_F_SOCK_NONEMPTY (LE 32-bit).
     var fl = IORING_CQE_F_MORE | IORING_CQE_F_SOCK_NONEMPTY
     for k in range(4):
-        (p + 12 + k).init_pointee_copy(
+        (p + 12 + k).unsafe_write(
             UInt8(Int((fl >> UInt32(k * 8)) & UInt32(0xFF)))
         )
     var cqe = decode_cqe_at(p)
@@ -371,11 +369,11 @@ def test_decode_cqe_at_sign_extends_negative_res() raises:
         unsafe_from_address=Int(raw)
     )
     for i in range(IO_URING_CQE_BYTES):
-        (p + i).init_pointee_copy(UInt8(0))
+        (p + i).unsafe_write(UInt8(0))
     # res = -125 (two's complement 32-bit = 0xFFFFFF83).
     var res_raw: UInt32 = UInt32(0xFFFFFF83)
     for k in range(4):
-        (p + 8 + k).init_pointee_copy(
+        (p + 8 + k).unsafe_write(
             UInt8(Int((res_raw >> UInt32(k * 8)) & UInt32(0xFF)))
         )
     var cqe = decode_cqe_at(p)

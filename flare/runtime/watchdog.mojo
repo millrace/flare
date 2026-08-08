@@ -153,7 +153,7 @@ struct DeadlineWatchdog(Movable):
         """Allocate the control block and spawn the watchdog thread."""
         var raw = alloc[Int64](_BLOCK_LEN)
         for i in range(_BLOCK_LEN):
-            (raw + i).init_pointee_copy(Int64(0))
+            (raw + i).unsafe_write(Int64(0))
         self._block = Int(raw)
         _atomic_store(
             self._block, _IDX_POLL_MS, Int64(poll_ms if poll_ms > 0 else 1)
