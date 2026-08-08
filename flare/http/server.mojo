@@ -808,37 +808,61 @@ struct HttpServer(Movable):
                 self._tls_ctx_addr(),
             )
 
-    def serve_tls[
-        H: Handler
-    ](mut self, var handler: H, num_workers: Int = 1) raises:
-        """Serve HTTPS with any ``Handler``.
+    def serve_tls[H: Handler](mut self, var handler: H) raises:
+        """Serve HTTPS on one worker with any ``Handler``.
 
         Requires the server to have been constructed via :meth:`bind_tls`.
         Equivalent to calling :meth:`serve` on a TLS-bound server: the
         connection is handshaken on the reactor and then dispatched by
         ALPN to the HTTP/1.1 or HTTP/2 handle, so many connections are in
-        flight at once and ``num_workers`` scales across cores. Streaming
-        responses compose -- a ``body_stream`` handler is emitted with
-        ``Transfer-Encoding: chunked`` framing written as ciphertext.
+        flight at once. Streaming responses compose -- a ``body_stream``
+        handler is emitted with ``Transfer-Encoding: chunked`` framing
+        written as ciphertext.
 
         Kept as a named entry point because "serve HTTPS" reads better at
         a call site than "serve, having bound TLS earlier", but there is
-        only one TLS code path now.
+        only one TLS code path now. Mirrors :meth:`serve`'s overload
+        split: this arity accepts ``Handler``-only types, the
+        ``num_workers`` arity additionally requires ``Copyable`` because
+        each worker gets its own copy.
 
         Args:
             handler: The request handler (ownership transferred).
-            num_workers: Reactor workers; 1 (default) stays single-threaded.
 
         Raises:
             Error: If no TLS context is bound (use :meth:`bind_tls`).
             NetworkError: On fatal listener errors.
         """
+        self._require_tls_ctx()
+        self.serve[H](handler^)
+
+    def serve_tls[
+        H: Handler & Copyable
+    ](mut self, var handler: H, num_workers: Int) raises:
+        """Serve HTTPS across ``num_workers`` reactor workers.
+
+        The multi-worker twin of :meth:`serve_tls`; each worker gets its
+        own ``H.copy()`` and they share one ``SSL_CTX``.
+
+        Args:
+            handler: The request handler (ownership transferred).
+            num_workers: Reactor workers.
+
+        Raises:
+            Error: If no TLS context is bound (use :meth:`bind_tls`).
+            NetworkError: On fatal listener errors.
+        """
+        self._require_tls_ctx()
+        self.serve[H](handler^, num_workers)
+
+    @always_inline
+    def _require_tls_ctx(self) raises:
+        """Raise unless :meth:`bind_tls` supplied a server context."""
         if not self._tls_ctx:
             raise Error(
                 "HttpServer.serve_tls: no TLS context bound; construct the"
                 " server via HttpServer.bind_tls(addr, cert, key)"
             )
-        self.serve[H](handler^, num_workers)
 
     def serve[
         H: Handler, W: WsH2Handler

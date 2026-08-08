@@ -100,16 +100,24 @@ struct Http2Config(Copyable, Defaultable, Movable):
     reactor-attached driver.
 
     The ``allow_huffman_decode`` flag gates HPACK Huffman decoding
-    on the inbound HEADERS path. The default H=0 encoder + raw-
-    literal decoder is CRIME-class-side-channel-free by construction;
-    the scalar Huffman decoder is wired through ``HpackDecoder``
-    when this flag is ``True``. Default ``False`` keeps the
-    legacy wire format byte-identical for upgrading peers.
+    on the inbound HEADERS path. **Default ``True``, and it should
+    stay that way.** RFC 7541 sec 5.2 lets the *encoder* choose
+    whether a literal is Huffman-coded and signals it with the H bit;
+    a decoder does not get the same choice. curl, every browser, and
+    h2load Huffman-code by default, so a server that rejects H=1
+    cannot talk to them -- it answers the client's first HEADERS
+    frame by tearing down the connection. This defaulted to ``False``
+    through v0.9, which is why flare's h2 interop was only ever
+    exercised against flare's own client (which emits H=0).
 
-    The ``allow_huffman_encode`` flag mirrors the decoder side: when
-    ``True`` the server's outbound HEADERS encoder picks the shorter
-    of raw vs Huffman per literal. Default ``False`` keeps the
-    legacy H=0-only emit byte-identical.
+    Set it to ``False`` only to reproduce the legacy raw-literal
+    wire for a specific peer.
+
+    The ``allow_huffman_encode`` flag is the emit-side twin and
+    legitimately defaults to ``False``: what a server *sends* is its
+    own choice, H=0 output is CRIME-class-side-channel-free by
+    construction, and every compliant client accepts it. Set it
+    ``True`` to pick the shorter of raw vs Huffman per literal.
 
     Example:
 
@@ -122,7 +130,7 @@ struct Http2Config(Copyable, Defaultable, Movable):
         max_frame_size=32768,
         max_header_list_size=16384,
         header_table_size=8192,
-        allow_huffman_decode=False,
+        allow_huffman_decode=True,
         allow_huffman_encode=False,
     )
     var conn = Http2Connection.with_config(cfg)
@@ -177,16 +185,15 @@ struct Http2Config(Copyable, Defaultable, Movable):
         """Default to the production-shape SETTINGS pinned in
         the design doc: 100 concurrent streams, 64 KiB-1 initial
         window, 16 KiB max frame, 8 KiB max header list, 4 KiB
-        HPACK dynamic table, Huffman decode/encode both disabled
-        (legacy wire-compatible default), Extended CONNECT
-        disabled.
+        HPACK dynamic table, Huffman decode **on** and encode off,
+        Extended CONNECT disabled.
         """
         self.max_concurrent_streams = _H2_DEFAULT_MAX_CONCURRENT_STREAMS
         self.initial_window_size = _H2_DEFAULT_INITIAL_WINDOW_SIZE
         self.max_frame_size = _H2_DEFAULT_MAX_FRAME_SIZE
         self.max_header_list_size = _H2_DEFAULT_MAX_HEADER_LIST_SIZE
         self.header_table_size = _H2_DEFAULT_HEADER_TABLE_SIZE
-        self.allow_huffman_decode = False
+        self.allow_huffman_decode = True
         self.allow_huffman_encode = False
         self.enable_connect_protocol = False
 

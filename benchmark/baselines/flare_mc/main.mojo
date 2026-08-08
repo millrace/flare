@@ -125,6 +125,29 @@ def main() raises:
         " pin=",
         pin,
     )
+    # FLARE_BENCH_TLS=1 terminates TLS in-process across all workers,
+    # which is what the operational gate's "TLS + multi-worker +
+    # streaming" soak needs. Certs from ``pixi run bench-tls-setup``.
+    if getenv("FLARE_BENCH_TLS", "0") == "1":
+        var alpn = List[String]()
+        alpn.append("h2")
+        alpn.append("http/1.1")
+        var tls_srv = HttpServer.bind_tls(
+            SocketAddr.localhost(UInt16(port)),
+            cert_file=getenv(
+                "FLARE_BENCH_CERT", "build/tls-bench-certs/server.pem"
+            ),
+            key_file=getenv(
+                "FLARE_BENCH_KEY", "build/tls-bench-certs/server.key"
+            ),
+            alpn=alpn^,
+            config=materialize[BENCH_CONFIG](),
+        )
+        print("flare multicore listening (TLS) on 127.0.0.1:", port)
+        var th = BenchHandler()
+        tls_srv.serve_tls(th^, num_workers=workers)
+        return
+
     var srv = HttpServer.bind(
         SocketAddr.localhost(UInt16(port)), materialize[BENCH_CONFIG]()
     )

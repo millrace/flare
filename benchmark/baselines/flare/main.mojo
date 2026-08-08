@@ -111,7 +111,31 @@ def main() raises:
     # 413 it and the comparison against actix / hyper / axum (which
     # impose no such cap) would measure the wrong thing.
     cfg.max_body_size = 32 * 1024 * 1024
+
+    # FLARE_BENCH_TLS=1 terminates TLS in-process instead of serving
+    # cleartext, so the tls_* configs and the TLS soak have a server to
+    # point at. Certs come from ``pixi run bench-tls-setup``; wrk does
+    # not verify them, which is why self-signed is fine here.
+    var h = BenchHandler()
+    if getenv("FLARE_BENCH_TLS", "0") == "1":
+        var alpn = List[String]()
+        alpn.append("h2")
+        alpn.append("http/1.1")
+        var tls_srv = HttpServer.bind_tls(
+            SocketAddr.localhost(UInt16(port)),
+            cert_file=getenv(
+                "FLARE_BENCH_CERT", "build/tls-bench-certs/server.pem"
+            ),
+            key_file=getenv(
+                "FLARE_BENCH_KEY", "build/tls-bench-certs/server.key"
+            ),
+            alpn=alpn^,
+            config=cfg^,
+        )
+        print("flare listening (TLS) on 127.0.0.1:", port)
+        tls_srv.serve_tls(h^)
+        return
+
     print("flare listening on 127.0.0.1:", port)
     var srv = HttpServer.bind(SocketAddr.localhost(UInt16(port)), cfg^)
-    var h = BenchHandler()
     srv.serve(h^)

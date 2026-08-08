@@ -323,6 +323,49 @@ def test_https_multi_worker() raises:
     assert_equal(ok_count, 4)
 
 
+def test_https_alpn_negotiates_h2() raises:
+    """The server actually selects ``h2`` when the client offers it.
+
+    Split out from the round-trip test below deliberately. Asserting
+    only "status 200" cannot tell h2 from an h1 fallback, and an
+    earlier version of this file did exactly that -- it passed against
+    a server that could not serve h2 at all. This one fails if ALPN
+    lands anywhere other than h2.
+    """
+    var srv = HttpServer.bind_tls(
+        SocketAddr(IpAddr.parse("127.0.0.1"), UInt16(0)),
+        _SERVER_CRT,
+        _SERVER_KEY,
+        alpn=_alpn_h2_first(),
+    )
+    var port = UInt16(srv.local_addr().port)
+
+    var pid = fork()
+    if pid == 0:
+        try:
+            srv.serve(_hello)
+        except:
+            pass
+        exit()
+    usleep(300000)
+
+    var negotiated = String("")
+    try:
+        var cfg = TlsConfig(ca_bundle=_CA_CRT)
+        cfg.alpn = List[String]()
+        cfg.alpn.append("h2")
+        cfg.alpn.append("http/1.1")
+        var s = TlsStream.connect("localhost", port, cfg^)
+        negotiated = s.alpn_selected()
+        s.close()
+    except:
+        pass
+
+    _ = kill(pid, SIGKILL)
+    waitpid(pid)
+    assert_equal(negotiated, "h2")
+
+
 def test_https_alpn_h2_is_served() raises:
     """ALPN ``h2`` over TLS reaches the handler.
 

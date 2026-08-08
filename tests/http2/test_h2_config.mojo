@@ -49,7 +49,12 @@ def test_default_config_matches_rfc_and_v0_6_shape() raises:
     assert_equal(cfg.max_frame_size, 16384)
     assert_equal(cfg.max_header_list_size, 8192)
     assert_equal(cfg.header_table_size, 4096)
-    assert_false(cfg.allow_huffman_decode)
+    # Huffman *decode* defaults on: RFC 7541 sec 5.2 makes Huffman the
+    # encoder's choice, signalled by the H bit, so a decoder that
+    # rejects H=1 cannot talk to curl, browsers or h2load. Encode stays
+    # off -- what we emit is genuinely our choice.
+    assert_true(cfg.allow_huffman_decode)
+    assert_false(cfg.allow_huffman_encode)
 
 
 def test_default_config_validates() raises:

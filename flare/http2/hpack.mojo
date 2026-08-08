@@ -9,13 +9,18 @@ This is a complete-but-pragmatic decoder + encoder:
   :func:`encode_integer`.
 - String literal codec (RFC 7541 §5.2) with optional Huffman.
   ``HpackDecoder`` accepts ``H=1`` literals iff
-  ``allow_huffman`` is set (default ``False``: reject). The
-  decoder uses the canonical RFC 7541 Appendix B codec from
-  ``flare.http.hpack_huffman``. ``HpackEncoder`` emits raw
-  ``H=0`` literals by default; flipping ``allow_huffman`` makes
-  it pick the shorter of raw vs Huffman per literal. The
-  defaults match the legacy wire behaviour exactly so existing
-  peers keep interoperating.
+  ``allow_huffman`` is set. The decoder uses the canonical
+  RFC 7541 Appendix B codec from ``flare.http.hpack_huffman``.
+  ``HpackEncoder`` emits raw ``H=0`` literals by default;
+  flipping ``allow_huffman`` makes it pick the shorter of raw vs
+  Huffman per literal.
+
+  This struct defaults to ``False`` because it is a low-level
+  primitive built by hand. The server-facing knob,
+  ``Http2Config.allow_huffman_decode``, defaults to **True**, and
+  that is the one that matters for interop: RFC 7541 sec 5.2
+  makes Huffman the *encoder's* choice, so a decoder that rejects
+  ``H=1`` cannot talk to curl, browsers, or h2load.
 - ``Indexed Header Field`` (§6.1), ``Literal Header Field with
   Incremental Indexing`` (§6.2.1), ``Literal Header Field without
   Indexing`` (§6.2.2), ``Literal Header Field Never Indexed``
