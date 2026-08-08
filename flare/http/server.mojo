@@ -808,53 +808,37 @@ struct HttpServer(Movable):
                 self._tls_ctx_addr(),
             )
 
-    def serve_tls[H: Handler](mut self, var handler: H) raises:
-        """Serve HTTPS (TLS-terminated HTTP/1.1) with any ``Handler``.
+    def serve_tls[
+        H: Handler
+    ](mut self, var handler: H, num_workers: Int = 1) raises:
+        """Serve HTTPS with any ``Handler``.
 
-        Requires the server to have been constructed via
-        :meth:`bind_tls`. Runs a synchronous accept loop; each accepted
-        connection is driven through a non-blocking
-        :class:`flare.http._reactor.tls_conn_handle.TlsConnHandle`
-        (handshake on ``poll``-blocked edges, then an HTTP/1.1
-        request/response keep-alive loop over ``SSL_read`` / ``SSL_write``
-        reusing the same parse + serialise helpers as the plaintext
-        path). Streaming responses compose: a ``body_stream`` handler is
-        emitted with ``Transfer-Encoding: chunked`` framing written as
-        ciphertext.
+        Requires the server to have been constructed via :meth:`bind_tls`.
+        Equivalent to calling :meth:`serve` on a TLS-bound server: the
+        connection is handshaken on the reactor and then dispatched by
+        ALPN to the HTTP/1.1 or HTTP/2 handle, so many connections are in
+        flight at once and ``num_workers`` scales across cores. Streaming
+        responses compose -- a ``body_stream`` handler is emitted with
+        ``Transfer-Encoding: chunked`` framing written as ciphertext.
 
-        This path handles one connection at a time on the calling thread
-        (matching the original blocking ``HttpServer`` semantics);
-        reactor-multiplexed TLS + h2-over-TLS reuse this same
-        ``TlsConnHandle`` state machine and are the follow-up.
+        Kept as a named entry point because "serve HTTPS" reads better at
+        a call site than "serve, having bound TLS earlier", but there is
+        only one TLS code path now.
 
         Args:
             handler: The request handler (ownership transferred).
+            num_workers: Reactor workers; 1 (default) stays single-threaded.
 
         Raises:
             Error: If no TLS context is bound (use :meth:`bind_tls`).
             NetworkError: On fatal listener errors.
         """
-        # Function-scope imports break the server<->tls_server module
-        # cycle: tls_server imports parsing/serialisation helpers from
-        # this module, so importing it at module scope would be circular.
-        from .tls_server import handle_tls_h1_connection
-        from ._reactor.tls_conn_handle import TlsConnHandle
-
         if not self._tls_ctx:
             raise Error(
                 "HttpServer.serve_tls: no TLS context bound; construct the"
                 " server via HttpServer.bind_tls(addr, cert, key)"
             )
-        self._stopping = False
-        while not self._stopping:
-            var stream = self._listener.accept()
-            var conn = TlsConnHandle(stream^, self._tls_ctx.value())
-            try:
-                handle_tls_h1_connection(conn, self.config, handler)
-            except:
-                pass
-            # Free the SSL + close the fd promptly before the next accept.
-            _ = conn^
+        self.serve[H](handler^, num_workers)
 
     def serve[
         H: Handler, W: WsH2Handler

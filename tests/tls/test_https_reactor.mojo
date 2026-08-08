@@ -331,6 +331,19 @@ def test_https_alpn_h2_is_served() raises:
     assert_equal(body, "hello https")
 
 
+def test_bind_tls_constructs() raises:
+    """``bind_tls`` loads the cert/key and binds without serving."""
+    var srv = HttpServer.bind_tls(
+        SocketAddr(IpAddr.parse("127.0.0.1"), UInt16(0)),
+        _SERVER_CRT,
+        _SERVER_KEY,
+        alpn=_alpn_h1(),
+    )
+    var addrs = srv.local_addrs()
+    assert_true(len(addrs) == 1, "one bound address expected")
+    assert_true(addrs[0].port > 0, "ephemeral port must be assigned")
+
+
 def main() raises:
     print("=" * 60)
     print("test_https_reactor.mojo — HTTPS on the unified reactor")

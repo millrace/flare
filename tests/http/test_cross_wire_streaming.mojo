@@ -5,8 +5,8 @@ every server wire and reassembles to the identical application body:
 
   - h1 / https: ``Transfer-Encoding: chunked`` framing
     (``frame_chunk_into`` + ``frame_terminator_into``), which the TLS
-    path (:func:`flare.http.tls_server.handle_tls_h1_connection`) writes
-    verbatim through ``SSL_write``.
+    path writes verbatim through ``SSL_write`` once the reactor's
+    ``KIND_TLS`` handshake has promoted the connection to h1.
   - h2: one DATA frame per chunk (RFC 9113 §6.1), ``END_STREAM`` on the
     last.
   - h3: one DATA frame per chunk (RFC 9114 §7.2.1), then FIN.
