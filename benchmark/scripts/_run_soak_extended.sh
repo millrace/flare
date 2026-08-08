@@ -3,7 +3,7 @@
 #
 # v0.5.0 / S3.7 — extended tier of the soak harness.
 #
-# Runs all three workloads back-to-back at 300 s/workload (~15 min
+# Runs all four workloads back-to-back at 300 s/workload (~15 min
 # total). Stronger RSS-trend signal than the 60 s smoke; cheap
 # enough to run on demand before pushing larger changes, but still
 # below the 24 h release-gate threshold.
@@ -31,6 +31,8 @@ run_workload() {
 run_workload slow_clients
 run_workload churn
 run_workload mixed
+# v0.10 operational gate: TLS + multi-worker + streaming.
+run_workload streaming_tls
 
 echo ""
 echo "════════ Soak extended summary (300s/workload) ════════"

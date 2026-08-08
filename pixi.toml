@@ -204,6 +204,7 @@ bench-tls-setup           = "bash benchmark/scripts/_make_self_signed.sh"
 bench-soak-slow-clients   = "bash benchmark/scripts/_run_soak.sh --workload=slow_clients --duration-secs=${SOAK_DURATION_SECS:-60}"
 bench-soak-churn          = "bash benchmark/scripts/_run_soak.sh --workload=churn        --duration-secs=${SOAK_DURATION_SECS:-60}"
 bench-soak-mixed          = "bash benchmark/scripts/_run_soak.sh --workload=mixed        --duration-secs=${SOAK_DURATION_SECS:-60}"
+bench-soak-streaming-tls  = "bash benchmark/scripts/_run_soak.sh --workload=streaming_tls --duration-secs=${SOAK_DURATION_SECS:-60}"  # v0.10 operational gate: TLS + multi-worker + streaming
 bench-soak-smoke          = "bash benchmark/scripts/_run_soak_smoke.sh"
 bench-soak-extended       = "bash benchmark/scripts/_run_soak_extended.sh"
 

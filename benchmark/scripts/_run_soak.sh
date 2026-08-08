@@ -45,8 +45,8 @@ for arg in "$@"; do
 done
 
 case "$WORKLOAD" in
-    slow_clients|churn|mixed) ;;
-    *) echo "[_run_soak] --workload must be one of: slow_clients churn mixed" >&2; exit 2 ;;
+    slow_clients|churn|mixed|streaming_tls) ;;
+    *) echo "[_run_soak] --workload must be one of: slow_clients churn mixed streaming_tls" >&2; exit 2 ;;
 esac
 
 if [ -z "$DURATION_SECS" ] || ! [[ "$DURATION_SECS" =~ ^[0-9]+$ ]]; then
@@ -74,7 +74,26 @@ case "$WORKLOAD" in
         DEFAULT_THREADS=2
         DEFAULT_CONNS=64
         ;;
+    streaming_tls)
+        # The operational gate for v0.10: TLS terminated in-process,
+        # multiple workers, and a chunked streaming response -- the
+        # three things the release claims and that no other soak
+        # workload touches. Runs against the multicore baseline
+        # because "multi-worker" is part of the claim being soaked.
+        LUA="$SCRIPTS_DIR/wrk_soak_streaming.lua"
+        DEFAULT_THREADS=4
+        DEFAULT_CONNS=128
+        BASELINE_DIR="$ROOT/benchmark/baselines/flare_mc"
+        SOAK_SCHEME="https"
+        SOAK_PATH="/stream"
+        export FLARE_BENCH_TLS=1
+        export FLARE_BENCH_WORKERS="${FLARE_BENCH_WORKERS:-4}"
+        ;;
 esac
+
+# Cleartext plaintext unless the workload said otherwise.
+SOAK_SCHEME="${SOAK_SCHEME:-http}"
+SOAK_PATH="${SOAK_PATH:-/plaintext}"
 
 WRK_THREADS="${SOAK_WRK_THREADS:-$DEFAULT_THREADS}"
 WRK_CONNS="${SOAK_WRK_CONNS:-$DEFAULT_CONNS}"
@@ -154,7 +173,7 @@ OBSERVER_PID=$!
 sleep 1
 
 # ── Run wrk ─────────────────────────────────────────────────────────────────
-URL="http://127.0.0.1:$PORT/plaintext"
+URL="$SOAK_SCHEME://127.0.0.1:$PORT$SOAK_PATH"
 echo "[soak/$WORKLOAD] wrk -t$WRK_THREADS -c$WRK_CONNS -d${DURATION_SECS}s -s $LUA $URL"
 wrk -t"$WRK_THREADS" -c"$WRK_CONNS" -d"${DURATION_SECS}s" \
     --latency \
@@ -374,6 +393,12 @@ if workload == "slow_clients":
 elif workload == "churn":
     workload_pass = gates["server_alive"] and gates["no_non_2xx"] and gates["fd_end_bounded"]
 elif workload == "mixed":
+    workload_pass = gates["server_alive"] and gates["no_non_2xx"] and gates["rss_within_2x"]
+elif workload == "streaming_tls":
+    # Same three gates as mixed. RSS is the load-bearing one here: a
+    # streaming response that fails to free its ChunkSource box, or a
+    # TLS session whose SSL is not freed on teardown, shows up as
+    # RSS drift over hours and as nothing at all in a short run.
     workload_pass = gates["server_alive"] and gates["no_non_2xx"] and gates["rss_within_2x"]
 else:
     workload_pass = False
