@@ -843,6 +843,15 @@ def _unified_handle_conn_event[
                     tls_ptr[].last_interest = want
                 except:
                     _cleanup_conn_unified(fd, conns, timers, reactor)
+                    return
+            # Bound a stalled handshake on the same idle timer that
+            # bounds a stalled request: a peer that opens a connection,
+            # dribbles one record and goes quiet must not hold a slot
+            # for the life of the process.
+            if config.idle_timeout_ms > 0:
+                if fd in timers:
+                    _ = wheel.cancel(timers[fd])
+                timers[fd] = wheel.schedule(config.idle_timeout_ms, UInt64(fd))
             return
         # Handshake complete: ALPN decides the protocol handle.
         if not _migrate_tls(fd, h2_config, conns, ws_hooks.copy()):

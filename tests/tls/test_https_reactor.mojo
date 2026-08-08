@@ -14,16 +14,51 @@ port instead of dropping the connection, multi-worker HTTPS serves,
 and a streaming handler still frames chunked ciphertext.
 """
 
+from std.ffi import c_int, c_size_t
 from std.memory import stack_allocation
 from std.testing import assert_equal, assert_true, TestSuite
 
 from flare.utils import SIGKILL, exit, fork, kill, usleep, waitpid
 from flare.net import IpAddr, SocketAddr
+from flare.net._libc import (
+    AF_INET,
+    MSG_NOSIGNAL,
+    SOCK_STREAM,
+    _close,
+    _connect,
+    _fill_sockaddr_in,
+    _send,
+    _socket,
+    _strerror,
+    get_errno,
+)
 from flare.tls import TlsConfig, TlsStream
 from flare.http import HttpClient, HttpServer, Request, Response, ok
 from flare.http.body import ChunkSource
 from flare.http.cancel import Cancel
 from flare.http.response import stream_response
+from flare.http.server import ServerConfig
+
+
+def _connect_loopback(port: UInt16) raises -> c_int:
+    """Open a blocking loopback TCP connection and return the fd."""
+    var c = _socket(AF_INET, SOCK_STREAM, c_int(0))
+    if c < c_int(0):
+        raise Error("socket() failed: " + _strerror(get_errno().value))
+    var sa = stack_allocation[16, UInt8]()
+    for i in range(16):
+        (sa + i).init_pointee_copy(UInt8(0))
+    var ip = stack_allocation[4, UInt8]()
+    (ip + 0).init_pointee_copy(UInt8(127))
+    (ip + 1).init_pointee_copy(UInt8(0))
+    (ip + 2).init_pointee_copy(UInt8(0))
+    (ip + 3).init_pointee_copy(UInt8(1))
+    _fill_sockaddr_in(sa, port, ip)
+    if _connect(c, sa, c_int(16).cast[DType.uint32]()) < c_int(0):
+        var msg = _strerror(get_errno().value)
+        _ = _close(c)
+        raise Error("connect 127.0.0.1 failed: " + msg)
+    return c
 
 
 comptime _SERVER_CRT: String = "tests/certs/server.crt"
@@ -329,6 +364,64 @@ def test_https_alpn_h2_is_served() raises:
     assert_true(not raised, "h2-over-TLS round-trip raised")
     assert_equal(status, 200)
     assert_equal(body, "hello https")
+
+
+def test_stalled_handshake_does_not_block_other_clients() raises:
+    """A peer that opens a TLS connection and dribbles a partial
+    ClientHello must not stall anyone else.
+
+    On the old sequential driver this wedged the whole server: the
+    accept loop sat in that one handshake. On the reactor the stalled
+    connection just holds a slot until the idle timer reaps it, while
+    other clients are served normally.
+    """
+    var cfg_srv = ServerConfig(idle_timeout_ms=500)
+    var srv = HttpServer.bind_tls(
+        SocketAddr(IpAddr.parse("127.0.0.1"), UInt16(0)),
+        _SERVER_CRT,
+        _SERVER_KEY,
+        alpn=_alpn_h1(),
+        config=cfg_srv^,
+    )
+    var port = UInt16(srv.local_addr().port)
+
+    var pid = fork()
+    if pid == 0:
+        try:
+            srv.serve(_hello)
+        except:
+            pass
+        exit()
+    usleep(300000)
+
+    var served = False
+    try:
+        # Raw TCP: one byte of a TLS record header, then silence.
+        var stalled = _connect_loopback(port)
+        var one = stack_allocation[1, UInt8]()
+        one[0] = UInt8(0x16)  # TLS handshake content type
+        _ = _send(stalled, one, c_size_t(1), c_int(MSG_NOSIGNAL))
+
+        # A real client on the same server still completes.
+        var tcfg = TlsConfig(ca_bundle=_CA_CRT)
+        var s = TlsStream.connect("localhost", port, tcfg)
+        s.write_all(
+            Span[UInt8, _](
+                _bytes(
+                    "GET / HTTP/1.1\r\nHost: localhost\r\nConnection:"
+                    " close\r\n\r\n"
+                )
+            )
+        )
+        served = "hello https" in _read_until_close(s)
+        s.close()
+        _ = _close(stalled)
+    except:
+        pass
+
+    _ = kill(pid, SIGKILL)
+    waitpid(pid)
+    assert_true(served, "a stalled handshake blocked a healthy client")
 
 
 def test_bind_tls_constructs() raises:
