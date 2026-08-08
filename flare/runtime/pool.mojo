@@ -17,7 +17,7 @@ Today's callers go through ``UnsafePointer[T].alloc(1)`` directly:
     ...
     var ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=addr
-    ).bitcast[ConnHandle]()
+    ).unsafe_bitcast[ConnHandle]()
     ptr.unsafe_deinit_pointee()
     ptr.free()
 
@@ -103,7 +103,7 @@ struct Pool[T: Deinitable & Movable]:
             # through the bitcast pointer; reads / dereferences
             # also touch 0 bytes.
             var raw = alloc[UInt8](1)
-            raw.bitcast[Self.T]().unsafe_write(value^)
+            raw.unsafe_bitcast[Self.T]().unsafe_write(value^)
             return Int(raw)
 
     @staticmethod
@@ -127,7 +127,7 @@ struct Pool[T: Deinitable & Movable]:
         comptime if size_of[Self.T]() > 0:
             var ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=addr
-            ).bitcast[Self.T]()
+            ).unsafe_bitcast[Self.T]()
             ptr.unsafe_deinit_pointee()
             ptr.free()
         else:
@@ -138,7 +138,7 @@ struct Pool[T: Deinitable & Movable]:
             var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=addr
             )
-            raw.bitcast[Self.T]().unsafe_deinit_pointee()
+            raw.unsafe_bitcast[Self.T]().unsafe_deinit_pointee()
             raw.free()
 
     @staticmethod
@@ -157,4 +157,4 @@ struct Pool[T: Deinitable & Movable]:
         """
         return UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=addr
-        ).bitcast[Self.T]()
+        ).unsafe_bitcast[Self.T]()

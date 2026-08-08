@@ -338,8 +338,8 @@ def _read_ip_from_sockaddr(buf: UnsafePointer[UInt8, _]) raises -> String:
     # inet_ntop(AF_INET, &sin_addr, dst, dst_len) — sin_addr is at offset 4
     _ = external_call["inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]](
         AF_INET,
-        (buf + 4).bitcast[NoneType](),
-        ntop_buf.bitcast[c_char](),
+        (buf + 4).unsafe_bitcast[NoneType](),
+        ntop_buf.unsafe_bitcast[c_char](),
         c_uint(64),
     )
     if ntop_buf[0] == 0:
@@ -347,7 +347,7 @@ def _read_ip_from_sockaddr(buf: UnsafePointer[UInt8, _]) raises -> String:
     return String(
         StringSlice(
             unsafe_from_utf8=CStringSlice(
-                unsafe_from_ptr=ntop_buf.bitcast[Int8]()
+                unsafe_from_ptr=ntop_buf.unsafe_bitcast[Int8]()
             )
         )
     )
@@ -376,8 +376,8 @@ def _read_ipv6_from_sockaddr(buf: UnsafePointer[UInt8, _]) raises -> String:
     # inet_ntop(AF_INET6, &sin6_addr, dst, dst_len) — sin6_addr at offset 8
     _ = external_call["inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]](
         AF_INET6,
-        (buf + 8).bitcast[NoneType](),
-        ntop_buf.bitcast[c_char](),
+        (buf + 8).unsafe_bitcast[NoneType](),
+        ntop_buf.unsafe_bitcast[c_char](),
         c_uint(64),
     )
     if ntop_buf[0] == 0:
@@ -385,7 +385,7 @@ def _read_ipv6_from_sockaddr(buf: UnsafePointer[UInt8, _]) raises -> String:
     return String(
         StringSlice(
             unsafe_from_utf8=CStringSlice(
-                unsafe_from_ptr=ntop_buf.bitcast[Int8]()
+                unsafe_from_ptr=ntop_buf.unsafe_bitcast[Int8]()
             )
         )
     )
@@ -429,7 +429,9 @@ def _strerror(code: c_int) -> String:
         return "unknown error " + String(code)
     return String(
         StringSlice(
-            unsafe_from_utf8=CStringSlice(unsafe_from_ptr=ptr.bitcast[Int8]())
+            unsafe_from_utf8=CStringSlice(
+                unsafe_from_ptr=ptr.unsafe_bitcast[Int8]()
+            )
         )
     )
 
@@ -476,7 +478,9 @@ def _bind(fd: c_int, addr: UnsafePointer[UInt8, _], addrlen: c_uint) -> c_int:
         Int(addr) != 0 and Int(addrlen) > 0,
         "_bind: null addr or zero addrlen",
     )
-    return external_call["bind", c_int](fd, addr.bitcast[NoneType](), addrlen)
+    return external_call["bind", c_int](
+        fd, addr.unsafe_bitcast[NoneType](), addrlen
+    )
 
 
 @always_inline
@@ -496,7 +500,9 @@ def _accept(
         Int(addr) != 0 and Int(addrlen) != 0,
         "_accept: null addr / addrlen out-parameter",
     )
-    return external_call["accept", c_int](fd, addr.bitcast[NoneType](), addrlen)
+    return external_call["accept", c_int](
+        fd, addr.unsafe_bitcast[NoneType](), addrlen
+    )
 
 
 @always_inline
@@ -509,7 +515,7 @@ def _connect(
         "_connect: null addr or zero addrlen",
     )
     return external_call["connect", c_int](
-        fd, addr.bitcast[NoneType](), addrlen
+        fd, addr.unsafe_bitcast[NoneType](), addrlen
     )
 
 
@@ -525,7 +531,7 @@ def _getsockname(
         "_getsockname: null addr / addrlen out-parameter",
     )
     return external_call["getsockname", c_int](
-        fd, addr.bitcast[NoneType](), addrlen
+        fd, addr.unsafe_bitcast[NoneType](), addrlen
     )
 
 
@@ -541,7 +547,7 @@ def _getpeername(
         "_getpeername: null addr / addrlen out-parameter",
     )
     return external_call["getpeername", c_int](
-        fd, addr.bitcast[NoneType](), addrlen
+        fd, addr.unsafe_bitcast[NoneType](), addrlen
     )
 
 
@@ -554,7 +560,7 @@ def _send(
         Int(n) == 0 or Int(buf) != 0, "_send: null buffer with non-zero length"
     )
     return external_call["send", c_ssize_t](
-        fd, buf.bitcast[NoneType](), n, flags
+        fd, buf.unsafe_bitcast[NoneType](), n, flags
     )
 
 
@@ -581,7 +587,7 @@ def _writev(
         "_writev: null iovec array with non-zero iovcnt",
     )
     return external_call["writev", c_ssize_t](
-        fd, iov.bitcast[NoneType](), iovcnt
+        fd, iov.unsafe_bitcast[NoneType](), iovcnt
     )
 
 
@@ -594,7 +600,7 @@ def _recv(
         Int(n) == 0 or Int(buf) != 0, "_recv: null buffer with non-zero length"
     )
     return external_call["recv", c_ssize_t](
-        fd, buf.bitcast[NoneType](), n, flags
+        fd, buf.unsafe_bitcast[NoneType](), n, flags
     )
 
 
@@ -610,10 +616,10 @@ def _sendto(
     """Wrapper around ``sendto(2)``."""
     return external_call["sendto", c_ssize_t](
         fd,
-        buf.bitcast[NoneType](),
+        buf.unsafe_bitcast[NoneType](),
         n,
         flags,
-        addr.bitcast[NoneType](),
+        addr.unsafe_bitcast[NoneType](),
         addrlen,
     )
 
@@ -630,10 +636,10 @@ def _recvfrom(
     """Wrapper around ``recvfrom(2)``."""
     return external_call["recvfrom", c_ssize_t](
         fd,
-        buf.bitcast[NoneType](),
+        buf.unsafe_bitcast[NoneType](),
         n,
         flags,
-        addr.bitcast[NoneType](),
+        addr.unsafe_bitcast[NoneType](),
         addrlen,
     )
 
@@ -668,7 +674,7 @@ def _recvmmsg(
     )
     comptime if CompilationTarget.is_linux():
         return external_call["recvmmsg", c_int](
-            fd, msgvec.bitcast[NoneType](), vlen, flags, timeout
+            fd, msgvec.unsafe_bitcast[NoneType](), vlen, flags, timeout
         )
     else:
         # recvmmsg(2) is Linux-only; on other targets the symbol does not
@@ -699,7 +705,7 @@ def _sendmmsg(
     )
     comptime if CompilationTarget.is_linux():
         return external_call["sendmmsg", c_int](
-            fd, msgvec.bitcast[NoneType](), vlen, flags
+            fd, msgvec.unsafe_bitcast[NoneType](), vlen, flags
         )
     else:
         # sendmmsg(2) is Linux-only; gate the symbol out of non-Linux
@@ -726,7 +732,7 @@ def _sendmsg(
         Int(msg) != 0, "_sendmsg: null msghdr pointer"
     )
     return external_call["sendmsg", c_ssize_t](
-        fd, msg.bitcast[NoneType](), flags
+        fd, msg.unsafe_bitcast[NoneType](), flags
     )
 
 
@@ -740,7 +746,7 @@ def _setsockopt(
 ) -> c_int:
     """Wrapper around ``setsockopt(2)``."""
     return external_call["setsockopt", c_int](
-        fd, level, optname, optval.bitcast[NoneType](), optlen
+        fd, level, optname, optval.unsafe_bitcast[NoneType](), optlen
     )
 
 
@@ -766,7 +772,7 @@ def _getsockopt(
 ) -> c_int:
     """Wrapper around ``getsockopt(2)``."""
     return external_call["getsockopt", c_int](
-        fd, level, optname, optval.bitcast[NoneType](), optlen
+        fd, level, optname, optval.unsafe_bitcast[NoneType](), optlen
     )
 
 
@@ -785,7 +791,7 @@ def _poll(
         Number of fds with events, 0 on timeout, -1 on error.
     """
     return external_call["poll", c_int](
-        fds.bitcast[NoneType](), nfds, timeout_ms
+        fds.unsafe_bitcast[NoneType](), nfds, timeout_ms
     )
 
 
@@ -815,8 +821,8 @@ def _getaddrinfo(
     return external_call["getaddrinfo", c_int](
         host_copy.as_c_string_slice(),
         Optional[UnsafePointer[UInt8, MutUntrackedOrigin]](None),
-        hints.bitcast[NoneType](),
-        res_slot.bitcast[NoneType](),
+        hints.unsafe_bitcast[NoneType](),
+        res_slot.unsafe_bitcast[NoneType](),
     )
 
 
@@ -852,7 +858,9 @@ def _gai_strerror(code: c_int) -> String:
         return "unknown getaddrinfo error " + String(code)
     return String(
         StringSlice(
-            unsafe_from_utf8=CStringSlice(unsafe_from_ptr=ptr.bitcast[Int8]())
+            unsafe_from_utf8=CStringSlice(
+                unsafe_from_ptr=ptr.unsafe_bitcast[Int8]()
+            )
         )
     )
 
@@ -874,7 +882,7 @@ def _inet_pton(
     # as_c_string_slice() is mutating; copy into a local var first.
     var src_copy = src
     return external_call["inet_pton", c_int](
-        family, src_copy.as_c_string_slice(), dst.bitcast[NoneType]()
+        family, src_copy.as_c_string_slice(), dst.unsafe_bitcast[NoneType]()
     )
 
 

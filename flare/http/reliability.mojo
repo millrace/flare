@@ -66,14 +66,14 @@ def _alloc_cell(n: Int) -> Int:
 @always_inline
 def _cell_get(addr: Int, i: Int) -> Int64:
     var p = UnsafePointer[Int, MutUntrackedOrigin](unsafe_from_address=addr)
-    var slot = (p + i).bitcast[Scalar[DType.int64]]()
+    var slot = (p + i).unsafe_bitcast[Scalar[DType.int64]]()
     return Atomic[DType.int64].load[ordering=Ordering.ACQUIRE](slot)
 
 
 @always_inline
 def _cell_set(addr: Int, i: Int, v: Int64):
     var p = UnsafePointer[Int, MutUntrackedOrigin](unsafe_from_address=addr)
-    var slot = (p + i).bitcast[Scalar[DType.int64]]()
+    var slot = (p + i).unsafe_bitcast[Scalar[DType.int64]]()
     Atomic[DType.int64].store[ordering=Ordering.RELEASE](slot, v)
 
 

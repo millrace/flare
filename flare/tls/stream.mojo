@@ -87,7 +87,9 @@ def _c_err(read lib: OwnedDLHandle) raises -> String:
     var p = fn_err()
     return String(
         StringSlice(
-            unsafe_from_utf8=CStringSlice(unsafe_from_ptr=p.bitcast[Int8]())
+            unsafe_from_utf8=CStringSlice(
+                unsafe_from_ptr=p.unsafe_bitcast[Int8]()
+            )
         )
     )
 
@@ -236,7 +238,9 @@ def _do_ssl_get_version(read lib: OwnedDLHandle, ssl: Int) raises -> String:
     var p = f(ssl)
     return String(
         StringSlice(
-            unsafe_from_utf8=CStringSlice(unsafe_from_ptr=p.bitcast[Int8]())
+            unsafe_from_utf8=CStringSlice(
+                unsafe_from_ptr=p.unsafe_bitcast[Int8]()
+            )
         )
     )
 
@@ -248,7 +252,9 @@ def _do_ssl_get_cipher(read lib: OwnedDLHandle, ssl: Int) raises -> String:
     var p = f(ssl)
     return String(
         StringSlice(
-            unsafe_from_utf8=CStringSlice(unsafe_from_ptr=p.bitcast[Int8]())
+            unsafe_from_utf8=CStringSlice(
+                unsafe_from_ptr=p.unsafe_bitcast[Int8]()
+            )
         )
     )
 
@@ -846,7 +852,7 @@ struct TlsStream(Movable, Readable):
         return String(
             StringSlice(
                 unsafe_from_utf8=CStringSlice(
-                    unsafe_from_ptr=buf.bitcast[Int8]()
+                    unsafe_from_ptr=buf.unsafe_bitcast[Int8]()
                 )
             )
         )
@@ -879,7 +885,7 @@ struct TlsStream(Movable, Readable):
         return String(
             StringSlice(
                 unsafe_from_utf8=CStringSlice(
-                    unsafe_from_ptr=buf.bitcast[Int8]()
+                    unsafe_from_ptr=buf.unsafe_bitcast[Int8]()
                 )
             )
         )

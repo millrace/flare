@@ -678,7 +678,7 @@ def _accept_loop_unified_fd(
         if tls_ctx_addr != 0:
             var ctx_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=tls_ctx_addr
-            ).bitcast[ServerCtx]()
+            ).unsafe_bitcast[ServerCtx]()
             try:
                 addr = _tls_conn_alloc_addr(stream^, ctx_ptr[])
             except:

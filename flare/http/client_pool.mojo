@@ -184,7 +184,7 @@ struct ClientPool(Copyable, Movable):
         """
         return UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=self._addr
-        ).bitcast[_ClientPoolState]()
+        ).unsafe_bitcast[_ClientPoolState]()
 
     @staticmethod
     def build_key(scheme: String, host: String, port: Int) -> String:

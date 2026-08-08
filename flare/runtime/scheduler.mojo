@@ -104,7 +104,7 @@ def store_stop_flag(addr: Int, value: Bool):
         return
     var p = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=addr
-    ).bitcast[Scalar[DType.uint8]]()
+    ).unsafe_bitcast[Scalar[DType.uint8]]()
     Atomic[DType.uint8].store[ordering=Ordering.RELEASE](
         p, UInt8(1) if value else UInt8(0)
     )
@@ -117,7 +117,7 @@ def load_stop_flag(addr: Int) -> Bool:
         return False
     var p = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=addr
-    ).bitcast[Scalar[DType.uint8]]()
+    ).unsafe_bitcast[Scalar[DType.uint8]]()
     return Atomic[DType.uint8].load[ordering=Ordering.ACQUIRE](p) != UInt8(0)
 
 
@@ -151,7 +151,7 @@ def store_worker_stat(base_addr: Int, slot: Int, value: Int):
         return
     var p = UnsafePointer[Int, MutUntrackedOrigin](
         unsafe_from_address=base_addr + slot * 8
-    ).bitcast[Scalar[DType.int64]]()
+    ).unsafe_bitcast[Scalar[DType.int64]]()
     Atomic[DType.int64].store[ordering=Ordering.RELEASE](p, Int64(value))
 
 
@@ -162,7 +162,7 @@ def load_worker_stat(base_addr: Int, slot: Int) -> Int:
         return 0
     var p = UnsafePointer[Int, MutUntrackedOrigin](
         unsafe_from_address=base_addr + slot * 8
-    ).bitcast[Scalar[DType.int64]]()
+    ).unsafe_bitcast[Scalar[DType.int64]]()
     return Int(Atomic[DType.int64].load[ordering=Ordering.ACQUIRE](p))
 
 
@@ -228,7 +228,7 @@ def _scheduler_free_ctxs[F: Frontend & Copyable](addrs: List[Int]):
     """Destroy each ``_WorkerCtx[F]`` at the given address then free it."""
     for i in range(len(addrs)):
         var raw = _OpaquePtr(unsafe_from_address=addrs[i])
-        var typed = raw.bitcast[_WorkerCtx[F]]()
+        var typed = raw.unsafe_bitcast[_WorkerCtx[F]]()
         typed.unsafe_deinit_pointee()
         _scheduler_free_raw(raw)
 
@@ -311,7 +311,7 @@ def _worker_entry[F: Frontend & Copyable](arg: _OpaquePtr) -> _OpaquePtr:
     var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=ctx_addr
     )
-    var ctx_ptr = raw.bitcast[_WorkerCtx[F]]()
+    var ctx_ptr = raw.unsafe_bitcast[_WorkerCtx[F]]()
 
     var stopping_ptr = UnsafePointer[Bool, MutUntrackedOrigin](
         unsafe_from_address=ctx_ptr[].stopping_addr
@@ -528,7 +528,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
         # native Mojo allocator (see ``_scheduler_free_raw``).
         var stop_ptr = alloc[Bool](1)
         stop_ptr.unsafe_write(False)
-        var stop_raw = stop_ptr.bitcast[UInt8]()
+        var stop_raw = stop_ptr.unsafe_bitcast[UInt8]()
         var stopping_addr = Int(stop_ptr)
         s._stopping_addr = stopping_addr
 
@@ -686,7 +686,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
             # Native Mojo allocator (see _scheduler_free_raw for why).
             var ctx_ptr = alloc[_WorkerCtx[Self.F]](1)
             ctx_ptr.unsafe_write(ctx^)
-            var arg = ctx_ptr.bitcast[UInt8]()
+            var arg = ctx_ptr.unsafe_bitcast[UInt8]()
             var ctx_addr = Int(ctx_ptr)
 
             var spawned = False
@@ -710,7 +710,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                     except:
                         pass
                     (s._workers_ptr + j).unsafe_deinit_pointee()
-                _scheduler_free_raw(s._workers_ptr.bitcast[UInt8]())
+                _scheduler_free_raw(s._workers_ptr.unsafe_bitcast[UInt8]())
                 # b2: UnsafePointer is non-nullable; C NULL from a runtime 0.
                 var null_addr = 0
                 s._workers_ptr = UnsafePointer[
@@ -722,7 +722,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 _scheduler_free_ctxs[Self.F](s._ctx_addrs)
                 s._ctx_addrs.clear()
                 ctx_ptr.unsafe_deinit_pointee()
-                _scheduler_free_raw(ctx_ptr.bitcast[UInt8]())
+                _scheduler_free_raw(ctx_ptr.unsafe_bitcast[UInt8]())
                 # Free the pre-allocated per-worker stats cells.
                 for k in range(len(s._stats_addrs)):
                     _scheduler_free_raw(
@@ -735,7 +735,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 # listeners leave listener_ptr null).
                 if Int(listener_ptr) != 0:
                     listener_ptr.unsafe_deinit_pointee()
-                    _scheduler_free_raw(listener_ptr.bitcast[UInt8]())
+                    _scheduler_free_raw(listener_ptr.unsafe_bitcast[UInt8]())
                 s._shared_listener_addr = 0
                 s._shared_listener_fd = -1
                 # All workers joined, so no one is reading the
@@ -775,7 +775,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 pass
             (self._workers_ptr + i).unsafe_deinit_pointee()
         if self._workers_len > 0:
-            _scheduler_free_raw(self._workers_ptr.bitcast[UInt8]())
+            _scheduler_free_raw(self._workers_ptr.unsafe_bitcast[UInt8]())
             var null_addr = 0
             self._workers_ptr = UnsafePointer[ThreadHandle, MutUntrackedOrigin](
                 unsafe_from_address=null_addr
@@ -806,7 +806,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
 
         if self._shared_listener_addr != 0:
             var raw = _OpaquePtr(unsafe_from_address=self._shared_listener_addr)
-            var typed = raw.bitcast[TcpListener]()
+            var typed = raw.unsafe_bitcast[TcpListener]()
             typed.unsafe_deinit_pointee()
             _scheduler_free_raw(raw)
             self._shared_listener_addr = 0
@@ -815,7 +815,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
             var pwl_raw = _OpaquePtr(
                 unsafe_from_address=self._per_worker_listener_addrs[i]
             )
-            var pwl_typed = pwl_raw.bitcast[TcpListener]()
+            var pwl_typed = pwl_raw.unsafe_bitcast[TcpListener]()
             pwl_typed.unsafe_deinit_pointee()
             _scheduler_free_raw(pwl_raw)
         self._per_worker_listener_addrs.clear()

@@ -46,7 +46,7 @@ def _increment(arg: _OpaquePtr) -> _OpaquePtr:
     """Increment the int at ``arg`` and return NULL."""
     # b2: UnsafePointer dropped __bool__; check the address explicitly.
     if Int(arg) != 0:
-        var p = arg.bitcast[Int]()
+        var p = arg.unsafe_bitcast[Int]()
         p[] = p[] + 1
     var null_addr = 0
     return _OpaquePtr(unsafe_from_address=null_addr)

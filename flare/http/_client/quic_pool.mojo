@@ -124,7 +124,7 @@ struct QuicConnectionPool(Copyable, Movable):
     ) -> UnsafePointer[_QuicPoolState, MutUntrackedOrigin]:
         return UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=self._addr
-        ).bitcast[_QuicPoolState]()
+        ).unsafe_bitcast[_QuicPoolState]()
 
     @staticmethod
     def build_key(host: String, port: Int) -> String:

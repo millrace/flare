@@ -41,7 +41,7 @@ def _write_42(
     arg: UnsafePointer[UInt8, MutUntrackedOrigin],
 ) -> UnsafePointer[UInt8, MutUntrackedOrigin]:
     """Treat ``arg`` as a ``UnsafePointer[Int]`` and write 42 to it."""
-    var as_int_ptr = arg.bitcast[Int]()
+    var as_int_ptr = arg.unsafe_bitcast[Int]()
     as_int_ptr[] = 42
     return _null_out()
 
@@ -52,7 +52,7 @@ def _increment_counter(
     """Treat ``arg`` as ``UnsafePointer[Int]``; non-atomic increment,
     fine because each test thread has its own counter.
     """
-    var p = arg.bitcast[Int]()
+    var p = arg.unsafe_bitcast[Int]()
     p[] = p[] + 1
     return _null_out()
 
@@ -181,7 +181,7 @@ def test_many_spawn_join_cycles() raises:
 def _write_tid(
     arg: UnsafePointer[UInt8, MutUntrackedOrigin],
 ) -> UnsafePointer[UInt8, MutUntrackedOrigin]:
-    var as_u64_ptr = arg.bitcast[UInt64]()
+    var as_u64_ptr = arg.unsafe_bitcast[UInt64]()
     as_u64_ptr[] = current_thread_id()
     return _null_out()
 

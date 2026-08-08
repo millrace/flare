@@ -350,7 +350,7 @@ def _realtime_seconds() -> Int:
     for i in range(16):
         (buf + i).unsafe_write(UInt8(0))
     var rc = external_call["clock_gettime", c_int](
-        c_int(0), buf.bitcast[NoneType]()
+        c_int(0), buf.unsafe_bitcast[NoneType]()
     )
     debug_assert[assert_mode="safe"](
         Int(rc) == 0, "clock_gettime(CLOCK_REALTIME) failed; rc=", Int(rc)

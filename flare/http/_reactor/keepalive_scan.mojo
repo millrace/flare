@@ -142,7 +142,7 @@ def _monotonic_ms() -> Int:
     for i in range(16):
         (buf + i).unsafe_write(UInt8(0))
     _ = external_call["clock_gettime", c_int](
-        _CLOCK_MONOTONIC, buf.bitcast[NoneType]()
+        _CLOCK_MONOTONIC, buf.unsafe_bitcast[NoneType]()
     )
     var sec: Int64 = 0
     var nsec: Int64 = 0

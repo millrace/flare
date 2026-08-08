@@ -307,7 +307,7 @@ def _epoll_ctl(
         0 on success, -1 on error.
     """
     return external_call["epoll_ctl", c_int](
-        epfd, op, fd, event.bitcast[NoneType]()
+        epfd, op, fd, event.unsafe_bitcast[NoneType]()
     )
 
 
@@ -332,7 +332,7 @@ def _epoll_wait(
         -1 on error (errno set; EINTR is normal).
     """
     return external_call["epoll_wait", c_int](
-        epfd, events.bitcast[NoneType](), maxevents, timeout_ms
+        epfd, events.unsafe_bitcast[NoneType](), maxevents, timeout_ms
     )
 
 
@@ -398,11 +398,11 @@ def _kevent(
     comptime if CompilationTarget.is_macos():
         return external_call["kevent", c_int](
             kq,
-            changelist.bitcast[NoneType](),
+            changelist.unsafe_bitcast[NoneType](),
             nchanges,
-            eventlist.bitcast[NoneType](),
+            eventlist.unsafe_bitcast[NoneType](),
             nevents,
-            timeout.bitcast[NoneType](),
+            timeout.unsafe_bitcast[NoneType](),
         )
     else:
         return c_int(-1)
@@ -448,4 +448,4 @@ def _pipe(fds: UnsafePointer[c_int, _]) -> c_int:
     Returns:
         0 on success, -1 on error.
     """
-    return external_call["pipe", c_int](fds.bitcast[NoneType]())
+    return external_call["pipe", c_int](fds.unsafe_bitcast[NoneType]())

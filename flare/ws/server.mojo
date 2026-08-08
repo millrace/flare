@@ -716,7 +716,7 @@ def _ws_worker_entry(arg: _OpaquePtr) -> _OpaquePtr:
     var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=ctx_addr
     )
-    var ctx_ptr = raw.bitcast[_WsWorkerCtx]()
+    var ctx_ptr = raw.unsafe_bitcast[_WsWorkerCtx]()
     try:
         while True:
             var stream = ctx_ptr[].listener.accept()
@@ -784,7 +784,7 @@ def _ws_serve_multicore(
             i,
         )
         ctx_ptr.unsafe_write(ctx^)
-        var arg = ctx_ptr.bitcast[UInt8]()
+        var arg = ctx_ptr.unsafe_bitcast[UInt8]()
         var addr_int = Int(arg)
         ctx_addrs.append(addr_int)
         var th = ThreadHandle.spawn[_ws_worker_entry](
@@ -811,6 +811,6 @@ def _ws_serve_multicore(
         var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=ctx_addrs[i]
         )
-        raw.bitcast[_WsWorkerCtx]().unsafe_deinit_pointee()
+        raw.unsafe_bitcast[_WsWorkerCtx]().unsafe_deinit_pointee()
         raw.free()
     threads_ptr.free()

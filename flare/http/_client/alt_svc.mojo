@@ -322,7 +322,7 @@ struct AltSvcStore(Copyable, Movable):
         the :class:`ClientPool._state` pattern)."""
         return UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=self._addr
-        ).bitcast[_AltSvcState]()
+        ).unsafe_bitcast[_AltSvcState]()
 
     def record(
         read self, origin: String, header_value: String, now_s: UInt64

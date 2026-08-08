@@ -173,7 +173,7 @@ struct RawSocket(Movable):
                 self.fd,
                 SOL_SOCKET,
                 SO_NOSIGPIPE,
-                one.bitcast[UInt8](),
+                one.unsafe_bitcast[UInt8](),
                 c_uint(4),
             )
 
@@ -451,7 +451,9 @@ struct RawSocket(Movable):
         """
         var v = stack_allocation[1, c_int]()
         v.unsafe_write(c_int(1) if value else c_int(0))
-        var rc = _setsockopt(self.fd, level, opt, v.bitcast[UInt8](), c_uint(4))
+        var rc = _setsockopt(
+            self.fd, level, opt, v.unsafe_bitcast[UInt8](), c_uint(4)
+        )
         if rc < 0:
             var e = get_errno()
             raise NetworkError(_os_error("setsockopt"), Int(e.value))
@@ -469,7 +471,9 @@ struct RawSocket(Movable):
         """
         var v = stack_allocation[1, c_int]()
         v.unsafe_write(c_int(value))
-        var rc = _setsockopt(self.fd, level, opt, v.bitcast[UInt8](), c_uint(4))
+        var rc = _setsockopt(
+            self.fd, level, opt, v.unsafe_bitcast[UInt8](), c_uint(4)
+        )
         if rc < 0:
             var e = get_errno()
             raise NetworkError(_os_error("setsockopt"), Int(e.value))
@@ -494,10 +498,10 @@ struct RawSocket(Movable):
         var sec = ms // 1000
         var usec = (ms % 1000) * 1000
         # Write tv_sec as Int64 little-endian at offset 0
-        var sec_ptr = tv.bitcast[Int64]()
+        var sec_ptr = tv.unsafe_bitcast[Int64]()
         sec_ptr.unsafe_write(Int64(sec))
         # Write tv_usec as Int64 little-endian at offset 8
-        var usec_ptr = (tv + 8).bitcast[Int64]()
+        var usec_ptr = (tv + 8).unsafe_bitcast[Int64]()
         usec_ptr.unsafe_write(Int64(usec))
         var rc = _setsockopt(self.fd, SOL_SOCKET, opt, tv, c_uint(16))
         if rc < 0:

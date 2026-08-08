@@ -51,7 +51,7 @@ def _resolve_start(arg: _OpaquePtr) -> _OpaquePtr:
     """pthread start routine: resolve the host named by ``arg`` (a
     ``_ResolveCtx*``) and record the outcome in the cell. Must not raise
     (pthread has no exception channel), so all fallible work is wrapped."""
-    var ctx = arg.bitcast[_ResolveCtx]()
+    var ctx = arg.unsafe_bitcast[_ResolveCtx]()
     var host = Pool[String].get_ptr(ctx[].host_addr)[].copy()
     var res_addr = 0
     var err_addr = 0

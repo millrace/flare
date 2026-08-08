@@ -104,8 +104,8 @@ struct IpAddr(Copyable, Equatable, ImplicitlyCopyable, Movable, Writable):
                 "inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]
             ](
                 AF_INET,
-                ip4.bitcast[NoneType](),
-                ntop.bitcast[c_char](),
+                ip4.unsafe_bitcast[NoneType](),
+                ntop.unsafe_bitcast[c_char](),
                 c_uint(64),
             )
             if ntop[0] == 0:
@@ -114,7 +114,7 @@ struct IpAddr(Copyable, Equatable, ImplicitlyCopyable, Movable, Writable):
                 String(
                     StringSlice(
                         unsafe_from_utf8=CStringSlice(
-                            unsafe_from_ptr=ntop.bitcast[Int8]()
+                            unsafe_from_ptr=ntop.unsafe_bitcast[Int8]()
                         )
                     )
                 ),
@@ -133,8 +133,8 @@ struct IpAddr(Copyable, Equatable, ImplicitlyCopyable, Movable, Writable):
                 "inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]
             ](
                 AF_INET6,
-                ip6.bitcast[NoneType](),
-                ntop.bitcast[c_char](),
+                ip6.unsafe_bitcast[NoneType](),
+                ntop.unsafe_bitcast[c_char](),
                 c_uint(64),
             )
             if ntop[0] == 0:
@@ -143,7 +143,7 @@ struct IpAddr(Copyable, Equatable, ImplicitlyCopyable, Movable, Writable):
                 String(
                     StringSlice(
                         unsafe_from_utf8=CStringSlice(
-                            unsafe_from_ptr=ntop.bitcast[Int8]()
+                            unsafe_from_ptr=ntop.unsafe_bitcast[Int8]()
                         )
                     )
                 ),

@@ -140,7 +140,7 @@ def _conn_ptr_from_int(
     """Reverse of ``_conn_alloc_addr``: reconstruct a typed pointer."""
     return UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=addr
-    ).bitcast[ConnHandle]()
+    ).unsafe_bitcast[ConnHandle]()
 
 
 def _apply_step(

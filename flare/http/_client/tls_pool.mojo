@@ -117,7 +117,7 @@ struct TlsConnectionPool(Copyable, Movable):
     ) -> UnsafePointer[_TlsPoolState, MutUntrackedOrigin]:
         return UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=self._addr
-        ).bitcast[_TlsPoolState]()
+        ).unsafe_bitcast[_TlsPoolState]()
 
     @staticmethod
     def build_key(scheme: String, host: String, port: Int) -> String:

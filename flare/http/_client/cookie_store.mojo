@@ -63,7 +63,7 @@ struct CookieStore(Copyable, Movable):
         :class:`flare.http._client.alt_svc.AltSvcStore._state` pattern)."""
         return UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=self._addr
-        ).bitcast[_CookieState]()
+        ).unsafe_bitcast[_CookieState]()
 
     def record_set_cookie(read self, header_value: String) raises:
         """Parse + store one ``Set-Cookie`` header value.

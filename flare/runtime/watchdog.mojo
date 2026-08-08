@@ -58,7 +58,7 @@ def _slot_addr_idx(slot: Int) -> Int:
 def _atomic_load(block: Int, idx: Int) -> Int64:
     var p = UnsafePointer[Int64, MutUntrackedOrigin](unsafe_from_address=block)
     return Atomic[DType.int64].load[ordering=Ordering.ACQUIRE](
-        (p + idx).bitcast[Scalar[DType.int64]]()
+        (p + idx).unsafe_bitcast[Scalar[DType.int64]]()
     )
 
 
@@ -66,7 +66,7 @@ def _atomic_load(block: Int, idx: Int) -> Int64:
 def _atomic_store(block: Int, idx: Int, v: Int64):
     var p = UnsafePointer[Int64, MutUntrackedOrigin](unsafe_from_address=block)
     Atomic[DType.int64].store[ordering=Ordering.RELEASE](
-        (p + idx).bitcast[Scalar[DType.int64]](), v
+        (p + idx).unsafe_bitcast[Scalar[DType.int64]](), v
     )
 
 
@@ -124,7 +124,8 @@ def _watchdog_main(arg: _OpaquePtr) -> _OpaquePtr:
                         unsafe_from_address=Int(addr)
                     )
                     Atomic[DType.int64].store[ordering=Ordering.RELEASE](
-                        cp.bitcast[Scalar[DType.int64]](), _TIMEOUT_REASON
+                        cp.unsafe_bitcast[Scalar[DType.int64]](),
+                        _TIMEOUT_REASON,
                     )
                 # Fire once: disarm the slot.
                 _atomic_store(block, _slot_deadline_idx(slot), 0)

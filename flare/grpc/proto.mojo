@@ -60,7 +60,7 @@ def _f64_from_bits(bits: UInt64) -> Float64:
     """
     var p = stack_allocation[1, UInt64]()
     p[0] = bits
-    return p.bitcast[Float64]()[0]
+    return p.unsafe_bitcast[Float64]()[0]
 
 
 @always_inline
@@ -68,7 +68,7 @@ def _f32_from_bits(bits: UInt32) -> Float32:
     """Reinterpret a 32-bit pattern as a ``Float32`` (IEEE-754)."""
     var p = stack_allocation[1, UInt32]()
     p[0] = bits
-    return p.bitcast[Float32]()[0]
+    return p.unsafe_bitcast[Float32]()[0]
 
 
 # ── Writer ─────────────────────────────────────────────────────────────────────

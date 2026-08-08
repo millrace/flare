@@ -61,7 +61,9 @@ def _tls_err(lib: OwnedDLHandle) raises -> String:
     var p = fn_e()
     return String(
         StringSlice(
-            unsafe_from_utf8=CStringSlice(unsafe_from_ptr=p.bitcast[Int8]())
+            unsafe_from_utf8=CStringSlice(
+                unsafe_from_ptr=p.unsafe_bitcast[Int8]()
+            )
         )
     )
 

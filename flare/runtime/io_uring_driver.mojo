@@ -225,7 +225,7 @@ def _atomic_load_u32_acquire(
     debug_assert[assert_mode="safe"](
         Int(ptr) != 0, "_atomic_load_u32_acquire: ptr must be non-NULL"
     )
-    var typed = ptr.bitcast[Scalar[DType.uint32]]()
+    var typed = ptr.unsafe_bitcast[Scalar[DType.uint32]]()
     return Atomic[DType.uint32].load[ordering=Ordering.ACQUIRE](typed)
 
 
@@ -239,7 +239,7 @@ def _atomic_load_u32_relaxed(
     debug_assert[assert_mode="safe"](
         Int(ptr) != 0, "_atomic_load_u32_relaxed: ptr must be non-NULL"
     )
-    var typed = ptr.bitcast[Scalar[DType.uint32]]()
+    var typed = ptr.unsafe_bitcast[Scalar[DType.uint32]]()
     return Atomic[DType.uint32].load[ordering=Ordering.RELAXED](typed)
 
 
@@ -253,7 +253,7 @@ def _atomic_store_u32_release(
     debug_assert[assert_mode="safe"](
         Int(ptr) != 0, "_atomic_store_u32_release: ptr must be non-NULL"
     )
-    var typed = ptr.bitcast[Scalar[DType.uint32]]()
+    var typed = ptr.unsafe_bitcast[Scalar[DType.uint32]]()
     Atomic[DType.uint32].store[ordering=Ordering.RELEASE](typed, value)
 
 
@@ -268,7 +268,7 @@ def _atomic_store_u32_relaxed(
     debug_assert[assert_mode="safe"](
         Int(ptr) != 0, "_atomic_store_u32_relaxed: ptr must be non-NULL"
     )
-    var typed = ptr.bitcast[Scalar[DType.uint32]]()
+    var typed = ptr.unsafe_bitcast[Scalar[DType.uint32]]()
     Atomic[DType.uint32].store[ordering=Ordering.RELAXED](typed, value)
 
 

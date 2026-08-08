@@ -292,8 +292,8 @@ struct TcpStream(Movable, Readable):
                 var pfd = stack_allocation[Int(POLLFD_SIZE), UInt8]()
                 for i in range(Int(POLLFD_SIZE)):
                     (pfd + i).unsafe_write(0)
-                pfd.bitcast[c_int]().unsafe_write(sock.fd)
-                (pfd + 4).bitcast[Int16]().unsafe_write(Int16(POLLOUT))
+                pfd.unsafe_bitcast[c_int]().unsafe_write(sock.fd)
+                (pfd + 4).unsafe_bitcast[Int16]().unsafe_write(Int16(POLLOUT))
 
                 var nready = _poll(pfd, c_uint(1), c_int(timeout_ms))
                 if nready == c_int(0):
@@ -315,7 +315,7 @@ struct TcpStream(Movable, Readable):
                     sock.fd,
                     SOL_SOCKET,
                     SO_ERROR,
-                    so_err.bitcast[UInt8](),
+                    so_err.unsafe_bitcast[UInt8](),
                     so_len,
                 )
                 _ = _fcntl2(sock.fd, F_SETFL, flags)

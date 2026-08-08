@@ -113,7 +113,7 @@ def _race_worker(arg: _OpaquePtr) -> _OpaquePtr:
     """Pthread start routine: establish one leg's connection via the
     stored ``leg`` function and stash the outcome. Never raises across
     the FFI boundary -- every error is captured into the cell."""
-    var a = arg.bitcast[_RaceArg]()
+    var a = arg.unsafe_bitcast[_RaceArg]()
     var result = UnsafePointer[_RaceResult, MutUntrackedOrigin](
         unsafe_from_address=a[].result_addr
     )

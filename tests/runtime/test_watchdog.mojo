@@ -18,7 +18,7 @@ def _read_cell(addr: Int) -> Int:
     var p = UnsafePointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)
     return Int(
         Atomic[DType.int64].load[ordering=Ordering.ACQUIRE](
-            p.bitcast[Scalar[DType.int64]]()
+            p.unsafe_bitcast[Scalar[DType.int64]]()
         )
     )
 

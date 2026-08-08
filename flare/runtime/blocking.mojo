@@ -274,18 +274,18 @@ def _block_thunk[
     var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=Int(arg)
     )
-    var task_ptr = raw.bitcast[_Task[T]]()
+    var task_ptr = raw.unsafe_bitcast[_Task[T]]()
     var task = task_ptr.take_pointee()
 
     var result_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=task.result_addr
-    ).bitcast[T]()
+    ).unsafe_bitcast[T]()
     var err_buf = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=task.err_buf_addr
     )
     var err_len_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=task.err_len_addr
-    ).bitcast[Int]()
+    ).unsafe_bitcast[Int]()
     var success_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=task.success_addr
     )

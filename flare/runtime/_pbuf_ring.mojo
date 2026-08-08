@@ -129,5 +129,5 @@ def _pbuf_ring_set_tail(ring_addr: Int, new_tail: UInt16) -> None:
     # Use Atomic[u16] release store for cross-platform memory
     # ordering. On x86 this compiles to a regular mov + compiler
     # barrier; on ARM it emits the proper release-store instruction.
-    var typed = tail_ptr.bitcast[Scalar[DType.uint16]]()
+    var typed = tail_ptr.unsafe_bitcast[Scalar[DType.uint16]]()
     Atomic[DType.uint16].store[ordering=Ordering.RELEASE](typed, new_tail)

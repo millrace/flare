@@ -1131,7 +1131,7 @@ def _h2_conn_ptr_from_int(
     )
     return UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=addr
-    ).bitcast[Http2ConnHandle]()
+    ).unsafe_bitcast[Http2ConnHandle]()
 
 
 # ── Protocol-detection (preface peek) ──────────────────────────────────────
@@ -1350,4 +1350,4 @@ def _pending_conn_ptr_from_int(
     )
     return UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=addr
-    ).bitcast[PendingConnHandle]()
+    ).unsafe_bitcast[PendingConnHandle]()

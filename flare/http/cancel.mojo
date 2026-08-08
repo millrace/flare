@@ -155,7 +155,7 @@ struct CancelCell(Movable):
             return
         var p = UnsafePointer[Int, MutUntrackedOrigin](
             unsafe_from_address=self._addr
-        ).bitcast[Scalar[DType.int64]]()
+        ).unsafe_bitcast[Scalar[DType.int64]]()
         Atomic[DType.int64].store[ordering=Ordering.RELEASE](p, Int64(reason))
 
     def reset(mut self) -> None:
@@ -164,7 +164,7 @@ struct CancelCell(Movable):
             return
         var p = UnsafePointer[Int, MutUntrackedOrigin](
             unsafe_from_address=self._addr
-        ).bitcast[Scalar[DType.int64]]()
+        ).unsafe_bitcast[Scalar[DType.int64]]()
         Atomic[DType.int64].store[ordering=Ordering.RELEASE](
             p, Int64(CancelReason.NONE)
         )
@@ -228,7 +228,7 @@ struct Cancel(Copyable, ImplicitlyCopyable, Movable):
             return False
         var p = UnsafePointer[Int, MutUntrackedOrigin](
             unsafe_from_address=self._addr
-        ).bitcast[Scalar[DType.int64]]()
+        ).unsafe_bitcast[Scalar[DType.int64]]()
         return Atomic[DType.int64].load[ordering=Ordering.ACQUIRE](p) != Int64(
             CancelReason.NONE
         )
@@ -239,7 +239,7 @@ struct Cancel(Copyable, ImplicitlyCopyable, Movable):
             return CancelReason.NONE
         var p = UnsafePointer[Int, MutUntrackedOrigin](
             unsafe_from_address=self._addr
-        ).bitcast[Scalar[DType.int64]]()
+        ).unsafe_bitcast[Scalar[DType.int64]]()
         return Int(Atomic[DType.int64].load[ordering=Ordering.ACQUIRE](p))
 
     def addr(read self) -> Int:

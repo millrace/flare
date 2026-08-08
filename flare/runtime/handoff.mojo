@@ -73,21 +73,21 @@ comptime _MUTEX_BYTES: Int = 64  # generous upper bound across libc flavours
 def _mutex_init(mu: UnsafePointer[UInt8, _]) -> Bool:
     """Initialise the mutex blob with default attributes (NULL attr)."""
     var rc = external_call["pthread_mutex_init", Int32](
-        mu.bitcast[Int8](), Int(0)
+        mu.unsafe_bitcast[Int8](), Int(0)
     )
     return rc == Int32(0)
 
 
 def _mutex_destroy(mu: UnsafePointer[UInt8, _]):
-    _ = external_call["pthread_mutex_destroy", Int32](mu.bitcast[Int8]())
+    _ = external_call["pthread_mutex_destroy", Int32](mu.unsafe_bitcast[Int8]())
 
 
 def _mutex_lock(mu: UnsafePointer[UInt8, _]):
-    _ = external_call["pthread_mutex_lock", Int32](mu.bitcast[Int8]())
+    _ = external_call["pthread_mutex_lock", Int32](mu.unsafe_bitcast[Int8]())
 
 
 def _mutex_unlock(mu: UnsafePointer[UInt8, _]):
-    _ = external_call["pthread_mutex_unlock", Int32](mu.bitcast[Int8]())
+    _ = external_call["pthread_mutex_unlock", Int32](mu.unsafe_bitcast[Int8]())
 
 
 # ── HandoffQueue ────────────────────────────────────────────────────────
