@@ -117,6 +117,7 @@ natural.
 | Make HTTP requests | [`http_get.mojo`](../examples/basic/http_get.mojo) |
 | Talk WebSocket | [`websocket_echo.mojo`](../examples/basic/websocket_echo.mojo) |
 | Use TLS as a client | [`tls.mojo`](../examples/basic/tls.mojo) |
+| Terminate HTTPS in-process (h1 or h2 by ALPN, multi-worker) | [`https_server.mojo`](../examples/advanced/https_server.mojo) |
 | Manage cookies | [`cookies.mojo`](../examples/basic/cookies.mojo) |
 | Pass typed inputs to a handler | [`extractors.mojo`](../examples/intermediate/extractors.mojo) |
 | Share state across handlers | [`state.mojo`](../examples/intermediate/state.mojo) |

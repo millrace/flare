@@ -1,27 +1,25 @@
 """Example 23: Graceful shutdown with ``HttpServer.drain``.
 
-had
-``HttpServer.close()`` (a hard stop that cuts in-flight handlers
-mid-write). adds ``HttpServer.drain(timeout_ms)``
-that closes the listener (no new connections accepted), waits up
-to ``timeout_ms`` for in-flight reactor events to flush, and
-returns a ``ShutdownReport``.
+``HttpServer.close()`` is a hard stop that cuts in-flight handlers
+mid-write. ``HttpServer.drain(timeout_ms)`` closes the listener (no new
+connections accepted), then lets the reactor flip
+``CancelReason.SHUTDOWN`` on every live connection before closing it --
+so cancel-aware handlers and streaming bodies observe the shutdown at
+their next poll instead of losing the socket mid-chunk.
 
-Idiomatic deployments in containers send ``SIGTERM`` with a 30s
-grace period before ``SIGKILL``; the production shape is:
+**flare installs no signal handler.** Mojo has no module-level mutable
+state, which is what an async-signal-safe handler needs to flip a
+process-global flag, so the caller owns the ``signal(2)`` wiring:
 
     var srv = HttpServer.bind(...)
-    var sig = install_sigterm_handler() # planned for
-    while not sig.received():
-        ... do work, poll the flag at boundaries you own ...
+    # ... your platform's signal-flagging mechanism sets a flag ...
     var report = srv.drain(timeout_ms=30_000)
 
-Mojo doesn't yet support module-level mutable ``var``s, so the
-``install_sigterm_handler`` helper that flips a process-global byte
-from a libc signal handler is deferred to a later commit. This
-example demonstrates the ``drain`` API directly so users can wire
-it up to whatever signal-flagging mechanism their platform offers
-in the meantime.
+On the counts: the single-threaded path returns zeros, because
+``serve()`` owns the calling thread and ``drain`` can only signal the
+loop and return -- it has no vantage point from which to count
+anything. ``Scheduler.drain`` (multi-worker) joins its workers and
+reports measured per-worker numbers.
 
 Run:
     pixi run example-drain
@@ -58,10 +56,14 @@ def main() raises:
     print(" in_flight_at_deadline =", report2.in_flight_at_deadline)
     print()
 
+    print("Counts are zero on the single-threaded path by design --")
+    print("serve() owns the calling thread, so drain can only signal.")
+    print("Scheduler.drain (multi-worker) reports measured counts.")
+    print()
     print("In production:")
     print(" var srv = HttpServer.bind(SocketAddr.localhost(8080))")
     print(" # ... start server in a background thread ...")
-    print(" # ... main thread polls a sigterm flag ...")
+    print(" # ... main thread polls your own SIGTERM flag ...")
     print(" var report = srv.drain(timeout_ms=30_000)")
     print()
     print("=== Example 23 complete ===")

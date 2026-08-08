@@ -10,6 +10,7 @@ For runnable code, [`cookbook.md`](cookbook.md) maps "I want to..." to
 an example file. For layering and the request lifecycle, see
 [`architecture.md`](architecture.md).
 
+- [What serves what](#what-serves-what)
 - [HTTP server](#http-server)
 - [HTTP client](#http-client)
 - [Routing](#routing)
@@ -31,6 +32,25 @@ an example file. For layering and the request lifecycle, see
 - [Errors](#errors)
 - [Configuration knobs](#configuration-knobs)
 - [Stability](#stability)
+
+## What serves what
+
+Which wire works over which transport, at which worker count. The
+handler is the same object in every cell.
+
+| Wire | Cleartext, 1 worker | Cleartext, N workers | TLS, 1 worker | TLS, N workers |
+|---|---|---|---|---|
+| HTTP/1.1 | yes | yes | yes | yes |
+| HTTP/2 | yes (h2c) | yes (h2c) | yes (ALPN `h2`) | yes (ALPN `h2`) |
+| HTTP/3 | n/a | n/a | yes (`serve_http3`) | not yet |
+| WebSocket | yes | yes | yes (over h1 or h2) | yes |
+
+Cleartext picks the protocol with the RFC 9113 §3.4 preface peek; TLS
+picks it from the ALPN the handshake negotiated. `bind_many` (several
+distinct addresses) is single-worker only -- multi-worker uses
+`SO_REUSEPORT` on one address, and the N x M cross product is not built.
+The io_uring buffer-ring path is HTTP/1.1 cleartext only and stays
+opt-in.
 
 ## HTTP server
 

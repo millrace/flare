@@ -384,12 +384,30 @@ Per-connection state machines:
 
 ```mermaid
 flowchart LR
-    Accept["accept() new connection"] --> Pending["PendingConnHandle (24-byte preface peek)"]
+    Accept["accept() new connection"] --> Cleartext{"TLS bound?"}
+    Cleartext -->|no| Pending["PendingConnHandle (24-byte preface peek)"]
+    Cleartext -->|yes| Tls["TlsConnHandle (SSL_accept on reactor edges)"]
     Pending -->|"first byte != 'P'"| H1["ConnHandle (HTTP/1.1)"]
     Pending -->|"24 bytes == H2 preface"| H2["Http2ConnHandle (HTTP/2)"]
+    Tls -->|"ALPN != h2"| H1
+    Tls -->|"ALPN == h2"| H2
     H1 --> Handler["handler.serve(req)"]
     H2 --> Handler
 ```
+
+The connection table is a single `Dict[Int, Int]` of tagged pointers
+(`(kind << 56) | addr`) with four kinds: `KIND_PENDING`, `KIND_TLS`,
+`KIND_H1`, `KIND_H2`. The first two are transitional -- a connection
+leaves them once the protocol is known, either by the cleartext preface
+peek or by the ALPN the TLS handshake negotiated.
+
+Promotion moves both owned resources into the protocol handle: the fd is
+detached from the transitional handle and rewrapped as a `RawSocket`, and
+for TLS the `SSL*` moves across via `TlsTransport.release` / `adopt`. The
+h1 and h2 handles then carry an `Optional[TlsTransport]`; when it is set
+their read and write loops go through `SSL_read` / `SSL_write` instead of
+the raw syscalls, which is why streaming, keep-alive, cancellation and
+every middleware behave the same on HTTPS as on cleartext.
 
 Both terminal handles run in the same reactor (`epoll` /
 `kqueue`), share the same accept-fairness story

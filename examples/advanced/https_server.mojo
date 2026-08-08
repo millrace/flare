@@ -1,4 +1,4 @@
-"""Example -- HTTPS server (TLS-terminated HTTP/1.1) with streaming.
+"""Example -- HTTPS server with streaming, on the unified reactor.
 
 `basic/tls.mojo` shows the TLS *client*; this is the server side. Flare
 terminates TLS in-process and serves ordinary `Handler` / `Router` code
@@ -9,15 +9,18 @@ shape is one call to bind, one to serve::
         SocketAddr.localhost(8443),
         cert_file="server.crt",
         key_file="server.key",
-        alpn=["http/1.1"],
+        alpn=["h2", "http/1.1"],
     )
-    srv.serve_tls(router^)
+    srv.serve_tls(router^, num_workers=4)
 
 `bind_tls` loads the PEM cert/key into a server `SSL_CTX` and advertises
-the given ALPN protocols; `serve_tls` runs the accept loop, driving each
-connection through a non-blocking handshake and an HTTP/1.1 keep-alive
-loop over `SSL_read` / `SSL_write` -- reusing the exact same request
-parsing and response serialisation as the plaintext path.
+the given ALPN protocols. `serve_tls` is `serve` on a TLS-bound server:
+the handshake runs on the reactor as its own connection kind, so many
+TLS connections are in flight at once and `num_workers > 1` spreads them
+across cores. When the handshake completes, the negotiated ALPN picks
+the protocol -- `h2` gets an HTTP/2 connection, anything else gets
+HTTP/1.1 -- and from there it is the same parsing and serialisation the
+plaintext path uses, just through `SSL_read` / `SSL_write`.
 
 Streaming composes for free: a handler that returns `stream_response(src)`
 is emitted with `Transfer-Encoding: chunked` framing, pulled chunk by
@@ -25,11 +28,10 @@ chunk and written as ciphertext. The same handler streams byte-identically
 on h1 (chunked), h2 (DATA frames), h3 (DATA frames), and https (chunked
 over `SSL_write`) -- the wire is an implementation detail.
 
-This demo is self-contained and non-blocking: it exercises the handler +
-streaming source in-process (deterministic output), then binds a real
-HTTPS listener on an ephemeral port using the repo's test cert to prove
-`bind_tls` loads the cert and binds the socket. It does not enter the
-blocking `serve_tls` accept loop.
+This demo is self-contained: it exercises the handler + streaming source
+in-process (deterministic output), then binds a real HTTPS listener on an
+ephemeral port using the repo's test cert to prove `bind_tls` loads the
+cert and binds the socket. It does not enter the serve loop, which blocks.
 
 Run:
     pixi run example-https
@@ -118,11 +120,13 @@ def main() raises:
     print()
 
     # 3) The real bind: load the cert/key and bind an HTTPS listener on an
-    #    ephemeral port. `serve_tls(r^)` would then run the accept loop
-    #    (omitted here so the example stays non-blocking).
+    #    ephemeral port, advertising h2 ahead of http/1.1 so a modern
+    #    client negotiates HTTP/2 over the same socket. `serve_tls(r^)`
+    #    would then run the reactor (omitted here so the example exits).
     print("[3] HttpServer.bind_tls (real cert load + socket bind):")
     try:
         var alpn = List[String]()
+        alpn.append("h2")
         alpn.append("http/1.1")
         var srv = HttpServer.bind_tls(
             SocketAddr.localhost(0),
@@ -131,7 +135,8 @@ def main() raises:
             alpn=alpn^,
         )
         print("    bound HTTPS listener at", String(srv.local_addr()))
-        print("    -> srv.serve_tls(r^) runs the TLS accept loop")
+        print("    advertising ALPN: h2, http/1.1")
+        print("    -> srv.serve_tls(r^, num_workers=4) runs the reactor")
     except e:
         print("    (skipped live bind:", String(e), ")")
 

@@ -9,9 +9,11 @@ shape. Stacks the four pieces docs/operations.md asks for:
   /healthz   -> the contract your LB / k8s probe expects.
 
 Plus an explicit graceful-shutdown handler ready to wire up to
-SIGTERM. ``HttpServer.serve()`` honours SIGINT / SIGTERM natively;
-the example demonstrates the in-handler ``Cancel`` plumbing so
-long-running handlers stop politely.
+SIGTERM. flare installs **no** signal handler -- Mojo has no
+module-level mutable state for an async-signal-safe one, so the
+caller owns the ``signal(2)`` wiring and calls ``srv.drain(...)``.
+The example demonstrates the in-handler ``Cancel`` plumbing so
+long-running handlers stop politely when drain flips the cell.
 
 Pure construction -- no live network. The handler stack and the
 server config are exercised at import + ``main()`` time so the
@@ -89,8 +91,10 @@ def main() raises:
     # Live serve is intentionally commented out so the example
     # doubles as a unit-test of the construction shape. In a real
     # deployment uncomment the following and run on the address
-    # of your choice; SIGINT / SIGTERM trigger the in-flight
-    # cancellation + drain documented in docs/operations.md.
+    # of your choice. Wire your own SIGTERM flag and call
+    # ``srv.drain(timeout_ms)``; the reactor flips Cancel.SHUTDOWN
+    # on live connections before closing them. See
+    # docs/operations.md.
     #
     #     var srv = HttpServer.bind(
     #         SocketAddr.localhost(8080),
@@ -104,4 +108,5 @@ def main() raises:
     print("timeouts: read_body=30s handler=30s request=60s (see ServerConfig)")
     print()
     print("Wire up to bind+serve in your real deployment;")
-    print("see docs/operations.md for the SIGTERM contract.")
+    print("wire your own SIGTERM flag -> srv.drain(timeout_ms).")
+    print("see docs/operations.md for the shutdown contract.")
