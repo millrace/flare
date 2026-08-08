@@ -211,6 +211,7 @@ ASAN_TESTS=(
   "tests/tls/test_tls_server_ffi.mojo"           # ServerCtx FFI (11 borrow helpers)
   "tests/tls/test_tls_resume.mojo"               # v0.7 TLS resumption: TlsSession lifetime + new_session_cb
   "tests/tls/test_tls_conn_handle.mojo"          # streaming Phase 4 — non-blocking server TLS reactor (SSL_read/write _ex FFI + loopback handshake)
+  "tests/http/test_client_stream_download_tls.mojo"  # v0.10 S5 — HTTPS streaming download
   "tests/http/test_chunked_request.mojo"          # v0.10 S2a — inbound chunked framing + e2e upload
   "tests/tls/test_https_reactor.mojo"            # v0.10 S1 — HTTPS on the unified reactor (concurrent conns, ALPN h2, multi-worker, streaming)
   "tests/http/test_cross_wire_streaming.mojo"    # streaming — cross-wire framing round-trip (pure-function; h1/h2/h3 DATA + chunked)

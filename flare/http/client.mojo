@@ -1359,26 +1359,18 @@ struct HttpClient(Movable):
         close-delimited framings decoded on the fly). The connection is
         not pooled (``Connection: close``).
 
-        ponytail: cleartext ``http://`` only today -- TLS / h2 / h3
-        streaming download needs a type-erased reader over the TLS / QUIC
-        transports (follow-up). Use :meth:`get` for a buffered ``https``
-        response.
+        For ``https://`` use :meth:`get_streaming_tls`. Mojo cannot
+        return two different concrete types from one function and
+        ``HttpDownload`` is parametric over its transport, so the two
+        schemes are two entry points rather than one with a branch.
         """
         var u = Url.parse(self._resolve_url(url))
         if u.is_tls():
             raise Error(
-                "get_streaming: cleartext http:// only today; use get() for"
-                " https (buffered)"
+                "get_streaming: cleartext http:// only; use"
+                " get_streaming_tls() for https"
             )
-        var host_header = u.host
-        if u.port != 80:
-            host_header = host_header + ":" + String(Int(u.port))
-        var wire = String("GET ") + u.request_target() + " HTTP/1.1\r\n"
-        wire += "Host: " + host_header + "\r\n"
-        wire += "User-Agent: " + self._user_agent + "\r\n"
-        wire += "Accept: */*\r\n"
-        wire += "Accept-Encoding: identity\r\n"
-        wire += "Connection: close\r\n\r\n"
+        var wire = self._streaming_get_wire(u, 80)
         var proxy = self._resolve_proxy(u)
         var stream: TcpStream
         if proxy.byte_length() > 0:
@@ -1388,6 +1380,73 @@ struct HttpClient(Movable):
         var wb = wire.as_bytes()
         stream.write_all(Span[UInt8, _](wb))
         return HttpDownload[TcpStream](stream^)
+
+    def _streaming_get_wire(self, u: Url, default_port: Int) -> String:
+        """Build the HTTP/1.1 GET head shared by both streaming paths.
+
+        ``Accept-Encoding: identity`` on purpose: a streaming download
+        pulls bounded chunks, and a compressed body would have to be
+        fully buffered to inflate, which is the opposite of the point.
+        """
+        var host_header = u.host
+        if Int(u.port) != default_port:
+            host_header = host_header + ":" + String(Int(u.port))
+        var wire = String("GET ") + u.request_target() + " HTTP/1.1\r\n"
+        wire += "Host: " + host_header + "\r\n"
+        wire += "User-Agent: " + self._user_agent + "\r\n"
+        wire += "Accept: */*\r\n"
+        wire += "Accept-Encoding: identity\r\n"
+        wire += "Connection: close\r\n\r\n"
+        return wire^
+
+    def get_streaming_tls(self, url: String) raises -> HttpDownload[TlsStream]:
+        """GET an ``https://`` response and stream its body incrementally.
+
+        The TLS twin of :meth:`get_streaming`. ``HttpDownload`` is
+        already generic over :trait:`flare.io.Readable` and ``TlsStream``
+        already satisfies it, so this is the same reader driven over a
+        different transport -- a 1 GB HTTPS response no longer costs
+        1 GB of client memory.
+
+        ALPN is pinned to ``http/1.1``: ``HttpDownload`` decodes HTTP/1.1
+        framing (Content-Length, chunked, close-delimited), so letting
+        the handshake settle on ``h2`` would hand it frame bytes. HTTP/2
+        and HTTP/3 streaming downloads need a reader over their
+        multiplexed streams and remain a follow-up.
+
+        The connection is not pooled (``Connection: close``).
+
+        Args:
+            url: The target URL (absolute or relative to ``base_url``).
+
+        Returns:
+            An :class:`HttpDownload` positioned at the first body byte.
+
+        Raises:
+            Error: If ``url`` is not ``https://``.
+            NetworkError: On connection, TLS or I/O failure.
+        """
+        var u = Url.parse(self._resolve_url(url))
+        if not u.is_tls():
+            raise Error(
+                "get_streaming_tls: https:// only; use get_streaming() for http"
+            )
+        var wire = self._streaming_get_wire(u, 443)
+        var tls_cfg = self._config.copy()
+        tls_cfg.alpn = List[String]()
+        tls_cfg.alpn.append("http/1.1")
+        var stream: TlsStream
+        var proxy = self._resolve_proxy(u)
+        if proxy.byte_length() > 0:
+            var tcp = self._connect_tunnel(proxy, u.host, u.port)
+            stream = TlsStream.connect_over_tcp(tcp^, u.host, tls_cfg^)
+        else:
+            stream = TlsStream.connect_timeout(
+                u.host, u.port, tls_cfg^, self._timeout_ms
+            )
+        var wb = wire.as_bytes()
+        stream.write_all(Span[UInt8, _](wb))
+        return HttpDownload[TlsStream](stream^)
 
     def post(self, url: String, body: String) raises -> Response:
         """Perform a POST request with a JSON string body.
