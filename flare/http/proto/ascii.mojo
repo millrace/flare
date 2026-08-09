@@ -44,7 +44,7 @@ Public API
   allocation. The pure-ASCII fast path skips the per-byte branch.
 """
 
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 
 @always_inline
@@ -77,7 +77,7 @@ def ascii_unchecked_string(span: Span[UInt8, _]) -> String:
     if n == 0:
         return String("")
     var s = String(unsafe_uninit_length=n)
-    memcpy(dest=s.unsafe_ptr_mut(), src=span.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=s.unsafe_ptr_mut(), src=span.unsafe_ptr(), count=n)
     return s^
 
 

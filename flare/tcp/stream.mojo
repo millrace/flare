@@ -169,7 +169,7 @@ struct TcpStream(Movable, Readable):
         var sock = RawSocket(family, SOCK_STREAM)
         var sa = _build_sockaddr_in(addr)
         var rc = _connect(sock.fd, sa[0], sa[1])
-        sa[0].free()
+        sa[0].unsafe_free()
         if rc < 0:
             var e = get_errno()
             var s = String(addr)
@@ -231,7 +231,7 @@ struct TcpStream(Movable, Readable):
             var rc = _do_flare_connect_timeout(
                 lib, sock.fd, Int(sa[0]), sa[1], c_int(timeout_ms)
             )
-            sa[0].free()
+            sa[0].unsafe_free()
 
             if rc == c_int(-2):
                 raise ConnectionTimeout(String(addr), timeout_ms)
@@ -259,7 +259,7 @@ struct TcpStream(Movable, Readable):
             # 1. Save current socket flags and enable non-blocking mode.
             var flags = _fcntl2(sock.fd, F_GETFL, c_int(0))
             if flags < c_int(0):
-                sa[0].free()
+                sa[0].unsafe_free()
                 var e = get_errno()
                 raise NetworkError(
                     _strerror(e.value) + " (fcntl F_GETFL)", Int(e.value)
@@ -271,7 +271,7 @@ struct TcpStream(Movable, Readable):
             var connect_errno = (
                 get_errno()
             )  # capture before free() touches errno
-            sa[0].free()
+            sa[0].unsafe_free()
 
             if rc == c_int(0):
                 # Immediate success (common on loopback).
@@ -319,7 +319,7 @@ struct TcpStream(Movable, Readable):
                     so_len,
                 )
                 _ = _fcntl2(sock.fd, F_SETFL, flags)
-                var err_val = Int(so_err.load())
+                var err_val = Int(so_err.unsafe_load())
                 if err_val != 0:
                     if err_val == Int(ErrNo.ECONNREFUSED.value):
                         raise ConnectionRefused(s, err_val)

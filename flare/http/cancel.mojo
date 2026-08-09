@@ -142,7 +142,7 @@ struct CancelCell(Movable):
                 unsafe_from_address=self._addr
             )
             p.unsafe_deinit_pointee()
-            p.free()
+            p.unsafe_free()
 
     def flip(mut self, reason: Int) -> None:
         """Set the cell's reason with a release store.

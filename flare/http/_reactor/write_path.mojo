@@ -20,7 +20,7 @@ match the byte-fast-path / keep-alive helpers in
 """
 
 from std.collections import List
-from std.memory import memcpy, UnsafePointer
+from std.memory import unsafe_memcpy, UnsafePointer
 
 from flare.http.response import Response
 from flare.http.server import (
@@ -60,7 +60,7 @@ def _put_str(mut buf: List[UInt8], off: Int, s: StringSlice) -> Int:
     """
     var n = s.byte_length()
     if n > 0:
-        memcpy(dest=buf.unsafe_ptr() + off, src=s.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=buf.unsafe_ptr() + off, src=s.unsafe_ptr(), count=n)
     return off + n
 
 
@@ -93,7 +93,7 @@ def _put_bytes(
 ) -> Int:
     """memcpy ``n`` bytes from ``src`` into ``buf`` at ``off``."""
     if n > 0:
-        memcpy(dest=buf.unsafe_ptr() + off, src=src, count=n)
+        unsafe_memcpy(dest=buf.unsafe_ptr() + off, src=src, count=n)
     return off + n
 
 

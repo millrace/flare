@@ -60,10 +60,10 @@ def monotonic_now_s() -> UInt64:
     ts_buf[1] = 0
     var rc = external_call["clock_gettime", c_int](_CLOCK_MONOTONIC, ts_buf)
     if Int(rc) != 0:
-        ts_buf.free()
+        ts_buf.unsafe_free()
         return UInt64(0)
     var sec = ts_buf[0]
-    ts_buf.free()
+    ts_buf.unsafe_free()
     return UInt64(sec)
 
 
@@ -355,7 +355,7 @@ struct AltSvcStore(Copyable, Movable):
             return
         var sp = self._state()
         sp.unsafe_deinit_pointee()
-        sp.free()
+        sp.unsafe_free()
         self._addr = 0
 
 

@@ -728,7 +728,7 @@ struct Http2ConnHandle(Movable):
                     unsafe_from_address=addr
                 )
                 p.unsafe_deinit_pointee()
-                p.free()
+                p.unsafe_free()
         for entry in self._stream_out.items():
             var addr = entry.value
             if addr != 0:

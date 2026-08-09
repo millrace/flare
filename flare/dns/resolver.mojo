@@ -123,7 +123,7 @@ def resolve(host: String) raises -> List[IpAddr]:
     if rc != 0:
         raise DnsError(host, Int(rc), _gai_strerror(rc))
 
-    var head = Int(res_slot.unsafe_bitcast[UInt64]().load())
+    var head = Int(res_slot.unsafe_bitcast[UInt64]().unsafe_load())
     var results = List[IpAddr]()
 
     var cur = head
@@ -137,10 +137,12 @@ def resolve(host: String) raises -> List[IpAddr]:
             unsafe_from_address=cur
         )
         var family = Int(
-            (node + ADDRINFO_AI_FAMILY_OFF).unsafe_bitcast[Int32]().load()
+            (node + ADDRINFO_AI_FAMILY_OFF)
+            .unsafe_bitcast[Int32]()
+            .unsafe_load()
         )
         var sa_ptr = Int(
-            (node + ADDRINFO_AI_ADDR_OFF).unsafe_bitcast[UInt64]().load()
+            (node + ADDRINFO_AI_ADDR_OFF).unsafe_bitcast[UInt64]().unsafe_load()
         )
 
         if sa_ptr != 0:
@@ -157,7 +159,9 @@ def resolve(host: String) raises -> List[IpAddr]:
                 except:
                     pass
 
-        cur = Int((node + ADDRINFO_AI_NEXT_OFF).unsafe_bitcast[UInt64]().load())
+        cur = Int(
+            (node + ADDRINFO_AI_NEXT_OFF).unsafe_bitcast[UInt64]().unsafe_load()
+        )
 
     _freeaddrinfo(head)
 

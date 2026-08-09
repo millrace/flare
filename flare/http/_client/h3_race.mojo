@@ -168,12 +168,12 @@ def race_http3_h2_connect(
         winner = RACE_H2
 
     h3_arg.unsafe_deinit_pointee()
-    h3_arg.free()
+    h3_arg.unsafe_free()
     h2_arg.unsafe_deinit_pointee()
-    h2_arg.free()
+    h2_arg.unsafe_free()
     h3_res.unsafe_deinit_pointee()
-    h3_res.free()
+    h3_res.unsafe_free()
     h2_res.unsafe_deinit_pointee()
-    h2_res.free()
+    h2_res.unsafe_free()
 
     return winner

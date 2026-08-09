@@ -151,7 +151,7 @@ struct TlsConnectionPool(Copyable, Movable):
                 continue
             var cell = Pool[TlsStream].get_ptr(addr)
             var stream = cell.take_pointee()
-            cell.free()
+            cell.unsafe_free()
             sp[].entries[key] = deque^
             return Optional(stream^)
         _ = sp[].entries.pop(key)
@@ -203,7 +203,7 @@ struct TlsConnectionPool(Copyable, Movable):
             for i in range(len(entry.value)):
                 Pool[TlsStream].free(entry.value[i])
         sp.unsafe_deinit_pointee()
-        sp.free()
+        sp.unsafe_free()
         self._addr = 0
 
 
@@ -215,9 +215,9 @@ def _monotonic_ms() -> Int:
     ts_buf[1] = 0
     var rc = external_call["clock_gettime", c_int](_CLOCK_MONOTONIC, ts_buf)
     if Int(rc) != 0:
-        ts_buf.free()
+        ts_buf.unsafe_free()
         return 0
     var sec = ts_buf[0]
     var nsec = ts_buf[1]
-    ts_buf.free()
+    ts_buf.unsafe_free()
     return sec * 1000 + nsec // 1_000_000

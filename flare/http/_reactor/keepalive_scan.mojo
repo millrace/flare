@@ -22,7 +22,7 @@ References:
 
 from std.collections import List
 from std.ffi import c_int, external_call
-from std.memory import memcpy, stack_allocation
+from std.memory import unsafe_memcpy, stack_allocation
 from std.sys.info import CompilationTarget
 
 from flare.http.headers import HeaderMap
@@ -147,9 +147,9 @@ def _monotonic_ms() -> Int:
     var sec: Int64 = 0
     var nsec: Int64 = 0
     for i in range(8):
-        sec |= Int64(Int((buf + i).load())) << Int64(8 * i)
+        sec |= Int64(Int((buf + i).unsafe_load())) << Int64(8 * i)
     for i in range(8):
-        nsec |= Int64(Int((buf + 8 + i).load())) << Int64(8 * i)
+        nsec |= Int64(Int((buf + 8 + i).unsafe_load())) << Int64(8 * i)
     return Int(sec) * 1000 + Int(nsec) // 1_000_000
 
 
@@ -334,7 +334,7 @@ def _compact_read_buf_drop_prefix(
     # replaces the O(N) per-byte append loop with a single memcpy.
     var leftover = List[UInt8](capacity=keep)
     leftover.resize(keep, UInt8(0))
-    memcpy(
+    unsafe_memcpy(
         dest=leftover.unsafe_ptr(),
         src=read_buf.unsafe_ptr() + drop_n,
         count=keep,

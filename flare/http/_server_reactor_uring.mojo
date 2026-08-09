@@ -534,7 +534,7 @@ def _free_recv_buffer_pool(addr: Int):
     if addr == 0:
         return
     var p = UnsafePointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)
-    p.free()
+    p.unsafe_free()
 
 
 def _cleanup_conn_uring_br(
@@ -926,7 +926,7 @@ def run_uring_bufring_reactor_loop_shared[
             # single-worker variant for the full rationale).
             ch_ptr[].read_buf.reserve(len(ch_ptr[].read_buf) + n)
             for i in range(n):
-                ch_ptr[].read_buf.append((buf + i).load())
+                ch_ptr[].read_buf.append((buf + i).unsafe_load())
 
             # Re-fill via shared-memory tail bump (PBUF_RING).
             var cur_tail = _pbuf_ring_get_tail(ring_addr)

@@ -129,7 +129,7 @@ struct Pool[T: Deinitable & Movable]:
                 unsafe_from_address=addr
             ).unsafe_bitcast[Self.T]()
             ptr.unsafe_deinit_pointee()
-            ptr.free()
+            ptr.unsafe_free()
         else:
             # ZST path: free as UInt8 since that's what was
             # allocated. Still run T's destructor for symmetry —
@@ -139,7 +139,7 @@ struct Pool[T: Deinitable & Movable]:
                 unsafe_from_address=addr
             )
             raw.unsafe_bitcast[Self.T]().unsafe_deinit_pointee()
-            raw.free()
+            raw.unsafe_free()
 
     @staticmethod
     @always_inline

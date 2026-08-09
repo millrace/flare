@@ -216,7 +216,7 @@ struct ThreadHandle(Movable):
                 c_size_t,
                 _OpaquePtr,  # cpu_set_t *
             ](self._thread_id, c_size_t(_CPUSET_SIZE), cpuset_ptr)
-            cpuset_ptr.free()
+            cpuset_ptr.unsafe_free()
             if rc != c_int(0):
                 raise Error(
                     "pthread_setaffinity_np failed with rc=" + String(Int(rc))

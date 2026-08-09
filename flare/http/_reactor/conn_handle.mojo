@@ -47,7 +47,7 @@ and the fuzz corpus.
 
 from std.collections import List, Optional
 from std.ffi import c_int, c_size_t, ErrNo, get_errno
-from std.memory import memcpy, stack_allocation
+from std.memory import unsafe_memcpy, stack_allocation
 
 from flare.crypto.hmac import base64url_decode
 from flare.errors import map_handler_error
@@ -329,7 +329,7 @@ struct ConnHandle(Movable):
                 var got_int = Int(got)
                 self.read_buf.resize(old_len + got_int, UInt8(0))
                 var dst = self.read_buf.unsafe_ptr() + old_len
-                memcpy(dest=dst, src=chunk, count=got_int)
+                unsafe_memcpy(dest=dst, src=chunk, count=got_int)
                 if (
                     len(self.read_buf)
                     > config.max_header_size + config.max_body_size
@@ -406,7 +406,7 @@ struct ConnHandle(Movable):
             var add = len(bytes)
             self.read_buf.resize(old_len + add, UInt8(0))
             var dst = self.read_buf.unsafe_ptr() + old_len
-            memcpy(dest=dst, src=bytes.unsafe_ptr(), count=add)
+            unsafe_memcpy(dest=dst, src=bytes.unsafe_ptr(), count=add)
             if (
                 len(self.read_buf)
                 > config.max_header_size + config.max_body_size

@@ -7,7 +7,7 @@ re-exports every name here, so the public ``flare.http`` /
 ``flare.prelude`` / ``flare`` surfaces are unchanged.
 """
 
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from json import dumps, Value as JsonValue
 
@@ -31,7 +31,7 @@ def _string_to_bytes(s: String) -> List[UInt8]:
         return body_bytes^
     body_bytes.resize(n, UInt8(0))
     var src = s.as_bytes()
-    memcpy(dest=body_bytes.unsafe_ptr(), src=src.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=body_bytes.unsafe_ptr(), src=src.unsafe_ptr(), count=n)
     return body_bytes^
 
 

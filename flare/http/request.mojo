@@ -140,7 +140,7 @@ struct Request(Movable):
         if self._params:
             var p = self._params.value()
             p.unsafe_deinit_pointee()
-            p.free()
+            p.unsafe_free()
 
     @staticmethod
     def test_get(url: String) -> Request:

@@ -310,7 +310,7 @@ struct UringReactor(Movable):
         """Free the wakeup buffer + close the wakeup fd; the
         ``IoUringDriver`` destructor handles ring teardown."""
         if Int(self._wake_buf) != 0:
-            self._wake_buf.free()
+            self._wake_buf.unsafe_free()
         if self._wake_fd != INVALID_FD:
             _ = _close(self._wake_fd)
 

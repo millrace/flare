@@ -534,13 +534,13 @@ def _build_sockaddr_in(
             (ip_buf + i).unsafe_write(0)
         var rc = _inet_pton(AF_INET6, String(addr.ip), ip_buf)
         if rc != 1:
-            ip_buf.free()
+            ip_buf.unsafe_free()
             raise AddressParseError(String(addr.ip))
         var sa = alloc[UInt8](28)
         for i in range(28):
             (sa + i).unsafe_write(0)
         _fill_sockaddr_in6(sa, addr.port, ip_buf)
-        ip_buf.free()
+        ip_buf.unsafe_free()
         return Tuple(sa, SOCKADDR_IN6_SIZE)
     else:
         var ip_buf = alloc[UInt8](4)
@@ -548,13 +548,13 @@ def _build_sockaddr_in(
             (ip_buf + i).unsafe_write(0)
         var rc = _inet_pton(AF_INET, String(addr.ip), ip_buf)
         if rc != 1:
-            ip_buf.free()
+            ip_buf.unsafe_free()
             raise AddressParseError(String(addr.ip))
         var sa = alloc[UInt8](16)
         for i in range(16):
             (sa + i).unsafe_write(0)
         _fill_sockaddr_in(sa, addr.port, ip_buf)
-        ip_buf.free()
+        ip_buf.unsafe_free()
         return Tuple(sa, SOCKADDR_IN_SIZE)
 
 

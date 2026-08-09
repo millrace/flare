@@ -100,5 +100,5 @@ struct CookieStore(Copyable, Movable):
             return
         var sp = self._state()
         sp.unsafe_deinit_pointee()
-        sp.free()
+        sp.unsafe_free()
         self._addr = 0

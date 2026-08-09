@@ -203,13 +203,13 @@ struct BatchReceiver(Movable):
 
     def __deinit__(deinit self):
         if Int(self._mmsg) != 0:
-            self._mmsg.free()
+            self._mmsg.unsafe_free()
         if Int(self._iov) != 0:
-            self._iov.free()
+            self._iov.unsafe_free()
         if Int(self._names) != 0:
-            self._names.free()
+            self._names.unsafe_free()
         if Int(self._data) != 0:
-            self._data.free()
+            self._data.unsafe_free()
 
     def recv(mut self, fd: Int) raises -> Int:
         """Drain up to ``capacity`` datagrams with one non-blocking
@@ -334,27 +334,27 @@ def send_batch(
         var ret = _sendmmsg(c_int(fd), mmsg, c_uint(n), c_int(0))
         if ret < 0:
             var e = get_errno()
-            mmsg.free()
-            iov.free()
+            mmsg.unsafe_free()
+            iov.unsafe_free()
             for j in range(len(sas)):
-                sas[j].free()
+                sas[j].unsafe_free()
             if e == ErrNo.ENOSYS:
                 raise UdpBatchUnsupported("sendmmsg")
             raise NetworkError(_strerror(e.value) + " (sendmmsg)", Int(e.value))
-        mmsg.free()
-        iov.free()
+        mmsg.unsafe_free()
+        iov.unsafe_free()
         for j in range(len(sas)):
-            sas[j].free()
+            sas[j].unsafe_free()
         return Int(ret)
     except e:
         # Defensive: free anything still owned on an unexpected raise
         # from _build_sockaddr_in mid-loop.
         if Int(mmsg) != 0:
-            mmsg.free()
+            mmsg.unsafe_free()
         if Int(iov) != 0:
-            iov.free()
+            iov.unsafe_free()
         for j in range(len(sas)):
-            sas[j].free()
+            sas[j].unsafe_free()
         raise e^
 
 
@@ -404,10 +404,10 @@ def send_segmented(
     _poke_u64(hdr, _OFF_CONTROLLEN, UInt64(_CMSG_LEN_GSO))
     var ret = _sendmsg(c_int(fd), hdr, c_int(0))
     var e = get_errno()
-    sa[0].free()
-    iov.free()
-    ctrl.free()
-    hdr.free()
+    sa[0].unsafe_free()
+    iov.unsafe_free()
+    ctrl.unsafe_free()
+    hdr.unsafe_free()
     if ret < 0:
         if e == ErrNo.ENOSYS or e == ErrNo.EINVAL or e == ErrNo.ENOPROTOOPT:
             raise UdpBatchUnsupported("sendmsg/UDP_SEGMENT")

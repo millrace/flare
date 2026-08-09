@@ -7,7 +7,7 @@ re-exports every name here (including the ``_ascii_lower`` alias the
 reactor and gRPC adapter import from ``flare.http.server``).
 """
 
-from std.memory import memcpy, stack_allocation
+from std.memory import unsafe_memcpy, stack_allocation
 
 from ..response import Response
 from ..headers import _eq_icase
@@ -96,7 +96,7 @@ def _append_str(mut buf: List[UInt8], s: String):
         return
     var old_len = len(buf)
     buf.resize(old_len + n, UInt8(0))
-    memcpy(dest=buf.unsafe_ptr() + old_len, src=s.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=buf.unsafe_ptr() + old_len, src=s.unsafe_ptr(), count=n)
 
 
 @always_inline

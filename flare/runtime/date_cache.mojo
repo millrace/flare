@@ -357,7 +357,7 @@ def _realtime_seconds() -> Int:
     )
     var sec: Int64 = 0
     for i in range(8):
-        sec |= Int64(Int((buf + i).load())) << Int64(8 * i)
+        sec |= Int64(Int((buf + i).unsafe_load())) << Int64(8 * i)
     return Int(sec)
 
 

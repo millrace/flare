@@ -140,7 +140,7 @@ struct TcpListener(Movable):
 
         var sa = _build_sockaddr_in(addr)
         var rc = _bind(sock.fd, sa[0], sa[1])
-        sa[0].free()
+        sa[0].unsafe_free()
 
         if rc < 0:
             var e = get_errno()

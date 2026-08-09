@@ -221,7 +221,7 @@ def _scheduler_free_raw(raw: _OpaquePtr):
     ``fuzz-scheduler-shutdown`` harness from importing
     ``flare.runtime.scheduler`` at all.
     """
-    raw.free()
+    raw.unsafe_free()
 
 
 def _scheduler_free_ctxs[F: Frontend & Copyable](addrs: List[Int]):

@@ -233,10 +233,10 @@ def _fill_sockaddr_in(
     (buf + 3).unsafe_write(UInt8(port & 0xFF))
 
     # IPv4 address (already in network byte order from inet_pton)
-    (buf + 4).unsafe_write((ip_bytes + 0).load())
-    (buf + 5).unsafe_write((ip_bytes + 1).load())
-    (buf + 6).unsafe_write((ip_bytes + 2).load())
-    (buf + 7).unsafe_write((ip_bytes + 3).load())
+    (buf + 4).unsafe_write((ip_bytes + 0).unsafe_load())
+    (buf + 5).unsafe_write((ip_bytes + 1).unsafe_load())
+    (buf + 6).unsafe_write((ip_bytes + 2).unsafe_load())
+    (buf + 7).unsafe_write((ip_bytes + 3).unsafe_load())
     # bytes 8-15 remain zero-initialised by caller (sin_zero padding)
 
 
@@ -283,7 +283,7 @@ def _fill_sockaddr_in6(
 
     # sin6_addr (16 bytes)
     for i in range(16):
-        (buf + 8 + i).unsafe_write((ip_bytes + i).load())
+        (buf + 8 + i).unsafe_write((ip_bytes + i).unsafe_load())
 
     # sin6_scope_id (4 bytes zeroed)
     for i in range(24, 28):

@@ -470,7 +470,7 @@ struct IoUringRing(Movable):
             )
         var rc = io_uring_setup(entries, raw)
         if rc < 0:
-            raw.free()
+            raw.unsafe_free()
             raise Error("io_uring_setup failed: errno=" + String(-rc))
         self._fd = rc
         self._params_buf = UnsafePointer[UInt8, MutUntrackedOrigin](
@@ -482,7 +482,7 @@ struct IoUringRing(Movable):
         if self._fd >= 0:
             _ = external_call["close", c_int](c_int(self._fd))
         if Int(self._params_buf) != 0:
-            self._params_buf.free()
+            self._params_buf.unsafe_free()
 
     def fd(self) -> Int:
         """Return the ring file descriptor."""
@@ -527,7 +527,7 @@ def is_io_uring_available() -> Bool:
     for i in range(_IO_URING_PARAMS_BYTES):
         (raw + i).unsafe_write(UInt8(0))
     var rc = io_uring_setup(1, raw)
-    raw.free()
+    raw.unsafe_free()
     if rc < 0:
         return False
     _ = external_call["close", c_int](c_int(rc))

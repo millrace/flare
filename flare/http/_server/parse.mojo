@@ -9,7 +9,7 @@ they build on live in :mod:`flare.http._server.parse_util`.
 keep importing them from ``flare.http.server``.
 """
 
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from ..intern import intern_method_bytes
 from ..request import Request
@@ -304,7 +304,7 @@ def _parse_http_request_bytes(
             var n2 = end - pos
             if n2 > 0:
                 body.resize(n2, UInt8(0))
-                memcpy(
+                unsafe_memcpy(
                     dest=body.unsafe_ptr(),
                     src=data.unsafe_ptr() + pos,
                     count=n2,
@@ -429,7 +429,7 @@ def _parse_http_request_bytes_minimal(
         var n = body_end - body_start
         if n > 0:
             body.resize(n, UInt8(0))
-            memcpy(
+            unsafe_memcpy(
                 dest=body.unsafe_ptr(),
                 src=data.unsafe_ptr() + body_start,
                 count=n,

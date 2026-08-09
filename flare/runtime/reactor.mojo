@@ -239,8 +239,8 @@ struct Reactor(Movable):
                 var e = _os_error("pipe")
                 _ = _close(kq)
                 raise e
-            var r_end = pipe_fds.load()
-            var w_end = (pipe_fds + 1).load()
+            var r_end = pipe_fds.unsafe_load()
+            var w_end = (pipe_fds + 1).unsafe_load()
             self._fd = kq
             self._wake_read = r_end
             self._wake_write = w_end

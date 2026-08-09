@@ -113,8 +113,8 @@ def _pbuf_ring_get_tail(ring_addr: Int) -> UInt16:
     var tail_ptr = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=ring_addr + 14
     )
-    var lo = Int(tail_ptr.load())
-    var hi = Int((tail_ptr + 1).load())
+    var lo = Int(tail_ptr.unsafe_load())
+    var hi = Int((tail_ptr + 1).unsafe_load())
     return UInt16((hi << 8) | lo)
 
 
