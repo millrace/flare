@@ -140,16 +140,18 @@ def _monotonic_ms() -> Int:
     """
     var buf = stack_allocation[16, UInt8]()
     for i in range(16):
-        (buf + i).unsafe_write(UInt8(0))
+        buf.unsafe_offset(i).unsafe_write(UInt8(0))
     _ = external_call["clock_gettime", c_int](
         _CLOCK_MONOTONIC, buf.unsafe_bitcast[NoneType]()
     )
     var sec: Int64 = 0
     var nsec: Int64 = 0
     for i in range(8):
-        sec |= Int64(Int((buf + i).unsafe_load())) << Int64(8 * i)
+        sec |= Int64(Int(buf.unsafe_offset(i).unsafe_load())) << Int64(8 * i)
     for i in range(8):
-        nsec |= Int64(Int((buf + 8 + i).unsafe_load())) << Int64(8 * i)
+        nsec |= Int64(Int(buf.unsafe_offset(8 + i).unsafe_load())) << Int64(
+            8 * i
+        )
     return Int(sec) * 1000 + Int(nsec) // 1_000_000
 
 

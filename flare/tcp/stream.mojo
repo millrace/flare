@@ -291,9 +291,11 @@ struct TcpStream(Movable, Readable):
                 # 3. EINPROGRESS: wait for the socket to become writable.
                 var pfd = stack_allocation[Int(POLLFD_SIZE), UInt8]()
                 for i in range(Int(POLLFD_SIZE)):
-                    (pfd + i).unsafe_write(0)
+                    pfd.unsafe_offset(i).unsafe_write(0)
                 pfd.unsafe_bitcast[c_int]().unsafe_write(sock.fd)
-                (pfd + 4).unsafe_bitcast[Int16]().unsafe_write(Int16(POLLOUT))
+                pfd.unsafe_offset(4).unsafe_bitcast[Int16]().unsafe_write(
+                    Int16(POLLOUT)
+                )
 
                 var nready = _poll(pfd, c_uint(1), c_int(timeout_ms))
                 if nready == c_int(0):

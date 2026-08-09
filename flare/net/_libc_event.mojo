@@ -121,23 +121,25 @@ def _epoll_event_set(
         Int(buf) != 0, "_epoll_event_set: null epoll_event buffer"
     )
     # events field is always at offset 0, little-endian UInt32.
-    (buf + 0).unsafe_write(UInt8(events & 0xFF))
-    (buf + 1).unsafe_write(UInt8((events >> 8) & 0xFF))
-    (buf + 2).unsafe_write(UInt8((events >> 16) & 0xFF))
-    (buf + 3).unsafe_write(UInt8((events >> 24) & 0xFF))
+    buf.unsafe_offset(0).unsafe_write(UInt8(events & 0xFF))
+    buf.unsafe_offset(1).unsafe_write(UInt8((events >> 8) & 0xFF))
+    buf.unsafe_offset(2).unsafe_write(UInt8((events >> 16) & 0xFF))
+    buf.unsafe_offset(3).unsafe_write(UInt8((events >> 24) & 0xFF))
 
     # x86_64 packs the struct: data starts at offset 4. aarch64 keeps natural
     # alignment: 4 bytes of padding then data at offset 8.
     comptime if not CompilationTarget.is_x86():
-        (buf + 4).unsafe_write(UInt8(0))
-        (buf + 5).unsafe_write(UInt8(0))
-        (buf + 6).unsafe_write(UInt8(0))
-        (buf + 7).unsafe_write(UInt8(0))
+        buf.unsafe_offset(4).unsafe_write(UInt8(0))
+        buf.unsafe_offset(5).unsafe_write(UInt8(0))
+        buf.unsafe_offset(6).unsafe_write(UInt8(0))
+        buf.unsafe_offset(7).unsafe_write(UInt8(0))
 
     # data.u64 is 8 bytes, little-endian.
     var off = EPOLL_EVENT_DATA_OFF
     for i in range(8):
-        (buf + off + i).unsafe_write(UInt8((data_u64 >> UInt64(8 * i)) & 0xFF))
+        buf.unsafe_offset(off + i).unsafe_write(
+            UInt8((data_u64 >> UInt64(8 * i)) & 0xFF)
+        )
 
 
 @always_inline
@@ -147,10 +149,10 @@ def _epoll_event_read_events(buf: UnsafePointer[UInt8, _]) -> UInt32:
         Int(buf) != 0, "_epoll_event_read_events: null epoll_event buffer"
     )
     return (
-        UInt32((buf + 0).unsafe_load())
-        | (UInt32((buf + 1).unsafe_load()) << 8)
-        | (UInt32((buf + 2).unsafe_load()) << 16)
-        | (UInt32((buf + 3).unsafe_load()) << 24)
+        UInt32(buf.unsafe_offset(0).unsafe_load())
+        | (UInt32(buf.unsafe_offset(1).unsafe_load()) << 8)
+        | (UInt32(buf.unsafe_offset(2).unsafe_load()) << 16)
+        | (UInt32(buf.unsafe_offset(3).unsafe_load()) << 24)
     )
 
 
@@ -163,7 +165,7 @@ def _epoll_event_read_data(buf: UnsafePointer[UInt8, _]) -> UInt64:
     var off = EPOLL_EVENT_DATA_OFF
     var v: UInt64 = 0
     for i in range(8):
-        v |= UInt64((buf + off + i).unsafe_load()) << UInt64(8 * i)
+        v |= UInt64(buf.unsafe_offset(off + i).unsafe_load()) << UInt64(8 * i)
     return v
 
 
@@ -196,33 +198,37 @@ def _kevent_set(
     """
     # ident: 8 bytes LE
     for i in range(8):
-        (buf + KEVENT_IDENT_OFF + i).unsafe_write(
+        buf.unsafe_offset(KEVENT_IDENT_OFF + i).unsafe_write(
             UInt8((ident >> UInt64(8 * i)) & 0xFF)
         )
     # filter: 2 bytes LE (Int16 -> two's complement via UInt16 bit-cast)
     var f16 = UInt16(filter & 0xFFFF) if filter >= 0 else UInt16(
         (UInt32(Int32(filter)) & 0xFFFF)
     )
-    (buf + KEVENT_FILTER_OFF + 0).unsafe_write(UInt8(f16 & 0xFF))
-    (buf + KEVENT_FILTER_OFF + 1).unsafe_write(UInt8((f16 >> 8) & 0xFF))
+    buf.unsafe_offset(KEVENT_FILTER_OFF + 0).unsafe_write(UInt8(f16 & 0xFF))
+    buf.unsafe_offset(KEVENT_FILTER_OFF + 1).unsafe_write(
+        UInt8((f16 >> 8) & 0xFF)
+    )
     # flags: 2 bytes LE
-    (buf + KEVENT_FLAGS_OFF + 0).unsafe_write(UInt8(flags & 0xFF))
-    (buf + KEVENT_FLAGS_OFF + 1).unsafe_write(UInt8((flags >> 8) & 0xFF))
+    buf.unsafe_offset(KEVENT_FLAGS_OFF + 0).unsafe_write(UInt8(flags & 0xFF))
+    buf.unsafe_offset(KEVENT_FLAGS_OFF + 1).unsafe_write(
+        UInt8((flags >> 8) & 0xFF)
+    )
     # fflags: 4 bytes LE
     for i in range(4):
-        (buf + KEVENT_FFLAGS_OFF + i).unsafe_write(
+        buf.unsafe_offset(KEVENT_FFLAGS_OFF + i).unsafe_write(
             UInt8((fflags >> UInt32(8 * i)) & 0xFF)
         )
     # data: 8 bytes LE (treat as bit pattern; caller supplies non-negative
     # values for our use-cases)
     var d64 = UInt64(data) if data >= 0 else UInt64(Int(data))
     for i in range(8):
-        (buf + KEVENT_DATA_OFF + i).unsafe_write(
+        buf.unsafe_offset(KEVENT_DATA_OFF + i).unsafe_write(
             UInt8((d64 >> UInt64(8 * i)) & 0xFF)
         )
     # udata: 8 bytes LE
     for i in range(8):
-        (buf + KEVENT_UDATA_OFF + i).unsafe_write(
+        buf.unsafe_offset(KEVENT_UDATA_OFF + i).unsafe_write(
             UInt8((udata >> UInt64(8 * i)) & 0xFF)
         )
 
@@ -239,8 +245,8 @@ def _kevent_read_ident(buf: UnsafePointer[UInt8, _]) -> UInt64:
 @always_inline
 def _kevent_read_filter(buf: UnsafePointer[UInt8, _]) -> Int16:
     """Read the ``filter`` field from a ``kevent`` buffer."""
-    var lo = UInt16((buf + KEVENT_FILTER_OFF + 0).unsafe_load())
-    var hi = UInt16((buf + KEVENT_FILTER_OFF + 1).unsafe_load())
+    var lo = UInt16(buf.unsafe_offset(KEVENT_FILTER_OFF + 0).unsafe_load())
+    var hi = UInt16(buf.unsafe_offset(KEVENT_FILTER_OFF + 1).unsafe_load())
     var v = lo | (hi << 8)
     return Int16(v) if v < 0x8000 else Int16(Int(v) - 0x10000)
 
@@ -248,8 +254,8 @@ def _kevent_read_filter(buf: UnsafePointer[UInt8, _]) -> Int16:
 @always_inline
 def _kevent_read_flags(buf: UnsafePointer[UInt8, _]) -> UInt16:
     """Read the ``flags`` field from a ``kevent`` buffer."""
-    return UInt16((buf + KEVENT_FLAGS_OFF + 0).unsafe_load()) | (
-        UInt16((buf + KEVENT_FLAGS_OFF + 1).unsafe_load()) << 8
+    return UInt16(buf.unsafe_offset(KEVENT_FLAGS_OFF + 0).unsafe_load()) | (
+        UInt16(buf.unsafe_offset(KEVENT_FLAGS_OFF + 1).unsafe_load()) << 8
     )
 
 
@@ -258,9 +264,9 @@ def _kevent_read_fflags(buf: UnsafePointer[UInt8, _]) -> UInt32:
     """Read the ``fflags`` field from a ``kevent`` buffer."""
     var v: UInt32 = 0
     for i in range(4):
-        v |= UInt32((buf + KEVENT_FFLAGS_OFF + i).unsafe_load()) << UInt32(
-            8 * i
-        )
+        v |= UInt32(
+            buf.unsafe_offset(KEVENT_FFLAGS_OFF + i).unsafe_load()
+        ) << UInt32(8 * i)
     return v
 
 

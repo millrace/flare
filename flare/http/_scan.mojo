@@ -81,7 +81,7 @@ def find_crlfcrlf[
 
     comptime if W == 32:
         while i + W + 3 <= n:
-            var chunk = (p + i).load[width=W]()
+            var chunk = p.unsafe_offset(i).load[width=W]()
             var cr_mask = chunk.eq(13)
             if cr_mask.reduce_or():
                 var bits = pack_bits[dtype=DType.uint32](cr_mask)
@@ -94,7 +94,7 @@ def find_crlfcrlf[
             i += W
     elif W == 64:
         while i + W + 3 <= n:
-            var chunk = (p + i).load[width=W]()
+            var chunk = p.unsafe_offset(i).load[width=W]()
             var cr_mask = chunk.eq(13)
             if cr_mask.reduce_or():
                 var bits = pack_bits[dtype=DType.uint64](cr_mask)
@@ -189,7 +189,7 @@ def scan_content_length[
 
     comptime if W == 32:
         while i + W <= end:
-            var chunk = (p + i).load[width=W]()
+            var chunk = p.unsafe_offset(i).load[width=W]()
             # Candidate if byte == 'c' (0x63) or 'C' (0x43).
             var lc = chunk.eq(99)
             var uc = chunk.eq(67)
@@ -207,7 +207,7 @@ def scan_content_length[
             i += W
     elif W == 64:
         while i + W <= end:
-            var chunk = (p + i).load[width=W]()
+            var chunk = p.unsafe_offset(i).load[width=W]()
             var lc = chunk.eq(99)
             var uc = chunk.eq(67)
             var cand = lc | uc

@@ -758,7 +758,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 var th = ThreadHandle.spawn[_worker_entry[Self.F]](arg)
                 # Move the (non-Copyable) handle into the next slot
                 # of the worker array; bump the live-slot counter.
-                (s._workers_ptr + s._workers_len).unsafe_write(th^)
+                s._workers_ptr.unsafe_offset(s._workers_len).unsafe_write(th^)
                 s._workers_len += 1
                 s._ctx_addrs.append(ctx_addr)
                 spawned = True
@@ -770,10 +770,10 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 store_stop_flag(stopping_addr, True)
                 for j in range(s._workers_len):
                     try:
-                        (s._workers_ptr + j)[].join()
+                        s._workers_ptr.unsafe_offset(j)[].join()
                     except:
                         pass
-                    (s._workers_ptr + j).unsafe_deinit_pointee()
+                    s._workers_ptr.unsafe_offset(j).unsafe_deinit_pointee()
                 _scheduler_free_raw(s._workers_ptr.unsafe_bitcast[UInt8]())
                 # b2: UnsafePointer is non-nullable; C NULL from a runtime 0.
                 var null_addr = 0
@@ -834,10 +834,10 @@ struct Scheduler[F: Frontend & Copyable](Movable):
         """
         for i in range(self._workers_len):
             try:
-                (self._workers_ptr + i)[].join()
+                self._workers_ptr.unsafe_offset(i)[].join()
             except:
                 pass
-            (self._workers_ptr + i).unsafe_deinit_pointee()
+            self._workers_ptr.unsafe_offset(i).unsafe_deinit_pointee()
         if self._workers_len > 0:
             _scheduler_free_raw(self._workers_ptr.unsafe_bitcast[UInt8]())
             var null_addr = 0

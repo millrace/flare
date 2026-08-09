@@ -221,22 +221,22 @@ def _fill_sockaddr_in(
 
     comptime if CompilationTarget.is_macos():
         # BSD-style: first byte is struct length, second is family
-        (buf + 0).unsafe_write(UInt8(16))  # sin_len
-        (buf + 1).unsafe_write(UInt8(2))  # AF_INET
+        buf.unsafe_offset(0).unsafe_write(UInt8(16))  # sin_len
+        buf.unsafe_offset(1).unsafe_write(UInt8(2))  # AF_INET
     else:
         # Linux: sin_family as little-endian UInt16 → [2, 0]
-        (buf + 0).unsafe_write(UInt8(2))  # family low byte
-        (buf + 1).unsafe_write(UInt8(0))  # family high byte
+        buf.unsafe_offset(0).unsafe_write(UInt8(2))  # family low byte
+        buf.unsafe_offset(1).unsafe_write(UInt8(0))  # family high byte
 
     # Port in network byte order (big-endian)
-    (buf + 2).unsafe_write(UInt8(port >> 8))
-    (buf + 3).unsafe_write(UInt8(port & 0xFF))
+    buf.unsafe_offset(2).unsafe_write(UInt8(port >> 8))
+    buf.unsafe_offset(3).unsafe_write(UInt8(port & 0xFF))
 
     # IPv4 address (already in network byte order from inet_pton)
-    (buf + 4).unsafe_write((ip_bytes + 0).unsafe_load())
-    (buf + 5).unsafe_write((ip_bytes + 1).unsafe_load())
-    (buf + 6).unsafe_write((ip_bytes + 2).unsafe_load())
-    (buf + 7).unsafe_write((ip_bytes + 3).unsafe_load())
+    buf.unsafe_offset(4).unsafe_write(ip_bytes.unsafe_offset(0).unsafe_load())
+    buf.unsafe_offset(5).unsafe_write(ip_bytes.unsafe_offset(1).unsafe_load())
+    buf.unsafe_offset(6).unsafe_write(ip_bytes.unsafe_offset(2).unsafe_load())
+    buf.unsafe_offset(7).unsafe_write(ip_bytes.unsafe_offset(3).unsafe_load())
     # bytes 8-15 remain zero-initialised by caller (sin_zero padding)
 
 
@@ -267,27 +267,29 @@ def _fill_sockaddr_in6(
     var af6 = Int(AF_INET6)
 
     comptime if CompilationTarget.is_macos():
-        (buf + 0).unsafe_write(UInt8(28))  # sin6_len
-        (buf + 1).unsafe_write(UInt8(af6))  # AF_INET6
+        buf.unsafe_offset(0).unsafe_write(UInt8(28))  # sin6_len
+        buf.unsafe_offset(1).unsafe_write(UInt8(af6))  # AF_INET6
     else:
-        (buf + 0).unsafe_write(UInt8(af6 & 0xFF))
-        (buf + 1).unsafe_write(UInt8((af6 >> 8) & 0xFF))
+        buf.unsafe_offset(0).unsafe_write(UInt8(af6 & 0xFF))
+        buf.unsafe_offset(1).unsafe_write(UInt8((af6 >> 8) & 0xFF))
 
     # Port in network byte order
-    (buf + 2).unsafe_write(UInt8(port >> 8))
-    (buf + 3).unsafe_write(UInt8(port & 0xFF))
+    buf.unsafe_offset(2).unsafe_write(UInt8(port >> 8))
+    buf.unsafe_offset(3).unsafe_write(UInt8(port & 0xFF))
 
     # sin6_flowinfo (4 bytes zeroed)
     for i in range(4, 8):
-        (buf + i).unsafe_write(UInt8(0))
+        buf.unsafe_offset(i).unsafe_write(UInt8(0))
 
     # sin6_addr (16 bytes)
     for i in range(16):
-        (buf + 8 + i).unsafe_write((ip_bytes + i).unsafe_load())
+        buf.unsafe_offset(8 + i).unsafe_write(
+            ip_bytes.unsafe_offset(i).unsafe_load()
+        )
 
     # sin6_scope_id (4 bytes zeroed)
     for i in range(24, 28):
-        (buf + i).unsafe_write(UInt8(0))
+        buf.unsafe_offset(i).unsafe_write(UInt8(0))
 
 
 @always_inline
@@ -333,12 +335,12 @@ def _read_ip_from_sockaddr(buf: UnsafePointer[UInt8, _]) raises -> String:
     )
     var ntop_buf = stack_allocation[64, UInt8]()
     for i in range(64):
-        (ntop_buf + i).unsafe_write(0)
+        ntop_buf.unsafe_offset(i).unsafe_write(0)
 
     # inet_ntop(AF_INET, &sin_addr, dst, dst_len) — sin_addr is at offset 4
     _ = external_call["inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]](
         AF_INET,
-        (buf + 4).unsafe_bitcast[NoneType](),
+        buf.unsafe_offset(4).unsafe_bitcast[NoneType](),
         ntop_buf.unsafe_bitcast[c_char](),
         c_uint(64),
     )
@@ -371,12 +373,12 @@ def _read_ipv6_from_sockaddr(buf: UnsafePointer[UInt8, _]) raises -> String:
     )
     var ntop_buf = stack_allocation[64, UInt8]()
     for i in range(64):
-        (ntop_buf + i).unsafe_write(0)
+        ntop_buf.unsafe_offset(i).unsafe_write(0)
 
     # inet_ntop(AF_INET6, &sin6_addr, dst, dst_len) — sin6_addr at offset 8
     _ = external_call["inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]](
         AF_INET6,
-        (buf + 8).unsafe_bitcast[NoneType](),
+        buf.unsafe_offset(8).unsafe_bitcast[NoneType](),
         ntop_buf.unsafe_bitcast[c_char](),
         c_uint(64),
     )

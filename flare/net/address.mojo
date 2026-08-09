@@ -95,11 +95,11 @@ struct IpAddr(Copyable, Equatable, ImplicitlyCopyable, Movable, Writable):
         # Try IPv4 first
         var ip4 = stack_allocation[4, UInt8]()
         for i in range(4):
-            (ip4 + i).unsafe_write(0)
+            ip4.unsafe_offset(i).unsafe_write(0)
         if _inet_pton(AF_INET, s, ip4) == 1:
             var ntop = stack_allocation[64, UInt8]()
             for i in range(64):
-                (ntop + i).unsafe_write(0)
+                ntop.unsafe_offset(i).unsafe_write(0)
             _ = external_call[
                 "inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]
             ](
@@ -124,11 +124,11 @@ struct IpAddr(Copyable, Equatable, ImplicitlyCopyable, Movable, Writable):
         # Try IPv6
         var ip6 = stack_allocation[16, UInt8]()
         for i in range(16):
-            (ip6 + i).unsafe_write(0)
+            ip6.unsafe_offset(i).unsafe_write(0)
         if _inet_pton(AF_INET6, s, ip6) == 1:
             var ntop = stack_allocation[64, UInt8]()
             for i in range(64):
-                (ntop + i).unsafe_write(0)
+                ntop.unsafe_offset(i).unsafe_write(0)
             _ = external_call[
                 "inet_ntop", UnsafePointer[UInt8, MutUntrackedOrigin]
             ](

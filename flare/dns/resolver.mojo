@@ -109,15 +109,15 @@ def resolve(host: String) raises -> List[IpAddr]:
     # hints: 48-byte zeroed addrinfo — ai_socktype = SOCK_STREAM(1)
     var hints = stack_allocation[48, UInt8]()
     for i in range(48):
-        (hints + i).unsafe_write(0)
-    (hints + _ADDRINFO_AI_SOCKTYPE_OFF).unsafe_bitcast[Int32]().unsafe_write(
-        Int32(1)
-    )
+        hints.unsafe_offset(i).unsafe_write(0)
+    hints.unsafe_offset(_ADDRINFO_AI_SOCKTYPE_OFF).unsafe_bitcast[
+        Int32
+    ]().unsafe_write(Int32(1))
 
     # result slot: 8-byte buffer that receives the addrinfo* pointer
     var res_slot = stack_allocation[8, UInt8]()
     for i in range(8):
-        (res_slot + i).unsafe_write(0)
+        res_slot.unsafe_offset(i).unsafe_write(0)
 
     var rc = _getaddrinfo(host, hints, res_slot)
     if rc != 0:
@@ -137,7 +137,7 @@ def resolve(host: String) raises -> List[IpAddr]:
             unsafe_from_address=cur
         )
         var family = Int(
-            (node + ADDRINFO_AI_FAMILY_OFF)
+            node.unsafe_offset(ADDRINFO_AI_FAMILY_OFF)
             .unsafe_bitcast[Int32]()
             .unsafe_load()
         )

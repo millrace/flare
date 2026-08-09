@@ -322,7 +322,7 @@ def encode_sqe_zero(buf: UnsafePointer[UInt8, MutUntrackedOrigin]) -> None:
         Int(buf) != 0, "encode_sqe_zero: buf must be non-NULL"
     )
     for i in range(IO_URING_SQE_BYTES):
-        (buf + i).unsafe_write(UInt8(0))
+        buf.unsafe_offset(i).unsafe_write(UInt8(0))
 
 
 @always_inline

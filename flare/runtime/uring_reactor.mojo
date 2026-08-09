@@ -288,7 +288,7 @@ struct UringReactor(Movable):
             # arming SQE keeps a stable pointer.
             var raw = alloc[UInt8](8)
             for i in range(8):
-                (raw + i).unsafe_write(UInt8(0))
+                raw.unsafe_offset(i).unsafe_write(UInt8(0))
             self._wake_buf = UnsafePointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=Int(raw)
             )
@@ -508,18 +508,22 @@ struct UringReactor(Movable):
         # u64 resv[3];  --> 40 bytes total.
         var reg = stack_allocation[40, UInt8]()
         for i in range(40):
-            (reg + i).unsafe_write(UInt8(0))
+            reg.unsafe_offset(i).unsafe_write(UInt8(0))
         # ring_addr (offset 0, u64 LE)
         var ra = UInt64(ring_addr)
         for i in range(8):
-            (reg + i).unsafe_write(UInt8(Int((ra >> UInt64(8 * i)) & 0xFF)))
+            reg.unsafe_offset(i).unsafe_write(
+                UInt8(Int((ra >> UInt64(8 * i)) & 0xFF))
+            )
         # ring_entries (offset 8, u32 LE)
         var re = UInt32(ring_entries)
         for i in range(4):
-            (reg + 8 + i).unsafe_write(UInt8(Int((re >> UInt32(8 * i)) & 0xFF)))
+            reg.unsafe_offset(8 + i).unsafe_write(
+                UInt8(Int((re >> UInt32(8 * i)) & 0xFF))
+            )
         # bgid (offset 12, u16 LE)
-        (reg + 12).unsafe_write(UInt8(Int(bgid) & 0xFF))
-        (reg + 13).unsafe_write(UInt8((Int(bgid) >> 8) & 0xFF))
+        reg.unsafe_offset(12).unsafe_write(UInt8(Int(bgid) & 0xFF))
+        reg.unsafe_offset(13).unsafe_write(UInt8((Int(bgid) >> 8) & 0xFF))
         # pad (offset 14-15) and resv[3] (offset 16-39) all zero.
         var rc = io_uring_register(
             Int(self._driver.fd()),
@@ -545,10 +549,10 @@ struct UringReactor(Movable):
         reference; userspace side ``munmap``s the ring memory."""
         var reg = stack_allocation[40, UInt8]()
         for i in range(40):
-            (reg + i).unsafe_write(UInt8(0))
+            reg.unsafe_offset(i).unsafe_write(UInt8(0))
         # Just bgid is needed for unregister.
-        (reg + 12).unsafe_write(UInt8(Int(bgid) & 0xFF))
-        (reg + 13).unsafe_write(UInt8((Int(bgid) >> 8) & 0xFF))
+        reg.unsafe_offset(12).unsafe_write(UInt8(Int(bgid) & 0xFF))
+        reg.unsafe_offset(13).unsafe_write(UInt8((Int(bgid) >> 8) & 0xFF))
         _ = io_uring_register(
             Int(self._driver.fd()),
             IORING_UNREGISTER_PBUF_RING,
@@ -907,9 +911,9 @@ struct UringReactor(Movable):
         if not self._cross_thread_wakeup:
             return
         var one = stack_allocation[8, UInt8]()
-        (one + 0).unsafe_write(UInt8(1))
+        one.unsafe_offset(0).unsafe_write(UInt8(1))
         for k in range(1, 8):
-            (one + k).unsafe_write(UInt8(0))
+            one.unsafe_offset(k).unsafe_write(UInt8(0))
         _ = self._io.write(self._wake_fd, one, c_size_t(8))
 
     # ── Private helpers ──────────────────────────────────────────────────────

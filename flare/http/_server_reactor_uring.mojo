@@ -525,7 +525,7 @@ def _alloc_recv_buffer_pool() raises -> Int:
     # slot (e.g. dump-on-error) shouldn't trip on uninitialised
     # memory.
     for i in range(size):
-        (raw + i).unsafe_write(UInt8(0))
+        raw.unsafe_offset(i).unsafe_write(UInt8(0))
     return Int(raw)
 
 
@@ -926,7 +926,7 @@ def run_uring_bufring_reactor_loop_shared[
             # single-worker variant for the full rationale).
             ch_ptr[].read_buf.reserve(len(ch_ptr[].read_buf) + n)
             for i in range(n):
-                ch_ptr[].read_buf.append((buf + i).unsafe_load())
+                ch_ptr[].read_buf.append(buf.unsafe_offset(i).unsafe_load())
 
             # Re-fill via shared-memory tail bump (PBUF_RING).
             var cur_tail = _pbuf_ring_get_tail(ring_addr)

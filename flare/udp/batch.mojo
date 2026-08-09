@@ -121,26 +121,30 @@ struct UdpBatchUnsupported(Copyable, Movable, Writable):
 @always_inline
 def _poke_u64(p: UnsafePointer[UInt8, MutUntrackedOrigin], off: Int, v: UInt64):
     for k in range(8):
-        (p + off + k).unsafe_write(UInt8(Int((v >> UInt64(k * 8)) & 0xFF)))
+        p.unsafe_offset(off + k).unsafe_write(
+            UInt8(Int((v >> UInt64(k * 8)) & 0xFF))
+        )
 
 
 @always_inline
 def _poke_u32(p: UnsafePointer[UInt8, MutUntrackedOrigin], off: Int, v: UInt32):
     for k in range(4):
-        (p + off + k).unsafe_write(UInt8(Int((v >> UInt32(k * 8)) & 0xFF)))
+        p.unsafe_offset(off + k).unsafe_write(
+            UInt8(Int((v >> UInt32(k * 8)) & 0xFF))
+        )
 
 
 @always_inline
 def _poke_u16(p: UnsafePointer[UInt8, MutUntrackedOrigin], off: Int, v: UInt16):
-    (p + off).unsafe_write(UInt8(Int(v & 0xFF)))
-    (p + off + 1).unsafe_write(UInt8(Int((v >> 8) & 0xFF)))
+    p.unsafe_offset(off).unsafe_write(UInt8(Int(v & 0xFF)))
+    p.unsafe_offset(off + 1).unsafe_write(UInt8(Int((v >> 8) & 0xFF)))
 
 
 @always_inline
 def _peek_u32(p: UnsafePointer[UInt8, MutUntrackedOrigin], off: Int) -> UInt32:
     var v = UInt32(0)
     for k in range(4):
-        v = v | (UInt32(Int((p + off + k)[])) << UInt32(k * 8))
+        v = v | (UInt32(Int(p.unsafe_offset(off + k)[])) << UInt32(k * 8))
     return v
 
 
@@ -280,7 +284,7 @@ struct BatchReceiver(Movable):
 def _alloc_zeroed(n: Int) -> UnsafePointer[UInt8, MutUntrackedOrigin]:
     var raw = alloc[UInt8](n)
     for i in range(n):
-        (raw + i).unsafe_write(UInt8(0))
+        raw.unsafe_offset(i).unsafe_write(UInt8(0))
     return UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=Int(raw)
     )

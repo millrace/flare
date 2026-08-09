@@ -453,19 +453,19 @@ struct IoUringRing(Movable):
             )
         var raw = alloc[UInt8](_IO_URING_PARAMS_BYTES)
         for i in range(_IO_URING_PARAMS_BYTES):
-            (raw + i).unsafe_write(UInt8(0))
+            raw.unsafe_offset(i).unsafe_write(UInt8(0))
         # Write setup_flags (offset 8, u32 LE), sq_thread_cpu
         # (offset 12, u32 LE), sq_thread_idle (offset 16, u32 LE)
         # before io_uring_setup. Layout matches the kernel's
         # struct io_uring_params (see IoUringParams docstring).
         for i in range(4):
-            (raw + 8 + i).unsafe_write(
+            raw.unsafe_offset(8 + i).unsafe_write(
                 UInt8(Int((setup_flags >> UInt32(8 * i)) & 0xFF))
             )
-            (raw + 12 + i).unsafe_write(
+            raw.unsafe_offset(12 + i).unsafe_write(
                 UInt8(Int((sq_thread_cpu >> UInt32(8 * i)) & 0xFF))
             )
-            (raw + 16 + i).unsafe_write(
+            raw.unsafe_offset(16 + i).unsafe_write(
                 UInt8(Int((sq_thread_idle >> UInt32(8 * i)) & 0xFF))
             )
         var rc = io_uring_setup(entries, raw)
@@ -525,7 +525,7 @@ def is_io_uring_available() -> Bool:
         return False
     var raw = alloc[UInt8](_IO_URING_PARAMS_BYTES)
     for i in range(_IO_URING_PARAMS_BYTES):
-        (raw + i).unsafe_write(UInt8(0))
+        raw.unsafe_offset(i).unsafe_write(UInt8(0))
     var rc = io_uring_setup(1, raw)
     raw.unsafe_free()
     if rc < 0:

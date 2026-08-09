@@ -91,15 +91,17 @@ def _pbuf_ring_add(
     )
     # addr (offset 0, u64 LE)
     for i in range(8):
-        (entry + i).unsafe_write(UInt8(Int((buf_addr >> UInt64(8 * i)) & 0xFF)))
+        entry.unsafe_offset(i).unsafe_write(
+            UInt8(Int((buf_addr >> UInt64(8 * i)) & 0xFF))
+        )
     # len (offset 8, u32 LE)
     for i in range(4):
-        (entry + 8 + i).unsafe_write(
+        entry.unsafe_offset(8 + i).unsafe_write(
             UInt8(Int((buf_len >> UInt32(8 * i)) & 0xFF))
         )
     # bid (offset 12, u16 LE)
-    (entry + 12).unsafe_write(UInt8(Int(bid) & 0xFF))
-    (entry + 13).unsafe_write(UInt8((Int(bid) >> 8) & 0xFF))
+    entry.unsafe_offset(12).unsafe_write(UInt8(Int(bid) & 0xFF))
+    entry.unsafe_offset(13).unsafe_write(UInt8((Int(bid) >> 8) & 0xFF))
     # resv left as-is (overwritten by tail-advance for slot 0;
     # ignored by kernel for other slots).
 
@@ -114,7 +116,7 @@ def _pbuf_ring_get_tail(ring_addr: Int) -> UInt16:
         unsafe_from_address=ring_addr + 14
     )
     var lo = Int(tail_ptr.unsafe_load())
-    var hi = Int((tail_ptr + 1).unsafe_load())
+    var hi = Int(tail_ptr.unsafe_offset(1).unsafe_load())
     return UInt16((hi << 8) | lo)
 
 

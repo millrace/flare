@@ -295,8 +295,8 @@ def _write_two_digits(
         "_write_two_digits: n must be in 0..=99; got ",
         n,
     )
-    (p + offset).unsafe_write(UInt8(48 + n // 10))
-    (p + offset + 1).unsafe_write(UInt8(48 + n % 10))
+    p.unsafe_offset(offset).unsafe_write(UInt8(48 + n // 10))
+    p.unsafe_offset(offset + 1).unsafe_write(UInt8(48 + n % 10))
 
 
 @always_inline
@@ -321,10 +321,10 @@ def _write_four_digits(
     var hundreds = (n % 1000) // 100
     var tens = (n % 100) // 10
     var ones = n % 10
-    (p + offset).unsafe_write(UInt8(48 + thousands))
-    (p + offset + 1).unsafe_write(UInt8(48 + hundreds))
-    (p + offset + 2).unsafe_write(UInt8(48 + tens))
-    (p + offset + 3).unsafe_write(UInt8(48 + ones))
+    p.unsafe_offset(offset).unsafe_write(UInt8(48 + thousands))
+    p.unsafe_offset(offset + 1).unsafe_write(UInt8(48 + hundreds))
+    p.unsafe_offset(offset + 2).unsafe_write(UInt8(48 + tens))
+    p.unsafe_offset(offset + 3).unsafe_write(UInt8(48 + ones))
 
 
 # ── Time helpers ──────────────────────────────────────────────────────────────
@@ -348,7 +348,7 @@ def _realtime_seconds() -> Int:
     """
     var buf = stack_allocation[16, UInt8]()
     for i in range(16):
-        (buf + i).unsafe_write(UInt8(0))
+        buf.unsafe_offset(i).unsafe_write(UInt8(0))
     var rc = external_call["clock_gettime", c_int](
         c_int(0), buf.unsafe_bitcast[NoneType]()
     )
@@ -357,7 +357,7 @@ def _realtime_seconds() -> Int:
     )
     var sec: Int64 = 0
     for i in range(8):
-        sec |= Int64(Int((buf + i).unsafe_load())) << Int64(8 * i)
+        sec |= Int64(Int(buf.unsafe_offset(i).unsafe_load())) << Int64(8 * i)
     return Int(sec)
 
 
@@ -382,33 +382,33 @@ def _format_imf_fixdate(
 
     # "Day, " (4-byte day-of-week + comma at offset 3, then a space at 4).
     var dow_simd = _day_of_week_short(ct.day_of_week)
-    (p + 0).unsafe_write(dow_simd[0])
-    (p + 1).unsafe_write(dow_simd[1])
-    (p + 2).unsafe_write(dow_simd[2])
-    (p + 3).unsafe_write(dow_simd[3])
-    (p + 4).unsafe_write(UInt8(32))  # space
+    p.unsafe_offset(0).unsafe_write(dow_simd[0])
+    p.unsafe_offset(1).unsafe_write(dow_simd[1])
+    p.unsafe_offset(2).unsafe_write(dow_simd[2])
+    p.unsafe_offset(3).unsafe_write(dow_simd[3])
+    p.unsafe_offset(4).unsafe_write(UInt8(32))  # space
 
     _write_two_digits(p, 5, ct.day)
-    (p + 7).unsafe_write(UInt8(32))  # space
+    p.unsafe_offset(7).unsafe_write(UInt8(32))  # space
 
     var mon_simd = _month_short(ct.month)
-    (p + 8).unsafe_write(mon_simd[0])
-    (p + 9).unsafe_write(mon_simd[1])
-    (p + 10).unsafe_write(mon_simd[2])
-    (p + 11).unsafe_write(mon_simd[3])  # trailing space
+    p.unsafe_offset(8).unsafe_write(mon_simd[0])
+    p.unsafe_offset(9).unsafe_write(mon_simd[1])
+    p.unsafe_offset(10).unsafe_write(mon_simd[2])
+    p.unsafe_offset(11).unsafe_write(mon_simd[3])  # trailing space
 
     _write_four_digits(p, 12, ct.year)
-    (p + 16).unsafe_write(UInt8(32))
+    p.unsafe_offset(16).unsafe_write(UInt8(32))
 
     _write_two_digits(p, 17, ct.hour)
-    (p + 19).unsafe_write(UInt8(58))  # ':'
+    p.unsafe_offset(19).unsafe_write(UInt8(58))  # ':'
     _write_two_digits(p, 20, ct.minute)
-    (p + 22).unsafe_write(UInt8(58))
+    p.unsafe_offset(22).unsafe_write(UInt8(58))
     _write_two_digits(p, 23, ct.second)
-    (p + 25).unsafe_write(UInt8(32))
-    (p + 26).unsafe_write(UInt8(71))  # 'G'
-    (p + 27).unsafe_write(UInt8(77))  # 'M'
-    (p + 28).unsafe_write(UInt8(84))  # 'T'
+    p.unsafe_offset(25).unsafe_write(UInt8(32))
+    p.unsafe_offset(26).unsafe_write(UInt8(71))  # 'G'
+    p.unsafe_offset(27).unsafe_write(UInt8(77))  # 'M'
+    p.unsafe_offset(28).unsafe_write(UInt8(84))  # 'T'
 
 
 # ── DateCache ────────────────────────────────────────────────────────────────

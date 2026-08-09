@@ -405,7 +405,7 @@ struct RawSocket(Movable):
         """
         var buf = stack_allocation[28, UInt8]()
         for i in range(28):
-            (buf + i).unsafe_write(0)
+            buf.unsafe_offset(i).unsafe_write(0)
         var len_ptr = stack_allocation[1, c_uint]()
         len_ptr.unsafe_write(c_uint(28))
         var rc = _getsockname(self.fd, buf, len_ptr)
@@ -494,14 +494,14 @@ struct RawSocket(Movable):
         # timeval: Int64 tv_sec, Int64 tv_usec (16 bytes on 64-bit)
         var tv = stack_allocation[16, UInt8]()
         for i in range(16):
-            (tv + i).unsafe_write(0)
+            tv.unsafe_offset(i).unsafe_write(0)
         var sec = ms // 1000
         var usec = (ms % 1000) * 1000
         # Write tv_sec as Int64 little-endian at offset 0
         var sec_ptr = tv.unsafe_bitcast[Int64]()
         sec_ptr.unsafe_write(Int64(sec))
         # Write tv_usec as Int64 little-endian at offset 8
-        var usec_ptr = (tv + 8).unsafe_bitcast[Int64]()
+        var usec_ptr = tv.unsafe_offset(8).unsafe_bitcast[Int64]()
         usec_ptr.unsafe_write(Int64(usec))
         var rc = _setsockopt(self.fd, SOL_SOCKET, opt, tv, c_uint(16))
         if rc < 0:
@@ -531,28 +531,28 @@ def _build_sockaddr_in(
     if addr.ip.is_v6():
         var ip_buf = alloc[UInt8](16)
         for i in range(16):
-            (ip_buf + i).unsafe_write(0)
+            ip_buf.unsafe_offset(i).unsafe_write(0)
         var rc = _inet_pton(AF_INET6, String(addr.ip), ip_buf)
         if rc != 1:
             ip_buf.unsafe_free()
             raise AddressParseError(String(addr.ip))
         var sa = alloc[UInt8](28)
         for i in range(28):
-            (sa + i).unsafe_write(0)
+            sa.unsafe_offset(i).unsafe_write(0)
         _fill_sockaddr_in6(sa, addr.port, ip_buf)
         ip_buf.unsafe_free()
         return Tuple(sa, SOCKADDR_IN6_SIZE)
     else:
         var ip_buf = alloc[UInt8](4)
         for i in range(4):
-            (ip_buf + i).unsafe_write(0)
+            ip_buf.unsafe_offset(i).unsafe_write(0)
         var rc = _inet_pton(AF_INET, String(addr.ip), ip_buf)
         if rc != 1:
             ip_buf.unsafe_free()
             raise AddressParseError(String(addr.ip))
         var sa = alloc[UInt8](16)
         for i in range(16):
-            (sa + i).unsafe_write(0)
+            sa.unsafe_offset(i).unsafe_write(0)
         _fill_sockaddr_in(sa, addr.port, ip_buf)
         ip_buf.unsafe_free()
         return Tuple(sa, SOCKADDR_IN_SIZE)

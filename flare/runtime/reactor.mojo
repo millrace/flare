@@ -234,13 +234,13 @@ struct Reactor(Movable):
                 raise _os_error("kqueue")
             var pipe_fds = stack_allocation[2, c_int]()
             pipe_fds.unsafe_write(INVALID_FD)
-            (pipe_fds + 1).unsafe_write(INVALID_FD)
+            pipe_fds.unsafe_offset(1).unsafe_write(INVALID_FD)
             if _pipe(pipe_fds) < c_int(0):
                 var e = _os_error("pipe")
                 _ = _close(kq)
                 raise e
             var r_end = pipe_fds.unsafe_load()
-            var w_end = (pipe_fds + 1).unsafe_load()
+            var w_end = pipe_fds.unsafe_offset(1).unsafe_load()
             self._fd = kq
             self._wake_read = r_end
             self._wake_write = w_end
@@ -345,7 +345,7 @@ struct Reactor(Movable):
         comptime if CompilationTarget.is_linux():
             var ev = stack_allocation[EPOLL_EVENT_SIZE, UInt8]()
             for i in range(EPOLL_EVENT_SIZE):
-                (ev + i).unsafe_write(UInt8(0))
+                ev.unsafe_offset(i).unsafe_write(UInt8(0))
             var bits = _interest_to_epoll(interest) | EPOLLEXCLUSIVE
             _epoll_event_set(ev, bits, token)
             var rc = _epoll_ctl(self._fd, EPOLL_CTL_ADD, fd, ev)
@@ -357,7 +357,7 @@ struct Reactor(Movable):
                 # registration error. Newer kernels accept it.
                 var ev2 = stack_allocation[EPOLL_EVENT_SIZE, UInt8]()
                 for i in range(EPOLL_EVENT_SIZE):
-                    (ev2 + i).unsafe_write(UInt8(0))
+                    ev2.unsafe_offset(i).unsafe_write(UInt8(0))
                 _epoll_event_set(ev2, _interest_to_epoll(interest), token)
                 if _epoll_ctl(self._fd, EPOLL_CTL_ADD, fd, ev2) < c_int(0):
                     raise _os_error("epoll_ctl ADD (EPOLLEXCLUSIVE fallback)")
@@ -387,7 +387,7 @@ struct Reactor(Movable):
         comptime if CompilationTarget.is_linux():
             var ev = stack_allocation[EPOLL_EVENT_SIZE, UInt8]()
             for i in range(EPOLL_EVENT_SIZE):
-                (ev + i).unsafe_write(UInt8(0))
+                ev.unsafe_offset(i).unsafe_write(UInt8(0))
             _epoll_event_set(ev, _interest_to_epoll(interest), token)
             if _epoll_ctl(self._fd, EPOLL_CTL_MOD, fd, ev) < c_int(0):
                 raise _os_error("epoll_ctl MOD")
@@ -411,7 +411,7 @@ struct Reactor(Movable):
         comptime if CompilationTarget.is_linux():
             var ev = stack_allocation[EPOLL_EVENT_SIZE, UInt8]()
             for i in range(EPOLL_EVENT_SIZE):
-                (ev + i).unsafe_write(UInt8(0))
+                ev.unsafe_offset(i).unsafe_write(UInt8(0))
             if _epoll_ctl(self._fd, EPOLL_CTL_DEL, fd, ev) < c_int(0):
                 raise _os_error("epoll_ctl DEL")
         else:
@@ -420,7 +420,7 @@ struct Reactor(Movable):
             var ident = UInt64(Int(fd))
             var ch = stack_allocation[KEVENT_SIZE * 2, UInt8]()
             for i in range(KEVENT_SIZE * 2):
-                (ch + i).unsafe_write(UInt8(0))
+                ch.unsafe_offset(i).unsafe_write(UInt8(0))
             _kevent_set(
                 ch,
                 ident=ident,
@@ -441,7 +441,7 @@ struct Reactor(Movable):
             )
             var ts_zero = stack_allocation[16, UInt8]()
             for i in range(16):
-                (ts_zero + i).unsafe_write(UInt8(0))
+                ts_zero.unsafe_offset(i).unsafe_write(UInt8(0))
             var out = stack_allocation[KEVENT_SIZE, UInt8]()
             _ = _kevent(self._fd, ch, c_int(2), out, c_int(0), ts_zero)
             # ENOENT on unregistered filter is not a fatal error; the
@@ -499,7 +499,7 @@ struct Reactor(Movable):
                 if tok == WAKEUP_TOKEN:
                     var drain = stack_allocation[8, UInt8]()
                     for k in range(8):
-                        (drain + k).unsafe_write(UInt8(0))
+                        drain.unsafe_offset(k).unsafe_write(UInt8(0))
                     _ = self._io.read(self._wake_read, drain, c_size_t(8))
                 out.append(Event(tok, _epoll_to_event_flags(bits)))
             return Int(n)
@@ -514,14 +514,16 @@ struct Reactor(Movable):
                 var sec = UInt64(timeout_ms // 1000)
                 var nsec = UInt64((timeout_ms % 1000) * 1_000_000)
                 for k in range(8):
-                    (ts + k).unsafe_write(UInt8((sec >> UInt64(8 * k)) & 0xFF))
+                    ts.unsafe_offset(k).unsafe_write(
+                        UInt8((sec >> UInt64(8 * k)) & 0xFF)
+                    )
                 for k in range(8):
-                    (ts + 8 + k).unsafe_write(
+                    ts.unsafe_offset(8 + k).unsafe_write(
                         UInt8((nsec >> UInt64(8 * k)) & 0xFF)
                     )
             else:
                 for k in range(16):
-                    (ts + k).unsafe_write(UInt8(0))
+                    ts.unsafe_offset(k).unsafe_write(UInt8(0))
             var changes = stack_allocation[KEVENT_SIZE, UInt8]()
             # For infinite timeout we pass a NULL timespec pointer; for
             # bounded waits we pass ``ts``.
@@ -574,7 +576,7 @@ struct Reactor(Movable):
                 if udata == WAKEUP_TOKEN:
                     var drain = stack_allocation[64, UInt8]()
                     for k in range(64):
-                        (drain + k).unsafe_write(UInt8(0))
+                        drain.unsafe_offset(k).unsafe_write(UInt8(0))
                     _ = self._io.read(self._wake_read, drain, c_size_t(64))
                 out.append(Event(udata, ev_flags))
             return Int(n)
@@ -623,7 +625,7 @@ struct Reactor(Movable):
         comptime if CompilationTarget.is_linux():
             var ev = stack_allocation[EPOLL_EVENT_SIZE, UInt8]()
             for i in range(EPOLL_EVENT_SIZE):
-                (ev + i).unsafe_write(UInt8(0))
+                ev.unsafe_offset(i).unsafe_write(UInt8(0))
             _epoll_event_set(ev, _interest_to_epoll(interest), token)
             if _epoll_ctl(self._fd, EPOLL_CTL_ADD, fd, ev) < c_int(0):
                 raise _os_error("epoll_ctl ADD")
@@ -652,7 +654,7 @@ struct Reactor(Movable):
         # Room for at most 2 changes (one per filter type).
         var ch = stack_allocation[KEVENT_SIZE * 2, UInt8]()
         for i in range(KEVENT_SIZE * 2):
-            (ch + i).unsafe_write(UInt8(0))
+            ch.unsafe_offset(i).unsafe_write(UInt8(0))
         var n_changes = 0
         if (interest & INTEREST_READ) != 0:
             _kevent_set(
@@ -702,7 +704,7 @@ struct Reactor(Movable):
             return
         var ts_zero = stack_allocation[16, UInt8]()
         for i in range(16):
-            (ts_zero + i).unsafe_write(UInt8(0))
+            ts_zero.unsafe_offset(i).unsafe_write(UInt8(0))
         # Allocate space for up to n_changes EV_ERROR replies so kqueue can
         # tell us about per-change failures without dropping the whole batch.
         var out = stack_allocation[KEVENT_SIZE * 2, UInt8]()
