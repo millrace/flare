@@ -58,6 +58,8 @@ from flare.http.request import Request
 from flare.http.response import Response
 from flare.http.response_stream import (
     ChunkSourceBox,
+    STREAM_BATCH_BYTES,
+    STREAM_BATCH_CHUNKS,
     frame_chunk_into,
     frame_terminator_into,
 )
@@ -123,14 +125,6 @@ comptime BYTE_SOURCE_BUFRING: Int = 1
 
 # ── Streaming coalescing budget ───────────────────────────────────────────────
 
-comptime STREAM_BATCH_CHUNKS: Int = 16
-"""Max chunks framed into ``write_buf`` by one ``_stream_refill``."""
-comptime STREAM_BATCH_BYTES: Int = 64 * 1024
-"""Max bytes framed into ``write_buf`` by one ``_stream_refill``.
-
-Whichever of the two caps is hit first ends the batch. Together they
-bound how much a single source can queue before the socket gets a
-chance to apply backpressure."""
 comptime STREAM_EDGE_PASSES: Int = 4
 """Max refill+flush passes inside one ``on_writable``.
 

@@ -43,6 +43,18 @@ from .body import ChunkSource
 from .cancel import Cancel
 
 
+# ── Streaming coalescing budget ───────────────────────────────────────────────
+
+comptime STREAM_BATCH_CHUNKS: Int = 16
+"""Max chunks a reactor drains from one source per batch."""
+comptime STREAM_BATCH_BYTES: Int = 64 * 1024
+"""Max bytes a reactor queues from one source per batch.
+
+Whichever cap is hit first ends the batch. Shared by the h1 and h2
+connection handles so both wires yield to their peers on the same
+budget: without one, a single endless source would hold the worker."""
+
+
 # ── Type-erased chunk-source box ─────────────────────────────────────────────
 
 

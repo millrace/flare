@@ -45,7 +45,11 @@ from flare.http.handler import CancelHandler, Handler
 from flare.http.headers import HeaderMap
 from flare.http.request import Request
 from flare.http.response import Response
-from flare.http.response_stream import ChunkSourceBox
+from flare.http.response_stream import (
+    ChunkSourceBox,
+    STREAM_BATCH_BYTES,
+    STREAM_BATCH_CHUNKS,
+)
 from flare.http.server import ServerConfig
 from flare.http2.server import Http2Connection, Http2Config
 from flare.net import IpAddr, SocketAddr
@@ -644,18 +648,18 @@ struct Http2ConnHandle(Movable):
         self.h2.emit_response(sid, resp^)
 
     def _stream_pump(mut self) raises:
-        """Fairly advance every active streaming response by one chunk.
+        """Fairly advance every active streaming response by one batch.
 
         For each active stream (in a stable snapshot order) flushes any
-        stashed remainder first (window permitting), then pulls a single
-        chunk from the source (mirroring the H1 refill's
-        one-chunk-per-edge yield), window-frames it, and stashes any
-        unsent tail. On end-of-stream it queues the trailers / END_STREAM
-        and frees the stream's box. All framing is bounded by the shared
-        connection send window and each stream's own window inside
-        ``queue_stream_data``, so a stream whose window is exhausted
-        simply makes no progress this pump and is retried on the next
-        WINDOW_UPDATE.
+        stashed remainder first (window permitting), then drains up to
+        one ``STREAM_BATCH_CHUNKS`` / ``STREAM_BATCH_BYTES`` batch from
+        the source (mirroring the H1 refill), window-frames it, and
+        stashes any unsent tail. On end-of-stream it queues the trailers
+        / END_STREAM and frees the stream's box. All framing is bounded
+        by the shared connection send window and each stream's own window
+        inside ``queue_stream_data``, so a stream whose window is
+        exhausted simply makes no progress this pump and is retried on
+        the next WINDOW_UPDATE.
         """
         if len(self._stream_out) == 0:
             return
@@ -667,10 +671,15 @@ struct Http2ConnHandle(Movable):
             self._pump_one(sids[i], cancel)
 
     def _pump_one(mut self, sid: Int, cancel: Cancel) raises:
-        """Advance a single streaming response ``sid`` by one edge.
+        """Advance a single streaming response ``sid`` by one batch.
 
-        Flushes the stashed remainder (if any), then pulls at most one
-        fresh chunk. Frees + removes the stream's box on end-of-stream.
+        Flushes the stashed remainder (if any), then drains up to
+        ``STREAM_BATCH_CHUNKS`` / ``STREAM_BATCH_BYTES`` of fresh chunks
+        into the connection's out buffer so a response of N small chunks
+        does not cost N pumps. Stops early on end-of-stream (frees the
+        stream's box), on an exhausted send window (stashes the tail), or
+        on an empty chunk, which means the source has nothing right now
+        and must not be re-polled in a tight loop.
         """
         if sid not in self._stream_out:
             return
@@ -686,23 +695,28 @@ struct Http2ConnHandle(Movable):
                 return  # window exhausted; wait for WINDOW_UPDATE
             st[].pending = List[UInt8]()
             st[].ppos = 0
-        while True:
+        var framed = 0
+        var queued = 0
+        while framed < STREAM_BATCH_CHUNKS and queued < STREAM_BATCH_BYTES:
             var nxt = st[].src.next(cancel)
             if not nxt:
                 self.h2.end_stream_response(sid, st[].tk, st[].tv)
                 self._clear_stream(sid)
                 return
-            var chunk = nxt.value().copy()
-            if len(chunk) == 0:
-                continue  # skip empty non-terminal chunks
-            var n = self.h2.queue_stream_data(sid, Span[UInt8, _](chunk))
-            if n < len(chunk):
-                var tail = List[UInt8](capacity=len(chunk) - n)
-                for k in range(n, len(chunk)):
-                    tail.append(chunk[k])
+            var clen = len(nxt.value())
+            if clen == 0:
+                return  # source idle; retry on the next pump
+            var n = self.h2.queue_stream_data(sid, Span[UInt8, _](nxt.value()))
+            framed += 1
+            queued += n
+            if n < clen:
+                # Window exhausted mid-chunk: stash the tail and stop.
+                var tail = List[UInt8](capacity=clen - n)
+                for k in range(n, clen):
+                    tail.append(nxt.value()[k])
                 st[].pending = tail^
                 st[].ppos = 0
-            return
+                return
 
     def _clear_stream(mut self, sid: Int) raises:
         """Free + remove the boxed streaming state for ``sid`` once its
