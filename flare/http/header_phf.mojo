@@ -114,6 +114,19 @@ The 70-name table covers (grouped by RFC):
   X-Content-Type-Options, X-Frame-Options, X-XSS-Protection,
   Strict-Transport-Security, Content-Security-Policy,
   Public-Key-Pins.
+
+
+v0.10 wiring result -- MEASURED, NOT ADOPTED. Wiring this into
+``HeaderMap`` (a parallel ``List[Int]`` of per-entry ids so a lookup
+becomes an integer compare) was a consistent regression: interleaved
+30 s A/B on the full-parse baseline gave -3.2 %, -2.8 %, -6.8 % across
+three paired runs. The extra list allocation per ``HeaderMap`` costs
+more than the faster compare saves, because the server builds a map
+per request but performs only about one lookup on it.
+
+It would pay on a map that is looked up many times -- a middleware
+stack reading a dozen headers, say. Re-measure before wiring; do not
+assume.
 """
 
 # ── Standard header name table ──────────────────────────────────────────────

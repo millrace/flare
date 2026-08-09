@@ -74,6 +74,18 @@ The value table is similarly length-dispatched. Lengths uniquely
 identify most candidates (``br`` is the only 2-char encoding,
 ``gzip`` the only 4-char one; ``HTTP/1.0`` and ``HTTP/1.1``
 share length 8 and are differentiated by the last byte; etc.).
+
+
+v0.10 wiring result -- MEASURED, NOT ADOPTED for header *values*.
+``intern_common_value`` in the header-parse loop showed no consistent
+effect (-0.8 %, +5.2 %, -13.1 % across three paired 30 s runs; median
+worse). The reason is that ``_string_from_static`` returns
+``String(s)``, which for a value short enough to be worth interning is
+covered by short-string optimisation -- so both paths avoid the heap
+and the lookup is pure added work.
+
+``intern_method_bytes`` stays wired on the request line: the method set
+is tiny and the dispatch is a single length compare.
 """
 
 from std.collections import Optional

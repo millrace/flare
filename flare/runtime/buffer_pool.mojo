@@ -94,6 +94,19 @@ pair per acquire/release; the actual win is that the **underlying
 
 Wiring into the reactor's accept-and-read path is a follow-up;
 this module provides the primitive + tests + re-exports.
+
+
+v0.10 wiring result -- NOT WIRED. ``ConnHandle.read_buf`` /
+``write_buf`` are allocated once per *connection*, not per request, and
+``Pool[ConnHandle].free`` genuinely destroys the handle, so the
+allocation this would remove happens once per accept. On a keep-alive
+workload (64 persistent connections serving millions of requests) there
+is essentially nothing to save; the target is connection *churn*.
+
+So the measurement to run before wiring is the ``churn`` config, not
+``throughput``. Wiring also needs a per-worker pool threaded through
+``_conn_alloc_addr`` and the accept paths, since the pool must outlive
+the handles and must not be shared across threads.
 """
 
 from .pool import Pool

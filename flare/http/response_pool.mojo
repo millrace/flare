@@ -56,6 +56,16 @@ serializer's hot-path layout. The primitive exists today so
 the wiring change is a mechanical swap of
 ``Response(status=200, ...)`` for
 ``response_pool.acquire(status=200, ...)``.
+
+
+v0.10 wiring result -- NOT WIRED, and the reason is structural rather
+than a measurement. The hot-path response is built by the handler
+(``resp = handler.serve(req^).lower()`` in ``ConnHandle``), so there is
+no point at which the reactor could hand it a pooled ``Response``.
+``release`` without a matching ``acquire`` just grows the pool. Wiring
+this would mean giving handlers access to the pool, i.e. changing the
+``Handler`` contract -- a much larger question than a hot-path tweak,
+and not one this pool answers on its own.
 """
 
 from .response import Response
