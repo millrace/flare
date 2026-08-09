@@ -128,13 +128,13 @@ def serialize_static_into(
         write_buf.reserve(n)
     write_buf.resize(n, UInt8(0))
     if keep_alive:
-        memcpy(
+        unsafe_memcpy(
             dest=write_buf.unsafe_ptr(),
             src=resp.keepalive_bytes.unsafe_ptr(),
             count=n,
         )
     else:
-        memcpy(
+        unsafe_memcpy(
             dest=write_buf.unsafe_ptr(),
             src=resp.close_bytes.unsafe_ptr(),
             count=n,
