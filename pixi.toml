@@ -328,6 +328,7 @@ metrics = { features = ["metrics"], solve-group = "default" }
 #                / flare.tls / flare.net). Cheap, runs in milliseconds, fits
 #                inside the per-commit gate.
 check-sans-io   = "bash tools/check_sans_io.sh"
+interop-smoke      = "bash tools/interop_smoke.sh"   # foreign-client check: curl/h2load on every wire we claim
 # check-reactor-size: enforces the 600-line cap on every file under
 #                flare/http/_reactor/. The cap guards the v0.8 reactor
 #                decomposition gain; offenders are either split or

@@ -45,6 +45,14 @@ handler is the same object in every cell.
 | HTTP/3 | n/a | n/a | yes (`serve_http3`) | not yet |
 | WebSocket | yes | yes | yes (over h1 or h2) | yes |
 
+Every HTTP/2 cell above is verified against **curl**, not just against
+flare's own client. That distinction matters: flare's client emits
+HPACK H=0 literals, so an h2 server that rejected Huffman-coded headers
+passed the whole in-tree h2 suite while being unable to answer curl,
+a browser, or h2load (fixed in v0.10 -- see
+`Http2Config.allow_huffman_decode`). `pixi run interop-smoke` is the
+guard against that class of bug returning.
+
 Cleartext picks the protocol with the RFC 9113 §3.4 preface peek; TLS
 picks it from the ALPN the handshake negotiated. `bind_many` (several
 distinct addresses) is single-worker only -- multi-worker uses
@@ -210,6 +218,7 @@ middleware that handles RFC 9111 freshness and conditional revalidation.
 | `StreamingResponse[B]`, `serialize_streaming_response` | `flare.http.streaming_response` |
 | `stream_response[S: ChunkSource](source, status)` — wire-agnostic streaming from the normal `Handler.serve -> Response` contract: the returned `Response.body_stream` is pulled per writable edge and framed as H1 chunked, H2 DATA, H3 DATA, or chunked-over-`SSL_write` (https). The **same handler streams byte-identically on every wire** (proven by `tests/http/test_cross_wire_streaming.mojo`); the H1 head is framed by the shared `frame_h1_stream_head_into` adapter | `flare.http.response`, `flare.http._server.write` |
 | `response_from_body[B: Body](body, status, reason)` — opt-in `Response[B]` ergonomics: lowers any `Body` impl into the concrete `Response` (buffered when length-known, `body_stream`-chunked otherwise) for the normal `Handler` path, no hot-path change | `flare.http.response` |
+| Inbound `Transfer-Encoding: chunked` request bodies — the reactor sizes a chunked request from its chunk framing (`scan_chunked_end`) instead of the absent `Content-Length`, and decodes it before dispatch, so a streamed upload reaches `Handler.serve` whole. `max_body_size` is enforced during the framing walk, not after, so an upload cannot grow the read buffer past the limit; malformed framing is a 400. Before v0.10 a chunked request was declared complete the moment its headers landed and the handler saw an empty body | `flare.http.proto.chunked`, [`tests/http/test_chunked_request.mojo`](../tests/http/test_chunked_request.mojo) |
 | `RequestView[origin]`, `parse_request_view` — zero-copy borrow over the parsed request, paired with `ViewHandler` | `flare.http.request_view` |
 | `HeaderMap`, `HeaderInjectionError`, `HeaderMapView`, `parse_header_view` | `flare.http.{headers,header_view}` |
 | `StaticResponse`, `precompute_response` — pre-encoded wire form for fixed-body endpoints | [`static_response.mojo`](../examples/intermediate/static_response.mojo) |
@@ -276,6 +285,7 @@ own dispatch loop.
 | Frame codec: `Frame`, `FrameFlags`, `FrameHeader`, `FrameType`, `encode_frame`, `parse_frame` (RFC 9113 §4, all 10 frame types); fuzz-clean (`fuzz-h2-frame`) | `flare.http2.frame` |
 | Stream state: `Stream`, `StreamState`, `Connection.handle_frame` (RFC 9113 §5); fuzz-clean (`fuzz-h2-continuation`, `fuzz-h2-rapid-reset`) | `flare.http2.state` |
 | HPACK (RFC 7541): `HpackEncoder`, `HpackDecoder`, `HpackHeader`, `encode_integer` / `decode_integer` (4/5/6/7-bit prefix codec); static + dynamic table, all four indexing modes, dynamic-table size update; fuzz-clean (`fuzz-hpack-decoder`) | `flare.http2.hpack` |
+| HPACK Huffman **decode on by default** (`Http2Config.allow_huffman_decode`) — RFC 7541 §5.2 makes Huffman the encoder's choice, signalled per literal by the H bit, so a decoder must accept both forms. curl, browsers and h2load all Huffman-code by default; this defaulted to `False` through v0.9, which made the h2 server unable to complete a request from any of them. `allow_huffman_encode` stays off: what the server emits is its own choice and H=0 is side-channel-free by construction | `flare.http2.server` |
 | HPACK Huffman codec — scalar-correct, H=1 wire-up + RFC 7541 §C.4 fixtures, and a 256-entry table-driven fast decoder that resolves codes of length <= 8 in one lookup (>=3x scalar across 16 B / 256 B / 4 KB / 64 KB input sizes; codes of length 9..30 fall through to the scalar bit-walker) | `flare.http.hpack_huffman`, `flare.http.hpack_huffman_simd` |
 | CONTINUATION-flood / RAPID-RESET (CVE-2023-44487) state-machine fuzz coverage | `fuzz/fuzz_h2_continuation.mojo`, `fuzz/fuzz_h2_rapid_reset.mojo` |
 | RFC 8441 Extended CONNECT (client side — `WsClient` over h2): `Http2ClientConnection.send_extended_connect` + `WsOverH2Stream` adapter + `bootstrap_ws_over_h2` | [`ws_over_h2.mojo`](../examples/advanced/ws_over_h2.mojo), `flare.ws.client_h2` |

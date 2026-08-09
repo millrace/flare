@@ -75,12 +75,22 @@ under load.
      — POSTs of 4 KB / 64 KB / 1 MB / 16 MB. The 1 MB and 16 MB
      cases drive the zero-copy reactor adoption.
    - **`downloads`** ([`downloads.yaml`](../benchmark/configs/downloads.yaml))
-     — GETs returning 4 KB / 64 KB / 1 MB / 16 MB streamed
-     bodies. Headline target for the streaming-body reactor
-     adoption: "no per-client allocation proportional to body
-     size." The Go baseline serves matching `/4kb` / `/64kb` /
-     `/1mb` / `/16mb` routes so the comparison is
-     apples-to-apples.
+     — GETs returning 4 KB / 64 KB / 1 MB / 16 MB **buffered**
+     bodies (these routes set `Content-Length`; for the streaming
+     write path see `sse_stream` below). All baselines, flare
+     included, serve matching `/4kb` / `/64kb` / `/1mb` / `/16mb`
+     routes so the comparison is apples-to-apples.
+   - **`sse_stream`** ([`sse_stream.yaml`](../benchmark/configs/sse_stream.yaml))
+     paired with **`buffered_4kb`**
+     ([`buffered_4kb.yaml`](../benchmark/configs/buffered_4kb.yaml))
+     — `/stream` returns 4096 bytes as 16 chunked writes;
+     `/4kb` returns the same 4096 bytes with `Content-Length`.
+     Run under identical knobs, the pair isolates the cost of the
+     streaming write path from the cost of the payload, so
+     streaming is quoted as a ratio rather than a bare number.
+     `pixi run --environment bench bench-streaming`. The Rust
+     baselines have no `/stream` route, so this one is
+     flare-vs-flare.
    - **`slow-clients`** ([`slow_clients.yaml`](../benchmark/configs/slow_clients.yaml))
      — 256 connections, each trickling 1 byte / 100 ms.
      Validates that the `read_body_timeout_ms` deadline reclaims
@@ -89,6 +99,14 @@ under load.
      — 10 K open / send / close cycles per second. Stresses
      `accept()` throughput, the `Pool[ConnHandle]` allocator,
      and the kernel's ephemeral-port + TIME_WAIT bookkeeping.
+
+   Each config declares the path it drives via `url_path:`.
+   Before v0.10 the harness hardcoded `/plaintext` and ignored
+   that field, so every config above was in fact measuring the
+   13-byte plaintext response with different connection counts.
+   Numbers in this document that predate v0.10 and are labelled
+   with a non-plaintext workload should be read with that in
+   mind.
 
 ---
 
@@ -1209,6 +1227,7 @@ serially or in parallel on different EPYC boxes):
 SOAK_DURATION_SECS=86400 pixi run --environment bench bench-soak-slow-clients
 SOAK_DURATION_SECS=86400 pixi run --environment bench bench-soak-churn
 SOAK_DURATION_SECS=86400 pixi run --environment bench bench-soak-mixed
+SOAK_DURATION_SECS=86400 pixi run --environment bench bench-soak-streaming-tls
 ```
 
 Same `_run_soak.sh` driver, same `summary.json` schema, same gate
@@ -1218,14 +1237,24 @@ filters.
 
 ### Workloads + gates
 
-All three workloads target `/plaintext` on the flare bench server
-boot from
+`slow_clients`, `churn` and `mixed` target `/plaintext` on the
+flare bench server boot from
 [`benchmark/baselines/flare/main.mojo`](../benchmark/baselines/flare/main.mojo)
 — the **same** entry point the bench-vs-baseline throughput
 harness uses, so soak numbers are directly comparable to the
 single-worker throughput tables above. The wrk lua scripts live
 in
 [`benchmark/scripts/wrk_soak_*.lua`](../benchmark/scripts/).
+
+`streaming_tls` is the exception and the v0.10 operational gate.
+It runs the **multicore** baseline with `FLARE_BENCH_TLS=1` and
+drives `https://.../stream`, so TLS termination, several workers
+and a chunked streaming response are all under load at once —
+the three properties the release claims, none of which the other
+three workloads touch. RSS is the load-bearing gate: a
+`ChunkSource` box or a per-connection `SSL` that is not freed
+when a streaming response finishes shows up as drift over hours
+and as nothing at all in a short run.
 
 #### slow-client
 
