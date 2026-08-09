@@ -54,18 +54,18 @@ struct CookieStore(Copyable, Movable):
         self._addr = addr
 
     @always_inline
-    def enabled(read self) -> Bool:
+    def enabled(imm self) -> Bool:
         """Return ``True`` when the jar is allocated."""
         return self._addr != 0
 
-    def _state(read self) -> UnsafePointer[_CookieState, MutUntrackedOrigin]:
+    def _state(imm self) -> UnsafePointer[_CookieState, MutUntrackedOrigin]:
         """Re-materialise a typed pointer from :attr:`_addr` (mirrors the
         :class:`flare.http._client.alt_svc.AltSvcStore._state` pattern)."""
         return UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=self._addr
         ).unsafe_bitcast[_CookieState]()
 
-    def record_set_cookie(read self, header_value: String) raises:
+    def record_set_cookie(imm self, header_value: String) raises:
         """Parse + store one ``Set-Cookie`` header value.
 
         ``Max-Age=0`` (RFC 6265 sec 5.2.2 delete directive) evicts the
@@ -81,7 +81,7 @@ struct CookieStore(Copyable, Movable):
             return
         self._state()[].jar.set(c^)
 
-    def request_header(read self) raises -> String:
+    def request_header(imm self) raises -> String:
         """The ``Cookie`` request header value for all stored cookies,
         or ``""`` if none are stored / the handle is empty."""
         if not self.enabled():

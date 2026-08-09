@@ -169,12 +169,12 @@ struct ClientPool(Copyable, Movable):
         self._addr = addr
 
     @always_inline
-    def enabled(read self) -> Bool:
+    def enabled(imm self) -> Bool:
         """Return ``True`` when ``_addr != 0`` (pooling is on)."""
         return self._addr != 0
 
     def _state(
-        read self,
+        imm self,
     ) -> UnsafePointer[_ClientPoolState, MutUntrackedOrigin]:
         """Re-materialise a typed pointer from :attr:`_addr`.
 
@@ -199,7 +199,7 @@ struct ClientPool(Copyable, Movable):
         var key = scheme + "://" + host + ":" + String(port)
         return key^
 
-    def acquire(read self, key: String) raises -> Int:
+    def acquire(imm self, key: String) raises -> Int:
         """Pop the most-recently-inserted idle fd for ``key``.
 
         Evicts every fd whose age exceeds
@@ -240,7 +240,7 @@ struct ClientPool(Copyable, Movable):
         _ = sp[].entries.pop(key)
         return -1
 
-    def release(read self, key: String, fd: Int) raises -> None:
+    def release(imm self, key: String, fd: Int) raises -> None:
         """Hand ``fd`` back to the pool for ``key``, or close it
         if the cap is reached.
 
@@ -275,7 +275,7 @@ struct ClientPool(Copyable, Movable):
         sp[].entries[key] = deque^
         sp[].insertion_ts_ms[fd] = _monotonic_ms()
 
-    def _total_idle(read self) -> Int:
+    def _total_idle(imm self) -> Int:
         """Return the sum of every per-origin deque length.
 
         Linear in the number of origins -- the pool size is

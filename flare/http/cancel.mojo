@@ -222,7 +222,7 @@ struct Cancel(Copyable, ImplicitlyCopyable, Movable):
         """
         return Cancel(0)
 
-    def cancelled(read self) -> Bool:
+    def cancelled(imm self) -> Bool:
         """Return True once the cell is non-zero (acquire load)."""
         if self._addr == 0:
             return False

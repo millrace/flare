@@ -73,7 +73,7 @@ from ..net._libc import (
 
 
 def _do_flare_connect_timeout(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     fd: c_int,
     sa_addr: Int,
     sa_len: c_uint,

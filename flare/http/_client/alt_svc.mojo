@@ -313,11 +313,11 @@ struct AltSvcStore(Copyable, Movable):
         self._addr = addr
 
     @always_inline
-    def enabled(read self) -> Bool:
+    def enabled(imm self) -> Bool:
         """Return ``True`` when the store is allocated."""
         return self._addr != 0
 
-    def _state(read self) -> UnsafePointer[_AltSvcState, MutUntrackedOrigin]:
+    def _state(imm self) -> UnsafePointer[_AltSvcState, MutUntrackedOrigin]:
         """Re-materialise a typed pointer from :attr:`_addr` (mirrors
         the :class:`ClientPool._state` pattern)."""
         return UnsafePointer[UInt8, MutUntrackedOrigin](
@@ -325,7 +325,7 @@ struct AltSvcStore(Copyable, Movable):
         ).unsafe_bitcast[_AltSvcState]()
 
     def record(
-        read self, origin: String, header_value: String, now_s: UInt64
+        imm self, origin: String, header_value: String, now_s: UInt64
     ) raises:
         """Record an origin's ``Alt-Svc`` header into the cache.
         No-op on the empty handle."""
@@ -333,7 +333,7 @@ struct AltSvcStore(Copyable, Movable):
             return
         self._state()[].cache.record(origin, header_value, now_s)
 
-    def has_fresh_h3(read self, origin: String, now_s: UInt64) -> Bool:
+    def has_fresh_h3(imm self, origin: String, now_s: UInt64) -> Bool:
         """Whether ``origin`` has a cached, unexpired h3 advert.
         ``False`` on the empty handle."""
         if not self.enabled():

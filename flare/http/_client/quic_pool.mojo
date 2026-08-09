@@ -116,11 +116,11 @@ struct QuicConnectionPool(Copyable, Movable):
         self._addr = addr
 
     @always_inline
-    def enabled(read self) -> Bool:
+    def enabled(imm self) -> Bool:
         return self._addr != 0
 
     def _state(
-        read self,
+        imm self,
     ) -> UnsafePointer[_QuicPoolState, MutUntrackedOrigin]:
         return UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=self._addr
@@ -132,7 +132,7 @@ struct QuicConnectionPool(Copyable, Movable):
         a ``:443`` connection never lands in a ``:8443`` bucket)."""
         return host + ":" + String(port)
 
-    def note_dial(read self) -> None:
+    def note_dial(imm self) -> None:
         """Record that the owner opened a fresh connection (pool
         miss). No-op when pooling is disabled."""
         if not self.enabled():
@@ -147,7 +147,7 @@ struct QuicConnectionPool(Copyable, Movable):
         return self._state()[].dials
 
     def acquire(
-        read self, key: String
+        imm self, key: String
     ) raises -> Optional[Http3ClientConnection]:
         """Move out the most-recently-released idle connection for
         ``key``, evicting any that exceeded the idle timeout first.
@@ -179,7 +179,7 @@ struct QuicConnectionPool(Copyable, Movable):
         _ = sp[].entries.pop(key)
         return None
 
-    def release(read self, key: String, var h3: Http3ClientConnection) raises:
+    def release(imm self, key: String, var h3: Http3ClientConnection) raises:
         """Hand ``h3`` back for reuse, or drop it (closing the fd via
         its destructor) when pooling is off or the per-host cap is
         reached."""

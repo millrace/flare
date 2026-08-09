@@ -60,10 +60,10 @@ def _encode_alpn_wire(protos: List[String]) raises -> List[UInt8]:
 
 
 def _do_acceptor_new(
-    read lib: OwnedDLHandle,
-    read cert_pem: List[UInt8],
-    read key_pem: List[UInt8],
-    read alpn_wire: List[UInt8],
+    imm lib: OwnedDLHandle,
+    imm cert_pem: List[UInt8],
+    imm key_pem: List[UInt8],
+    imm alpn_wire: List[UInt8],
     max_early_data: UInt32,
 ) raises -> Int:
     """Call ``flare_rustls_quic_acceptor_new`` and return the
@@ -89,7 +89,7 @@ def _do_acceptor_new(
     )
 
 
-def _do_acceptor_free(read lib: OwnedDLHandle, handle: Int) raises:
+def _do_acceptor_free(imm lib: OwnedDLHandle, handle: Int) raises:
     """Free an acceptor allocated by :func:`_do_acceptor_new`.
     NULL handle is a no-op (so the destructor is safe to call on
     a zero-initialised carrier whose construction failed)."""
@@ -105,7 +105,7 @@ def _do_acceptor_free(read lib: OwnedDLHandle, handle: Int) raises:
 
 
 def _do_accept(
-    read lib: OwnedDLHandle, acceptor: Int, read transport_params: List[UInt8]
+    imm lib: OwnedDLHandle, acceptor: Int, imm transport_params: List[UInt8]
 ) raises -> Int:
     """Call ``flare_rustls_quic_accept`` to construct a fresh
     per-connection session. Returns the ``Box<Session>*`` as
@@ -120,7 +120,7 @@ def _do_accept(
     )
 
 
-def _do_session_free(read lib: OwnedDLHandle, handle: Int) raises:
+def _do_session_free(imm lib: OwnedDLHandle, handle: Int) raises:
     """Free a session allocated by :func:`_do_accept`. NULL is a
     no-op."""
     if handle == 0:
@@ -135,9 +135,9 @@ def _do_session_free(read lib: OwnedDLHandle, handle: Int) raises:
 
 
 def _do_connector_new(
-    read lib: OwnedDLHandle,
-    read ca_pem: List[UInt8],
-    read alpn_wire: List[UInt8],
+    imm lib: OwnedDLHandle,
+    imm ca_pem: List[UInt8],
+    imm alpn_wire: List[UInt8],
 ) raises -> Int:
     """Call ``flare_rustls_quic_connector_new`` and return the
     ``Box<Connector>*`` as an ``Int``. Zero on failure (read
@@ -156,8 +156,8 @@ def _do_connector_new(
 
 
 def _do_connector_new_native_roots(
-    read lib: OwnedDLHandle,
-    read alpn_wire: List[UInt8],
+    imm lib: OwnedDLHandle,
+    imm alpn_wire: List[UInt8],
 ) raises -> Int:
     """Call ``flare_rustls_quic_connector_new_native_roots`` and
     return the ``Box<Connector>*`` as an ``Int``. Zero on failure
@@ -172,7 +172,7 @@ def _do_connector_new_native_roots(
     )
 
 
-def _do_connector_free(read lib: OwnedDLHandle, handle: Int) raises:
+def _do_connector_free(imm lib: OwnedDLHandle, handle: Int) raises:
     """Free a connector allocated by :func:`_do_connector_new`.
     NULL handle is a no-op."""
     if handle == 0:
@@ -184,10 +184,10 @@ def _do_connector_free(read lib: OwnedDLHandle, handle: Int) raises:
 
 
 def _do_connect(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     connector: Int,
-    read server_name: List[UInt8],
-    read transport_params: List[UInt8],
+    imm server_name: List[UInt8],
+    imm transport_params: List[UInt8],
 ) raises -> Int:
     """Call ``flare_rustls_quic_connect`` to construct a fresh
     client-role per-connection session for ``server_name`` (SNI).
@@ -209,7 +209,7 @@ def _do_connect(
 
 
 def _do_feed_crypto(
-    read lib: OwnedDLHandle, session: Int, level: Int, read data: List[UInt8]
+    imm lib: OwnedDLHandle, session: Int, level: Int, imm data: List[UInt8]
 ) raises -> Int:
     """Push inbound CRYPTO frame bytes into the rustls handshake
     state machine. Returns 0 on success, -1 on bad pointer, -2 on
@@ -221,7 +221,7 @@ def _do_feed_crypto(
 
 
 def _do_take_crypto(
-    read lib: OwnedDLHandle, session: Int, level: Int
+    imm lib: OwnedDLHandle, session: Int, level: Int
 ) raises -> List[UInt8]:
     """Drain pending outbound CRYPTO frame bytes at ``level``.
 
@@ -265,7 +265,7 @@ def _do_take_crypto(
 
 
 def _take_crypto_call(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     session: Int,
     level: Int,
     mut out_buf: List[UInt8],
@@ -295,7 +295,7 @@ def _take_crypto_call(
 
 
 def _do_is_handshake_complete(
-    read lib: OwnedDLHandle, session: Int
+    imm lib: OwnedDLHandle, session: Int
 ) raises -> Bool:
     """``flare_rustls_quic_is_handshake_complete`` returns 1 once
     the 1-RTT keys are derived, 0 while still handshaking, -1 on
@@ -347,7 +347,7 @@ def _do_alpn(read lib: OwnedDLHandle, session: Int) raises -> String:
 
 
 def _do_peer_transport_params(
-    read lib: OwnedDLHandle, session: Int
+    imm lib: OwnedDLHandle, session: Int
 ) raises -> List[UInt8]:
     """Copy the peer's raw ``quic_transport_parameters`` extension
     out of the rustls session. Returns an empty list when rustls
@@ -387,7 +387,7 @@ def _do_peer_transport_params(
 
 
 def _do_have_keys(
-    read lib: OwnedDLHandle, session: Int, level: Int
+    imm lib: OwnedDLHandle, session: Int, level: Int
 ) raises -> Int:
     """``flare_rustls_quic_have_keys``: 1 if rustls has installed
     keys at ``level``, 0 otherwise, -1 on bad pointer / level out
@@ -409,7 +409,7 @@ def _do_have_keys(
     return Int(f(session, c_int(level)))
 
 
-def _do_install_early_keys(read lib: OwnedDLHandle, session: Int) raises -> Int:
+def _do_install_early_keys(imm lib: OwnedDLHandle, session: Int) raises -> Int:
     """``flare_rustls_quic_install_early_keys``: capture rustls's
     0-RTT (EarlyData) ``DirectionalKeys`` into the session's slot.
 
@@ -442,11 +442,11 @@ def _do_is_early_data_accepted(
 
 
 def _do_packet_encrypt(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     session: Int,
     level: Int,
     packet_number: UInt64,
-    read header: List[UInt8],
+    imm header: List[UInt8],
     mut payload: List[UInt8],
 ) raises -> List[UInt8]:
     """``flare_rustls_quic_packet_encrypt``: encrypt ``payload``
@@ -499,11 +499,11 @@ def _do_packet_encrypt(
 
 
 def _do_packet_decrypt(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     session: Int,
     level: Int,
     packet_number: UInt64,
-    read header: List[UInt8],
+    imm header: List[UInt8],
     mut payload: List[UInt8],
 ) raises -> Int:
     """``flare_rustls_quic_packet_decrypt``: verify + strip the
@@ -544,10 +544,10 @@ def _do_packet_decrypt(
 
 
 def _do_header_encrypt(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     session: Int,
     level: Int,
-    read sample: List[UInt8],
+    imm sample: List[UInt8],
     first_byte_addr: Int,
     pn_addr: Int,
     pn_len: Int,
@@ -586,10 +586,10 @@ def _do_header_encrypt(
 
 
 def _do_header_decrypt(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     session: Int,
     level: Int,
-    read sample: List[UInt8],
+    imm sample: List[UInt8],
     first_byte_addr: Int,
     pn_addr: Int,
     pn_len: Int,
@@ -619,7 +619,7 @@ def _do_header_decrypt(
         )
 
 
-def _do_last_error(read lib: OwnedDLHandle) raises -> String:
+def _do_last_error(imm lib: OwnedDLHandle) raises -> String:
     """Read the thread-local last-error message set by the
     rustls FFI. Returns an empty string when no message is
     recorded.

@@ -95,7 +95,7 @@ def _find_flare_lib() -> String:
 
 
 def _do_flare_set_nonblocking(
-    read lib: OwnedDLHandle, fd: c_int, enable: c_int
+    imm lib: OwnedDLHandle, fd: c_int, enable: c_int
 ) raises -> c_int:
     """Invoke ``flare_set_nonblocking`` with ``lib`` borrowed across both
     the symbol lookup and the call (macOS path only). See the OwnedDLHandle /

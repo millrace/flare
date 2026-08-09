@@ -94,7 +94,7 @@ from flare.runtime.scheduler import (
 
 
 @always_inline
-def _poll_timeout_ms(read wheel: TimerWheel, cap_ms: Int = 100) -> Int:
+def _poll_timeout_ms(imm wheel: TimerWheel, cap_ms: Int = 100) -> Int:
     """Reactor poll timeout: time until the next timer fires, capped.
 
     Replaces the fixed 100ms poll (D7). The ``cap_ms`` stays

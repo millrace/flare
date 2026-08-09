@@ -535,7 +535,7 @@ def _aead_to_hp_ffi(aead: Int) raises -> Int:
 
 
 def _do_aead_seal(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     cipher_id: Int,
     key: List[UInt8],
     iv: List[UInt8],
@@ -581,7 +581,7 @@ def _do_aead_seal(
 
 
 def _do_aead_open(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     cipher_id: Int,
     key: List[UInt8],
     iv: List[UInt8],
@@ -633,7 +633,7 @@ def _do_aead_open(
 
 
 def _do_hp_mask(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     cipher_id: Int,
     hp_key: List[UInt8],
     sample: List[UInt8],

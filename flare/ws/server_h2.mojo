@@ -78,7 +78,7 @@ struct WsOverH2ServerStream(Copyable, Movable):
         self.read_buffer = rest^
         return got^
 
-    def is_closed(read self) -> Bool:
+    def is_closed(imm self) -> Bool:
         return self.closed
 
     def close(

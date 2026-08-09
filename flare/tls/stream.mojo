@@ -71,7 +71,7 @@ comptime _CERT_SUBJ_LEN: Int = 512
 # ── Borrow helpers (one per FFI export) ──────────────────────────────────────
 
 
-def _c_err(read lib: OwnedDLHandle) raises -> String:
+def _c_err(imm lib: OwnedDLHandle) raises -> String:
     """Return the last OpenSSL error string from ``flare_ssl_last_error()``.
 
     Args:
@@ -94,12 +94,12 @@ def _c_err(read lib: OwnedDLHandle) raises -> String:
     )
 
 
-def _do_ssl_ctx_new(read lib: OwnedDLHandle) raises -> Int:
+def _do_ssl_ctx_new(imm lib: OwnedDLHandle) raises -> Int:
     var f = dl_sym[def() thin abi("C") -> Int](lib, "flare_ssl_ctx_new")
     return f()
 
 
-def _do_ssl_ctx_free(read lib: OwnedDLHandle, ctx: Int) raises:
+def _do_ssl_ctx_free(imm lib: OwnedDLHandle, ctx: Int) raises:
     if ctx == 0:
         return
     var f = dl_sym[def(Int) thin abi("C") -> None](lib, "flare_ssl_ctx_free")
@@ -107,7 +107,7 @@ def _do_ssl_ctx_free(read lib: OwnedDLHandle, ctx: Int) raises:
 
 
 def _do_ssl_ctx_set_security_policy(
-    read lib: OwnedDLHandle, ctx: Int
+    imm lib: OwnedDLHandle, ctx: Int
 ) raises -> Int:
     var f = dl_sym[def(Int) thin abi("C") -> c_int](
         lib, "flare_ssl_ctx_set_security_policy"
@@ -116,7 +116,7 @@ def _do_ssl_ctx_set_security_policy(
 
 
 def _do_ssl_ctx_set_verify_peer(
-    read lib: OwnedDLHandle, ctx: Int, verify: c_int
+    imm lib: OwnedDLHandle, ctx: Int, verify: c_int
 ) raises -> Int:
     var f = dl_sym[def(Int, c_int) thin abi("C") -> c_int](
         lib, "flare_ssl_ctx_set_verify_peer"
@@ -125,7 +125,7 @@ def _do_ssl_ctx_set_verify_peer(
 
 
 def _do_ssl_ctx_load_ca_bundle(
-    read lib: OwnedDLHandle, ctx: Int, var ca_path: String
+    imm lib: OwnedDLHandle, ctx: Int, var ca_path: String
 ) raises -> Int:
     var f = dl_sym[def(Int, Int) thin abi("C") -> c_int](
         lib, "flare_ssl_ctx_load_ca_bundle"
@@ -174,12 +174,12 @@ def _do_ssl_ctx_set_alpn_protos(
     return Int(f(ctx, Int(blob.unsafe_ptr()), c_int(len(blob))))
 
 
-def _do_ssl_new(read lib: OwnedDLHandle, ctx: Int, fd: c_int) raises -> Int:
+def _do_ssl_new(imm lib: OwnedDLHandle, ctx: Int, fd: c_int) raises -> Int:
     var f = dl_sym[def(Int, c_int) thin abi("C") -> Int](lib, "flare_ssl_new")
     return f(ctx, fd)
 
 
-def _do_ssl_free(read lib: OwnedDLHandle, ssl: Int) raises:
+def _do_ssl_free(imm lib: OwnedDLHandle, ssl: Int) raises:
     if ssl == 0:
         return
     var f = dl_sym[def(Int) thin abi("C") -> None](lib, "flare_ssl_free")
@@ -187,7 +187,7 @@ def _do_ssl_free(read lib: OwnedDLHandle, ssl: Int) raises:
 
 
 def _do_ssl_connect(
-    read lib: OwnedDLHandle, ssl: Int, var sni: String
+    imm lib: OwnedDLHandle, ssl: Int, var sni: String
 ) raises -> Int:
     var f = dl_sym[def(Int, Int) thin abi("C") -> c_int](
         lib, "flare_ssl_connect"
@@ -206,7 +206,7 @@ def _do_ssl_connect(
 
 
 def _do_ssl_read(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     ssl: Int,
     buf: UnsafePointer[UInt8, _],
     size: Int,
@@ -218,7 +218,7 @@ def _do_ssl_read(
 
 
 def _do_ssl_write(
-    read lib: OwnedDLHandle, ssl: Int, data: Span[UInt8, _]
+    imm lib: OwnedDLHandle, ssl: Int, data: Span[UInt8, _]
 ) raises -> Int:
     var f = dl_sym[def(Int, Int, c_int) thin abi("C") -> c_int](
         lib, "flare_ssl_write"
@@ -226,7 +226,7 @@ def _do_ssl_write(
     return Int(f(ssl, Int(data.unsafe_ptr()), c_int(len(data))))
 
 
-def _do_ssl_shutdown(read lib: OwnedDLHandle, ssl: Int) raises -> Int:
+def _do_ssl_shutdown(imm lib: OwnedDLHandle, ssl: Int) raises -> Int:
     var f = dl_sym[def(Int) thin abi("C") -> c_int](lib, "flare_ssl_shutdown")
     return Int(f(ssl))
 
@@ -269,7 +269,7 @@ def _do_ssl_get_peer_cert_subject(
 
 
 def _do_ssl_get_alpn_selected(
-    read lib: OwnedDLHandle, ssl: Int, buf: UnsafePointer[UInt8, _], size: Int
+    imm lib: OwnedDLHandle, ssl: Int, buf: UnsafePointer[UInt8, _], size: Int
 ) raises -> Int:
     var f = dl_sym[def(Int, Int, c_int) thin abi("C") -> c_int](
         lib, "flare_ssl_get_alpn_selected"
@@ -281,7 +281,7 @@ def _do_ssl_get_alpn_selected(
 
 
 def _do_ssl_ctx_enable_client_session_cache(
-    read lib: OwnedDLHandle, ctx: Int
+    imm lib: OwnedDLHandle, ctx: Int
 ) raises -> Int:
     var f = dl_sym[def(Int) thin abi("C") -> c_int](
         lib, "flare_ssl_ctx_enable_client_session_cache"
@@ -362,7 +362,7 @@ def _classify_tls_error(err: String, host: String) raises:
 # caller is responsible for freeing it via ``_do_ssl_ctx_free``.
 
 
-def _build_ssl_ctx(read lib: OwnedDLHandle, config: TlsConfig) raises -> Int:
+def _build_ssl_ctx(imm lib: OwnedDLHandle, config: TlsConfig) raises -> Int:
     var ctx = _do_ssl_ctx_new(lib)
     if ctx == 0:
         raise TlsHandshakeError(_c_err(lib))

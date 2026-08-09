@@ -85,7 +85,7 @@ struct Encoding:
 
 
 def _do_decompress(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     data: Span[UInt8, _],
     window_bits: c_int,
     max_out: Int,
@@ -170,7 +170,7 @@ def _decompress_impl(
 
 
 def _do_decompress_deflate(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     data: Span[UInt8, _],
     max_out: Int,
 ) raises -> List[UInt8]:
@@ -248,7 +248,7 @@ def _decompress_deflate_impl(
 
 
 def _do_compress(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     data: Span[UInt8, _],
     level: c_int,
 ) raises -> List[UInt8]:
@@ -398,7 +398,7 @@ def decode_content(
 
 
 def _do_compress_brotli(
-    read lib: OwnedDLHandle, data: Span[UInt8, _], quality: c_int
+    imm lib: OwnedDLHandle, data: Span[UInt8, _], quality: c_int
 ) raises -> List[UInt8]:
     """Compress using ``flare_brotli_compress``, growing on overflow.
 
@@ -468,7 +468,7 @@ def compress_brotli(
 
 
 def _do_decompress_brotli(
-    read lib: OwnedDLHandle, data: Span[UInt8, _], max_out: Int
+    imm lib: OwnedDLHandle, data: Span[UInt8, _], max_out: Int
 ) raises -> List[UInt8]:
     """Decompress using ``flare_brotli_decompress``, growing on overflow.
 

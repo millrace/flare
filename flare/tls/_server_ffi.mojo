@@ -71,7 +71,7 @@ from ..utils.dylib import dl_sym
 
 
 def _do_ssl_ctx_new_server(
-    read lib: OwnedDLHandle, var cert_path: String, var key_path: String
+    imm lib: OwnedDLHandle, var cert_path: String, var key_path: String
 ) raises -> Int:
     var f = dl_sym[def(Int, Int) thin abi("C") -> Int](
         lib, "flare_ssl_ctx_new_server"
@@ -93,13 +93,13 @@ def _do_ssl_ctx_new_server(
     return addr
 
 
-def _do_ssl_ctx_free(read lib: OwnedDLHandle, addr: Int) raises:
+def _do_ssl_ctx_free(imm lib: OwnedDLHandle, addr: Int) raises:
     var f = dl_sym[def(Int) thin abi("C") -> None](lib, "flare_ssl_ctx_free")
     f(addr)
 
 
 def _do_ssl_ctx_reload(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     addr: Int,
     var cert_path: String,
     var key_path: String,
@@ -118,7 +118,7 @@ def _do_ssl_ctx_reload(
 
 
 def _do_ssl_ctx_set_alpn(
-    read lib: OwnedDLHandle, addr: Int, protos: List[UInt8]
+    imm lib: OwnedDLHandle, addr: Int, protos: List[UInt8]
 ) raises:
     var f = dl_sym[def(Int, Int, c_int) thin abi("C") -> c_int](
         lib, "flare_ssl_ctx_set_alpn_server"
@@ -128,7 +128,7 @@ def _do_ssl_ctx_set_alpn(
 
 
 def _do_ssl_ctx_set_verify_client_cert(
-    read lib: OwnedDLHandle, addr: Int, var ca_path: String
+    imm lib: OwnedDLHandle, addr: Int, var ca_path: String
 ) raises:
     var f = dl_sym[def(Int, Int) thin abi("C") -> c_int](
         lib, "flare_ssl_ctx_set_verify_client_cert"
@@ -142,7 +142,7 @@ def _do_ssl_ctx_set_verify_client_cert(
 
 
 def _do_ssl_ctx_enable_session_tickets(
-    read lib: OwnedDLHandle, addr: Int, lifetime_s: Int
+    imm lib: OwnedDLHandle, addr: Int, lifetime_s: Int
 ) raises:
     var f = dl_sym[def(Int, c_int) thin abi("C") -> c_int](
         lib, "flare_ssl_ctx_enable_session_tickets"
@@ -152,7 +152,7 @@ def _do_ssl_ctx_enable_session_tickets(
 
 
 def _do_ssl_new_accept(
-    read lib: OwnedDLHandle, ctx_addr: Int, fd: Int
+    imm lib: OwnedDLHandle, ctx_addr: Int, fd: Int
 ) raises -> Int:
     var f = dl_sym[def(Int, c_int) thin abi("C") -> Int](
         lib, "flare_ssl_new_accept"
@@ -160,7 +160,7 @@ def _do_ssl_new_accept(
     return f(ctx_addr, c_int(fd))
 
 
-def _do_ssl_do_handshake(read lib: OwnedDLHandle, ssl_addr: Int) raises -> Int:
+def _do_ssl_do_handshake(imm lib: OwnedDLHandle, ssl_addr: Int) raises -> Int:
     var f = dl_sym[def(Int) thin abi("C") -> c_int](
         lib, "flare_ssl_do_handshake"
     )
@@ -176,7 +176,7 @@ comptime SSL_IO_FATAL: Int = -4
 
 
 def _do_ssl_read_ex(
-    read lib: OwnedDLHandle, ssl_addr: Int, buf_ptr: Int, buf_len: Int
+    imm lib: OwnedDLHandle, ssl_addr: Int, buf_ptr: Int, buf_len: Int
 ) raises -> Int:
     var f = dl_sym[def(Int, Int, c_int) thin abi("C") -> c_int](
         lib, "flare_ssl_read_ex"
@@ -185,7 +185,7 @@ def _do_ssl_read_ex(
 
 
 def _do_ssl_write_ex(
-    read lib: OwnedDLHandle, ssl_addr: Int, buf_ptr: Int, buf_len: Int
+    imm lib: OwnedDLHandle, ssl_addr: Int, buf_ptr: Int, buf_len: Int
 ) raises -> Int:
     var f = dl_sym[def(Int, Int, c_int) thin abi("C") -> c_int](
         lib, "flare_ssl_write_ex"
@@ -194,7 +194,7 @@ def _do_ssl_write_ex(
 
 
 def _do_ssl_get_alpn_selected(
-    read lib: OwnedDLHandle, ssl_addr: Int
+    imm lib: OwnedDLHandle, ssl_addr: Int
 ) raises -> String:
     var f = dl_sym[def(Int, Int, c_int) thin abi("C") -> c_int](
         lib, "flare_ssl_get_alpn_selected"
@@ -208,7 +208,7 @@ def _do_ssl_get_alpn_selected(
 
 
 def _do_ssl_get_sni_host(
-    read lib: OwnedDLHandle, ssl_addr: Int
+    imm lib: OwnedDLHandle, ssl_addr: Int
 ) raises -> String:
     var f = dl_sym[def(Int, Int, c_int) thin abi("C") -> c_int](
         lib, "flare_ssl_get_sni_host"
@@ -221,7 +221,7 @@ def _do_ssl_get_sni_host(
     return String(unsafe_from_utf8=Span[UInt8, _](buf[:n]))
 
 
-def _do_ssl_free(read lib: OwnedDLHandle, ssl_addr: Int) raises:
+def _do_ssl_free(imm lib: OwnedDLHandle, ssl_addr: Int) raises:
     var f = dl_sym[def(Int) thin abi("C") -> None](lib, "flare_ssl_free")
     f(ssl_addr)
 

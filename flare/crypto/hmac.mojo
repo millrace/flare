@@ -47,7 +47,7 @@ from ..utils.dylib import dl_sym
 
 
 def _do_hmac_sha256(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     key: List[UInt8],
     msg: List[UInt8],
     mut out: List[UInt8],
@@ -88,7 +88,7 @@ def hmac_sha256(key: List[UInt8], msg: List[UInt8]) raises -> List[UInt8]:
 
 
 def _do_hmac_sha256_verify(
-    read lib: OwnedDLHandle,
+    imm lib: OwnedDLHandle,
     key: List[UInt8],
     msg: List[UInt8],
     mac: List[UInt8],

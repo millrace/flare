@@ -109,11 +109,11 @@ struct TlsConnectionPool(Copyable, Movable):
         self._addr = addr
 
     @always_inline
-    def enabled(read self) -> Bool:
+    def enabled(imm self) -> Bool:
         return self._addr != 0
 
     def _state(
-        read self,
+        imm self,
     ) -> UnsafePointer[_TlsPoolState, MutUntrackedOrigin]:
         return UnsafePointer[UInt8, MutUntrackedOrigin](
             unsafe_from_address=self._addr
@@ -126,7 +126,7 @@ struct TlsConnectionPool(Copyable, Movable):
         bucket)."""
         return scheme + "://" + host + ":" + String(port)
 
-    def acquire(read self, key: String) raises -> Optional[TlsStream]:
+    def acquire(imm self, key: String) raises -> Optional[TlsStream]:
         """Move out the most-recently-released idle stream for ``key``,
         evicting any that exceeded the idle timeout first. Returns
         ``None`` on a miss (pooling off, deque empty, or all survivors
@@ -157,7 +157,7 @@ struct TlsConnectionPool(Copyable, Movable):
         _ = sp[].entries.pop(key)
         return None
 
-    def release(read self, key: String, var stream: TlsStream) raises:
+    def release(imm self, key: String, var stream: TlsStream) raises:
         """Hand ``stream`` back for reuse, or drop it (closing it via
         its destructor) when pooling is off or the per-host cap is
         reached."""
