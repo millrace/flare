@@ -11,8 +11,14 @@ path = "src/main.rs"
 # Pinned to the same major.minor revision the v0.8 plan calls
 # out. Cargo.lock pins the exact patch revisions so the bench
 # numbers are reproducible across EPYC 7R32 dev-box rebuilds.
+#
+# Held at 0.22 deliberately. Under 0.24.5 this server answers the
+# first request and then every conn.send() returns CryptoFail, so
+# the baseline posts ~0 req/s; 0.22 serves the same workload
+# cleanly. Porting the server to 0.24 is the open follow-up --
+# until then this is the revision the published comparison used.
 [dependencies]
-quiche = { version = "0.24", default-features = false, features = ["boringssl-vendored"] }
+quiche = { version = "0.22", default-features = false, features = ["boringssl-vendored"] }
 mio    = { version = "0.8", features = ["net", "os-poll"] }
 ring   = "0.17"
 rcgen  = { version = "0.13", default-features = false, features = ["ring", "pem"] }

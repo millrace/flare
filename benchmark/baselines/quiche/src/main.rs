@@ -138,7 +138,25 @@ fn main() -> std::io::Result<()> {
             .values()
             .filter_map(|c| c.conn.timeout())
             .min();
-        poll.poll(&mut events, timeout)?;
+        // EINTR is not fatal: any profiler or debugger attaching to the
+        // process interrupts the wait, and propagating it killed the
+        // server mid-benchmark.
+        if let Err(e) = poll.poll(&mut events, timeout) {
+            if e.kind() == ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(e);
+        }
+
+        // No events means the deadline above expired. quiche requires
+        // on_timeout() only then; calling it on every pass makes each
+        // pass look like a timeout and wedges loss detection, which
+        // silences the connection after its first response.
+        if events.is_empty() {
+            for client in clients.values_mut() {
+                client.conn.on_timeout();
+            }
+        }
 
         // Drain inbound datagrams.
         'recv: loop {
@@ -223,7 +241,13 @@ fn main() -> std::io::Result<()> {
                 let (write, send_info) = match client.conn.send(&mut out) {
                     Ok(v) => v,
                     Err(quiche::Error::Done) => break 'send,
-                    Err(_) => break 'send,
+                    // Never swallow this. A silent break here is what
+                    // let the 0.24 CryptoFail regression look like a
+                    // healthy server posting 0 req/s.
+                    Err(e) => {
+                        eprintln!("quiche-h3: conn.send failed: {:?}", e);
+                        break 'send;
+                    }
                 };
                 if let Err(e) = socket.send_to(&out[..write], send_info.to) {
                     if e.kind() == ErrorKind::WouldBlock {
@@ -232,7 +256,6 @@ fn main() -> std::io::Result<()> {
                     return Err(e);
                 }
             }
-            client.conn.on_timeout();
         }
 
         // Reap closed connections.
