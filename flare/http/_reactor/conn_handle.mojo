@@ -121,6 +121,25 @@ comptime BYTE_SOURCE_BUFRING: Int = 1
 ``_recv``."""
 
 
+# ── Streaming coalescing budget ───────────────────────────────────────────────
+
+comptime STREAM_BATCH_CHUNKS: Int = 16
+"""Max chunks framed into ``write_buf`` by one ``_stream_refill``."""
+comptime STREAM_BATCH_BYTES: Int = 64 * 1024
+"""Max bytes framed into ``write_buf`` by one ``_stream_refill``.
+
+Whichever of the two caps is hit first ends the batch. Together they
+bound how much a single source can queue before the socket gets a
+chance to apply backpressure."""
+comptime STREAM_EDGE_PASSES: Int = 4
+"""Max refill+flush passes inside one ``on_writable``.
+
+The batch caps bound bytes per pass; this bounds passes per writable
+edge, so one connection with an endless source cannot hold the worker.
+``STREAM_EDGE_PASSES x STREAM_BATCH_CHUNKS`` chunks is the per-edge
+ceiling, after which the connection re-arms and yields to its peers."""
+
+
 # ── Connection handle ─────────────────────────────────────────────────────────
 
 
@@ -975,55 +994,69 @@ struct ConnHandle(Movable):
                 want_read=self.state == STATE_READING, want_write=False
             )
 
-        if self.tls:
-            var tls_step = self._flush_write_buf_tls()
-            if tls_step:
-                return tls_step.value()
-        else:
-            while self.write_pos < len(self.write_buf):
-                var remaining = len(self.write_buf) - self.write_pos
-                var ptr = self.write_buf.unsafe_ptr() + self.write_pos
-                var n = _send(
-                    self.fd(), ptr, c_size_t(remaining), c_int(MSG_NOSIGNAL)
-                )
-                if n > 0:
-                    self.write_pos += Int(n)
-                else:
-                    var e = get_errno()
-                    if e == ErrNo.EINTR:
-                        continue
-                    if e == ErrNo.EAGAIN or e == ErrNo.EWOULDBLOCK:
-                        break
-                    # Hard write error — close.
-                    self.should_close = True
-                    return StepResult(
-                        want_read=False, want_write=False, done=True
+        # Flush, and while a chunk source is attached, refill and flush
+        # again. Buffered responses have ``body_src == None`` and leave
+        # the loop on the first pass after a single Optional check.
+        var passes = 0
+        while True:
+            if self.tls:
+                var tls_step = self._flush_write_buf_tls()
+                if tls_step:
+                    return tls_step.value()
+            else:
+                while self.write_pos < len(self.write_buf):
+                    var remaining = len(self.write_buf) - self.write_pos
+                    var ptr = self.write_buf.unsafe_ptr() + self.write_pos
+                    var n = _send(
+                        self.fd(), ptr, c_size_t(remaining), c_int(MSG_NOSIGNAL)
                     )
+                    if n > 0:
+                        self.write_pos += Int(n)
+                    else:
+                        var e = get_errno()
+                        if e == ErrNo.EINTR:
+                            continue
+                        if e == ErrNo.EAGAIN or e == ErrNo.EWOULDBLOCK:
+                            break
+                        # Hard write error — close.
+                        self.should_close = True
+                        return StepResult(
+                            want_read=False, want_write=False, done=True
+                        )
 
-        if self.write_pos < len(self.write_buf):
-            # Partial write — re-arm on writable.
-            return StepResult(
-                want_read=False,
-                want_write=True,
-                idle_timeout_ms=config.write_timeout_ms,
-            )
+            if self.write_pos < len(self.write_buf):
+                # Partial write — the socket is full. Re-arm on writable.
+                return StepResult(
+                    want_read=False,
+                    want_write=True,
+                    idle_timeout_ms=config.write_timeout_ms,
+                )
 
-        # Response fully sent.
-        self.write_buf.clear()
-        self.write_pos = 0
+            # Everything queued has been sent.
+            self.write_buf.clear()
+            self.write_pos = 0
 
-        # Streaming body (K1): when a chunk source is attached, refill
-        # write_buf with the next framed chunk (or the terminator) and
-        # stay in STATE_WRITING. Buffered responses have ``body_src ==
-        # None`` and skip this with a single Optional check.
-        if self.body_src:
-            var more: Bool
+            if not self.body_src:
+                break
+
+            passes += 1
+            if passes >= STREAM_EDGE_PASSES:
+                # Per-edge budget spent; yield so peers on this worker
+                # make progress, and finish the stream on the next edge.
+                return StepResult(
+                    want_read=False,
+                    want_write=True,
+                    idle_timeout_ms=config.write_timeout_ms,
+                )
+
+            var queued: Bool
             try:
-                more = self._stream_refill()
+                queued = self._stream_refill()
             except:
                 self.should_close = True
                 return StepResult(want_read=False, want_write=False, done=True)
-            if more:
+            if not queued:
+                # Source is alive but had nothing to give this pass.
                 return StepResult(
                     want_read=False,
                     want_write=True,
@@ -1183,33 +1216,40 @@ struct ConnHandle(Movable):
         self.write_pos = 0
 
     def _stream_refill(mut self) raises -> Bool:
-        """Refill ``write_buf`` with the next framed chunk (or the
-        terminator) from ``body_src``. Returns ``True`` when bytes were
-        queued (stay in ``STATE_WRITING`` to flush them), ``False`` when
-        the stream is fully drained and its terminator has already been
-        queued on a prior call.
+        """Refill ``write_buf`` with up to ``STREAM_BATCH_CHUNKS`` framed
+        chunks (or the terminator) from ``body_src``. Returns ``True``
+        when bytes were queued, ``False`` when nothing could be queued.
 
         Called only when ``write_buf`` is fully flushed and ``body_src``
-        is set. Empty non-terminal chunks are skipped (a zero-length
-        chunk is the terminator, so a source must not frame one as data).
+        is set. Framing several chunks per call is what keeps a response
+        of N small chunks from costing N reactor turns and N sends; the
+        batch ends at ``STREAM_BATCH_CHUNKS``, at ``STREAM_BATCH_BYTES``,
+        at end-of-stream, or at the first empty chunk.
+
+        An empty chunk ends the batch rather than being skipped: a source
+        with nothing to hand over right now must not be re-polled in a
+        tight loop. A ``False`` return therefore means "alive but idle"
+        whenever ``body_src`` is still set, and the caller re-arms.
         """
         if not self.body_src:
             return False
         var cancel = self.cancel_cell.handle()
-        while True:
+        self.write_buf.clear()
+        self.write_pos = 0
+        var framed = 0
+        while (
+            framed < STREAM_BATCH_CHUNKS
+            and len(self.write_buf) < STREAM_BATCH_BYTES
+        ):
             var chunk_opt = self.body_src.value().next(cancel)
             if not chunk_opt:
                 # End-of-stream: queue the terminator and drop the
                 # source so the next flush-complete transitions normally.
-                self.write_buf.clear()
                 frame_terminator_into(self.write_buf)
-                self.write_pos = 0
                 self.body_src = Optional[ChunkSourceBox]()
                 return True
-            var chunk = chunk_opt.value().copy()
-            if len(chunk) == 0:
-                continue  # skip empty non-terminal chunks
-            self.write_buf.clear()
-            frame_chunk_into(self.write_buf, chunk)
-            self.write_pos = 0
-            return True
+            if len(chunk_opt.value()) == 0:
+                break
+            frame_chunk_into(self.write_buf, chunk_opt.value())
+            framed += 1
+        return len(self.write_buf) > 0
