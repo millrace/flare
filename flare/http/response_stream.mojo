@@ -21,6 +21,18 @@ reactor coupling so it can land and be tested on its own:
 The reactor adoption (a ``ChunkSourceBox`` field on ``Response`` +
 ``ConnHandle``, and the per-writable-edge pull loop) lands as the
 follow-up; the box + framing here are what it builds on.
+
+**writev verdict (v0.10): not adopted.** ``frame_chunk_into`` copies each
+payload into the connection's ``write_buf`` so one ``send(2)`` covers a
+whole batch of chunks. ``flare.runtime.iovec`` could skip that copy, at
+the cost of keeping every pulled chunk alive across the syscall and of a
+second, cleartext-only send path (TLS needs contiguous bytes for
+``SSL_write``). Profiled instead: at 70k req/s on ``/stream``,
+``ConnHandle.on_writable`` -- which inlines this framing and the copy --
+is 2.05 % of cycles, while ``__send`` is 61.7 % inclusive (kernel) and
+the source's own per-chunk ``next`` allocation is 14.9 %. The copy is not
+the cost center, so writev is not worth the second path. Revisit only if
+a profile puts the framing copy above the syscall.
 """
 
 from std.collections import Optional
