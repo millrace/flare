@@ -693,13 +693,26 @@ struct HttpServer(Movable):
             # later dispatch reads only the field.
             if not self.config.use_bufring:
                 self.config.use_bufring = _resolve_bufring_handler_env()
-            # The bufring path is HTTP/1.1-only by design and
-            # crashes under sustained 64-conn wrk2 load -- see
-            # the matching comment in the generic ``serve[H]``
-            # overload below. Bufring is also single-listener-
-            # only; we fall through to the unified loop when
-            # extras are attached so multi-listener users get
-            # the proper accept demux.
+            # The bufring path is HTTP/1.1-only by design, and
+            # single-listener-only -- we fall through to the
+            # unified loop when extras are attached so
+            # multi-listener users get the proper accept demux.
+            #
+            # It stays default-off because it cannot stream, NOT
+            # because it is unstable. The old "crashes under
+            # sustained 64-conn wrk2 load" note was stale: the
+            # root cause was the IoUringDriver SQE mmap sized
+            # from the ring_entries OFFSET instead of the COUNT
+            # (one page, 64 slots), which is fixed. Re-probed at
+            # v0.10 -- 64 conns for 30 s and 60 s and 128 conns
+            # for 30 s, ~8M requests total, no crash.
+            #
+            # What does keep it opt-in: the send path buffers a
+            # whole response before submitting, so a streaming
+            # body cannot interleave with recv processing (see
+            # ``_drive_handler_with_submit_send``). Default-on is
+            # not defensible in a release whose headline is
+            # streaming.
             comptime if CompilationTarget.is_linux():
                 if (
                     use_uring_backend()
@@ -1077,8 +1090,9 @@ struct HttpServer(Movable):
             # ``FLARE_BUFRING_HANDLER=1`` env var resolved at
             # startup). HTTP/1.1-only by design and
             # single-listener-only. See the matching comment in
-            # the plain-def overload above for the load-crash
-            # status that keeps it default-off.
+            # the plain-def overload above for why it stays
+            # opt-in -- it is the no-streaming limitation, not
+            # the load crash that note used to claim.
             comptime if CompilationTarget.is_linux():
                 if (
                     use_uring_backend()
