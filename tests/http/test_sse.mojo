@@ -149,6 +149,28 @@ def test_channel_open_emits_heartbeat_when_buffer_empty() raises:
     assert_equal(_bytes_to_str(got), ": keep-alive\n\n")
 
 
+def test_channel_idle_heartbeat_is_rate_limited() raises:
+    """Back-to-back idle pulls must not each emit a heartbeat.
+
+    The reactor drains a batch of chunks per writable edge, so an
+    ungated heartbeat would put a batch of them on the wire every edge.
+    The second pull inside the interval yields an empty chunk, which
+    reactors read as "nothing right now"."""
+    var ch = SseChannel()
+    var sentinel = Cancel.never()
+    var first = ch.next(sentinel).value().copy()
+    assert_equal(_bytes_to_str(first), ": keep-alive\n\n")
+    for _ in range(8):
+        var again = ch.next(sentinel)
+        assert_true(again.__bool__(), "idle channel must not signal EOF")
+        assert_equal(len(again.value()), 0)
+    # A pushed event still comes out immediately; the gate is only for
+    # the idle filler.
+    ch.push(SseEvent.message("live"))
+    var evt = ch.next(sentinel).value().copy()
+    assert_equal(_bytes_to_str(evt), "data: live\n\n")
+
+
 def test_channel_cancel_short_circuits_to_none() raises:
     """Mojo nightly note: cell.handle() returns a Cancel that holds
     the cell's heap address; the cell must be kept alive past the

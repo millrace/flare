@@ -53,9 +53,13 @@ Reactor adoption: same as example 24 — wires through the existing
 
 from std.collections import Optional
 
+from ._reactor.keepalive_scan import _monotonic_ms
 from .body import Body, ChunkSource, ChunkedBody, InlineBody
 from .cancel import Cancel
 from .response import Response, stream_response
+
+comptime SSE_HEARTBEAT_MS: Int = 15_000
+"""Minimum gap between ``: keep-alive`` comments on an idle channel."""
 
 
 # ── SseEvent ────────────────────────────────────────────────────────────────
@@ -178,6 +182,23 @@ struct SseChannel(ChunkSource, Copyable, Movable):
     disconnects (peer FIN ⇒ reactor flips ``cancel``) or the
     request-deadline fires.
 
+    Known ceiling -- an idle open channel still wakes the reactor.
+        ``next`` no longer emits bytes on every writable edge (see the
+        ``SSE_HEARTBEAT_MS`` gate), but the connection keeps write
+        interest armed, epoll is level-triggered, and the socket stays
+        writable, so the reactor re-dispatches it and gets an empty
+        chunk back. That costs CPU on an otherwise idle stream.
+
+        Fixing it needs a way to park a live-but-idle source, which
+        flare does not have yet, by either of two routes. (1) Teach the
+        timer wheel to wake rather than reap: today every fired timer
+        goes to ``_cleanup_conn_unified``, which closes the connection,
+        so there is no "call me back in N ms" timer to drop write
+        interest against. (2) Back the channel with an eventfd and drive
+        it through ``AsyncChunkSource`` / ``ChunkPoll.pending(fd)`` in
+        ``flare.http.async_body``, which is built for exactly this and
+        is not yet wired into the reactor.
+
     Thread safety:
         Not thread-safe. Push from the reactor's pthread or
         synchronise externally.
@@ -189,10 +210,14 @@ struct SseChannel(ChunkSource, Copyable, Movable):
 
     var _closed: Bool
 
+    var _last_beat_ms: Int
+    """Monotonic ms of the last heartbeat; ``-1`` before the first."""
+
     def __init__(out self):
         self._events = List[SseEvent]()
         self._next_idx = 0
         self._closed = False
+        self._last_beat_ms = -1
 
     def push(mut self, var event: SseEvent):
         """Append an event to the FIFO."""
@@ -212,22 +237,32 @@ struct SseChannel(ChunkSource, Copyable, Movable):
         return len(self._events) - self._next_idx
 
     def next(mut self, cancel: Cancel) raises -> Optional[List[UInt8]]:
-        """Yield the next event's wire bytes, or ``None`` to
-        signal end-of-stream.
+        """Yield the next event's wire bytes, an empty chunk when the
+        channel is open but idle, or ``None`` to signal end-of-stream.
 
         Returns ``None`` immediately if cancel is set OR the
         channel is closed AND the buffer is drained.
+
+        An idle open channel yields a comment-line heartbeat
+        (``": keep-alive\\n\\n"``, ignored by the WHATWG parser because
+        it starts with ``:``) at most once per ``SSE_HEARTBEAT_MS``, and
+        an empty chunk in between. Reactors read the empty chunk as
+        "nothing right now" and stop draining, so an idle stream costs no
+        bandwidth: without the gate, the reactor's coalescing loop would
+        pull a full batch of heartbeats on every writable edge.
         """
         if cancel.cancelled():
             return Optional[List[UInt8]]()
         if self._next_idx >= len(self._events):
             if self._closed:
                 return Optional[List[UInt8]]()
-            # Open channel with empty buffer: yield a comment-line
-            # heartbeat (": keep-alive\n\n") so the reactor still
-            # has something to flush. The WHATWG parser ignores
-            # comment lines (start with ":"), so this never fires
-            # an EventSource event on the client.
+            var now = _monotonic_ms()
+            if (
+                self._last_beat_ms >= 0
+                and now - self._last_beat_ms < SSE_HEARTBEAT_MS
+            ):
+                return Optional[List[UInt8]](List[UInt8]())
+            self._last_beat_ms = now
             var heartbeat = String(": keep-alive\n\n")
             var bytes = List[UInt8](capacity=heartbeat.byte_length())
             var p = heartbeat.unsafe_ptr()

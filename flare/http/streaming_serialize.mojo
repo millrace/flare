@@ -264,6 +264,11 @@ def serialize_streaming_response[
         if not chunk_opt:
             break
         var chunk = chunk_opt.value().copy()
+        if len(chunk) == 0:
+            # A zero-length chunk is the terminator's size line, so
+            # framing one here would end the body early. Sources use it
+            # to mean "nothing right now"; skip it.
+            continue
         if is_chunked:
             # ``hex_length\r\n``
             var size_line = _hex_lower(len(chunk)) + "\r\n"
