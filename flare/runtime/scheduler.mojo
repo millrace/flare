@@ -87,83 +87,22 @@ from ._thread import ThreadHandle, num_cpus, _OpaquePtr
 from .frontend import Frontend
 from .reuseport import bind_reuseport, bind_shared
 
-
-# ── Atomic stop-flag helpers ─────────────────────────────────────────────────
-# The stopping flag is a heap-allocated byte written by the main
-# thread and read by every worker. Release-store / acquire-load pair
-# gives the workers a proper happens-before edge on shutdown; lowers
-# to a plain ``mov`` on x86-64 (TSO) and to ``stlr`` / ``ldar`` on
-# ARM64. Callers pass the raw heap address (the same ``Int`` the
-# worker ctx carries) so the flag stays valid across struct moves.
-
-
-@always_inline
-def store_stop_flag(addr: Int, value: Bool):
-    """Release-store ``value`` into the heap stop-flag byte at ``addr``."""
-    if addr == 0:
-        return
-    var p = UnsafePointer[UInt8, MutUntrackedOrigin](
-        unsafe_from_address=addr
-    ).unsafe_bitcast[Scalar[DType.uint8]]()
-    Atomic[DType.uint8].store[ordering=Ordering.RELEASE](
-        p, UInt8(1) if value else UInt8(0)
-    )
-
-
-@always_inline
-def load_stop_flag(addr: Int) -> Bool:
-    """Acquire-load the heap stop-flag byte at ``addr``."""
-    if addr == 0:
-        return False
-    var p = UnsafePointer[UInt8, MutUntrackedOrigin](
-        unsafe_from_address=addr
-    ).unsafe_bitcast[Scalar[DType.uint8]]()
-    return Atomic[DType.uint8].load[ordering=Ordering.ACQUIRE](p) != UInt8(0)
-
-
-# ── Per-worker stats cell (D6 drain accounting + D9 crash visibility) ─────────
-# Each worker owns a heap cell of two ``Int64`` slots the worker writes
-# and the scheduler (main thread) reads. Slot 0 is the live-connection
-# snapshot (updated each reactor iteration); slot 1 is the exit status.
-# Release-store / acquire-load makes the worker's writes visible to the
-# scheduler after it joins the worker. A ``base_addr`` of 0 disables the
-# writes (single-worker / non-scheduler paths pay nothing).
-
-comptime WORKER_STAT_INFLIGHT: Int = 0
-"""Slot index: connections still registered on this worker."""
-comptime WORKER_STAT_STATUS: Int = 1
-"""Slot index: worker exit status (see ``WORKER_STATUS_*``)."""
-comptime WORKER_STAT_SLOTS: Int = 2
-"""Number of Int64 slots per worker cell."""
-
-comptime WORKER_STATUS_RUNNING: Int = 0
-"""Worker has not exited its serve loop yet."""
-comptime WORKER_STATUS_CLEAN: Int = 1
-"""Worker exited because it observed the stop flag (normal shutdown)."""
-comptime WORKER_STATUS_CRASHED: Int = 2
-"""Worker exited because its reactor poll failed (unexpected)."""
-
-
-@always_inline
-def store_worker_stat(base_addr: Int, slot: Int, value: Int):
-    """Release-store ``value`` into ``slot`` of the worker stats cell."""
-    if base_addr == 0:
-        return
-    var p = UnsafePointer[Int, MutUntrackedOrigin](
-        unsafe_from_address=base_addr + slot * 8
-    ).unsafe_bitcast[Scalar[DType.int64]]()
-    Atomic[DType.int64].store[ordering=Ordering.RELEASE](p, Int64(value))
-
-
-@always_inline
-def load_worker_stat(base_addr: Int, slot: Int) -> Int:
-    """Acquire-load ``slot`` of the worker stats cell (0 when disabled)."""
-    if base_addr == 0:
-        return 0
-    var p = UnsafePointer[Int, MutUntrackedOrigin](
-        unsafe_from_address=base_addr + slot * 8
-    ).unsafe_bitcast[Scalar[DType.int64]]()
-    return Int(Atomic[DType.int64].load[ordering=Ordering.ACQUIRE](p))
+# Re-exported so the reactor loops' existing
+# ``from flare.runtime.scheduler import load_stop_flag`` imports keep
+# resolving after the split.
+from .scheduler_stats import (
+    load_stop_flag,
+    store_stop_flag,
+    store_worker_stat,
+    load_worker_stat,
+    WORKER_STAT_INFLIGHT,
+    WORKER_STAT_STATUS,
+    WORKER_STAT_SLOTS,
+    WORKER_STATUS_RUNNING,
+    WORKER_STATUS_CLEAN,
+    WORKER_STATUS_CRASHED,
+)
+from ._worker import _WorkerCtx, _worker_entry
 
 
 # ── ShutdownReport (per-worker drain accounting) ─────────────────────────────
@@ -231,144 +170,6 @@ def _scheduler_free_ctxs[F: Frontend & Copyable](addrs: List[Int]):
         var typed = raw.unsafe_bitcast[_WorkerCtx[F]]()
         typed.unsafe_deinit_pointee()
         _scheduler_free_raw(raw)
-
-
-# ── Per-worker context ───────────────────────────────────────────────────────
-
-
-struct _WorkerCtx[F: Frontend & Copyable](Movable):
-    """Heap-allocated context passed to a pthread start routine.
-
-    Carries a *borrowed* listener fd (the underlying ``TcpListener``
-    is owned by the parent ``Scheduler``), a per-worker copy of
-    the frontend, the shared stopping flag (as a raw address), and
-    a worker index for pinning + logging. Workers must NOT close
-    ``listener_fd`` — that's the ``Scheduler``'s job on shutdown.
-
-    The frontend encapsulates everything protocol-specific that
-    used to live on this struct (handler, server config, HTTP/2
-    settings, auto-protocol toggle); the runtime layer no longer
-    needs to know any of those flags exist.
-    """
-
-    var listener_fd: Int
-    """The listener fd this worker will use. Semantics depend on
-    the binding strategy chosen by the Scheduler:
-    * **shared listener (default-off)**: shared across all
-      workers; owned by the Scheduler; workers call
-      register_exclusive (EPOLLEXCLUSIVE) to share accept fairly.
-    * **per-worker SO_REUSEPORT (default-on)**: per-worker fd,
-      bound on the Scheduler thread (so concurrent-bind races
-      can't happen) and handed to this specific worker; owned
-      by the Scheduler's per-worker listener table for cleanup.
-    """
-    var extra_fds: List[Int]
-    """This worker's listeners on the *additional* bind addresses,
-    one fd per extra address, in the order the addresses were passed
-    to :meth:`Scheduler.start`. Empty for a single-address scheduler.
-
-    Each fd is this worker's own ``SO_REUSEPORT`` listener, not a
-    shared one: N addresses x M workers means N*M listeners, all
-    bound serially on the scheduler thread. Owned by the Scheduler;
-    workers must not close them."""
-    var bind_addr: SocketAddr
-    """Bind address (the same one the Scheduler resolved). Kept
-    for diagnostics + future use; the actual fd is in
-    ``listener_fd`` regardless of strategy."""
-    var frontend: Self.F
-    var stopping_addr: Int
-    var worker_idx: Int
-    var pin_cores: Bool
-    var stats_addr: Int
-    """Heap address of this worker's two-slot ``Int64`` stats cell
-    (in-flight snapshot + exit status). 0 disables the writes."""
-
-    def __init__(
-        out self,
-        listener_fd: Int,
-        bind_addr: SocketAddr,
-        var frontend: Self.F,
-        stopping_addr: Int,
-        worker_idx: Int,
-        pin_cores: Bool,
-        stats_addr: Int,
-        var extra_fds: List[Int] = List[Int](),
-    ):
-        self.listener_fd = listener_fd
-        self.bind_addr = bind_addr
-        self.frontend = frontend^
-        self.stopping_addr = stopping_addr
-        self.worker_idx = worker_idx
-        self.pin_cores = pin_cores
-        self.stats_addr = stats_addr
-        self.extra_fds = extra_fds^
-
-
-# ── Worker entry point (comptime-specialised per F) ─────────────────────────
-
-
-def _worker_entry[F: Frontend & Copyable](arg: _OpaquePtr) -> _OpaquePtr:
-    """Pthread start routine for one reactor worker.
-
-    Casts ``arg`` back to a ``_WorkerCtx[F]`` pointer, optionally
-    pins to a CPU, then delegates to :meth:`Frontend.run_worker`
-    until the shared stopping flag is observed.
-
-    The context was allocated on the main thread with libc ``malloc``
-    plus ``init_pointee_move``; the Scheduler main thread destroys and
-    frees it after joining this worker.
-    """
-    var ctx_addr = Int(arg)
-    var raw = UnsafePointer[UInt8, MutUntrackedOrigin](
-        unsafe_from_address=ctx_addr
-    )
-    var ctx_ptr = raw.unsafe_bitcast[_WorkerCtx[F]]()
-
-    var stopping_ptr = UnsafePointer[Bool, MutUntrackedOrigin](
-        unsafe_from_address=ctx_ptr[].stopping_addr
-    )
-
-    # CPU pinning is best-effort: on macOS it's a no-op and on
-    # Linux an overly-ambitious CPU index might raise. Pinning
-    # happens from the worker itself via pthread_self, so we
-    # re-wrap the current thread id into a ThreadHandle just to
-    # reuse the ``pin_to_cpu`` helper.
-    if ctx_ptr[].pin_cores:
-        try:
-            var cpu = ctx_ptr[].worker_idx % num_cpus()
-            var self_handle = ThreadHandle(
-                _thread_id=external_call["pthread_self", UInt64]()
-            )
-            self_handle.pin_to_cpu(cpu)
-        except:
-            pass
-
-    # ``stopping_ptr[]`` dereferences to the heap-allocated Bool.
-    # The frontend's serving loop takes ``stopping`` as a ``def``
-    # parameter (reference semantics in Mojo), so every
-    # iteration re-reads the live flag from this stable heap
-    # address. That address was captured at
-    # ``Scheduler.start`` time and stays valid until
-    # ``Scheduler.shutdown`` joins every worker.
-    #
-    # ``run_worker`` is declared on the trait without ``raises``
-    # so impls cannot throw across the pthread boundary; the
-    # impl is responsible for catching internally and exiting
-    # cleanly when the stop flag flips.
-    ctx_ptr[].frontend.run_worker(
-        ctx_ptr[].listener_fd,
-        stopping_ptr[],
-        ctx_ptr[].stats_addr,
-        ctx_ptr[].extra_fds.copy(),
-    )
-
-    # Ctx ownership: the Scheduler main thread destroys + frees every
-    # ctx AFTER joining the worker, so we don't touch it here.
-    # b2: UnsafePointer is non-nullable; build C NULL from a runtime 0.
-    var null_addr = 0
-    return UnsafePointer[UInt8, MutUntrackedOrigin](
-        unsafe_from_address=null_addr
-    )
 
 
 # ── Scheduler ────────────────────────────────────────────────────────────────
