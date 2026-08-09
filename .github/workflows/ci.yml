@@ -197,7 +197,7 @@ jobs:
   # Mojo toolchain/allocator ships.
 
   conformance:
-    name: Conformance (h2spec / autobahn / quic-interop)
+    name: Conformance (interop smoke + h2spec / autobahn / quic-interop)
     runs-on: ubuntu-latest
     # DOCUMENTED HOST BLOCKER: the three external suites (h2spec,
     # autobahn wstest, quic-interop-runner) are not bundled and are not
@@ -215,5 +215,14 @@ jobs:
           locked: true
           cache: false
           post-cleanup: false
+      # Runs first and is NOT skippable: curl is on every runner image,
+      # so unlike the three suites below this leg always has signal.
+      # It exists because flare's h2 server was once unable to answer
+      # curl, a browser or h2load while the entire in-tree h2 suite
+      # passed -- our own client emits HPACK H=0, so no test we ran had
+      # ever sent a Huffman-coded header. A server is not interoperable
+      # until something we did not write has talked to it.
+      - name: Interop smoke (curl / h2load on every wire)
+        run: pixi run interop-smoke
       - name: Run provisioned conformance suites
         run: pixi run conformance
