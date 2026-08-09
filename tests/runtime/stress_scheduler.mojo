@@ -66,7 +66,11 @@ struct _NopFrontend(Copyable, Frontend, Movable):
         return False
 
     def run_worker(
-        mut self, listener_fd: Int, mut stopping: Bool, stats_addr: Int
+        mut self,
+        listener_fd: Int,
+        mut stopping: Bool,
+        stats_addr: Int,
+        extra_fds: List[Int] = List[Int](),
     ):
         var stopping_addr = Int(UnsafePointer[Bool, _](to=stopping))
         while not load_stop_flag(stopping_addr):

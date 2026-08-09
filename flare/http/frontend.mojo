@@ -133,7 +133,11 @@ struct HttpFrontend[H: Handler & Copyable](Copyable, Frontend, Movable):
         return False
 
     def run_worker(
-        mut self, listener_fd: Int, mut stopping: Bool, stats_addr: Int
+        mut self,
+        listener_fd: Int,
+        mut stopping: Bool,
+        stats_addr: Int,
+        extra_fds: List[Int] = List[Int](),
     ):
         """Pick the reactor entry point and run it until ``stopping`` flips."""
         try:
@@ -142,7 +146,12 @@ struct HttpFrontend[H: Handler & Copyable](Copyable, Frontend, Movable):
                     use_uring_backend()
                     and self.config.use_bufring
                     and self.tls_ctx_addr == 0
+                    and len(extra_fds) == 0
                 ):
+                    # The buffer-ring loop registers exactly one
+                    # listener, so it is not eligible once this worker
+                    # owns listeners on several addresses; fall through
+                    # to the unified loop, which is.
                     run_uring_bufring_reactor_loop_shared[Self.H](
                         listener_fd,
                         self.config,
@@ -151,7 +160,7 @@ struct HttpFrontend[H: Handler & Copyable](Copyable, Frontend, Movable):
                         stats_addr,
                     )
                     return
-            if self.auto_protocol or self.tls_ctx_addr != 0:
+            if self.auto_protocol or self.tls_ctx_addr != 0 or extra_fds:
                 run_unified_reactor_loop_shared[Self.H](
                     listener_fd,
                     self.config,
@@ -160,6 +169,7 @@ struct HttpFrontend[H: Handler & Copyable](Copyable, Frontend, Movable):
                     stopping,
                     stats_addr,
                     self.tls_ctx_addr,
+                    extra_fds,
                 )
             else:
                 run_reactor_loop_shared[Self.H](
@@ -204,9 +214,22 @@ struct StreamFrontend[H: StreamHandler & Copyable](Copyable, Frontend, Movable):
         return False
 
     def run_worker(
-        mut self, listener_fd: Int, mut stopping: Bool, stats_addr: Int
+        mut self,
+        listener_fd: Int,
+        mut stopping: Bool,
+        stats_addr: Int,
+        extra_fds: List[Int] = List[Int](),
     ):
-        """Drive the shared streaming reactor loop."""
+        """Drive the shared streaming reactor loop.
+
+        ``extra_fds`` is refused rather than ignored: the streaming
+        reactor registers a single listener, so accepting the list
+        silently would leave an address the caller bound with nothing
+        listening on it. ``HttpServer.serve_streaming`` refuses
+        bind_many up front for the same reason.
+        """
+        if extra_fds:
+            return
         try:
             run_stream_reactor_loop_shared[Self.H](
                 listener_fd,
@@ -259,9 +282,20 @@ struct StaticHttpFrontend(Copyable, Frontend, Movable):
         return False
 
     def run_worker(
-        mut self, listener_fd: Int, mut stopping: Bool, stats_addr: Int
+        mut self,
+        listener_fd: Int,
+        mut stopping: Bool,
+        stats_addr: Int,
+        extra_fds: List[Int] = List[Int](),
     ):
-        """Drive the static-response fast path."""
+        """Drive the static-response fast path.
+
+        ``extra_fds`` is refused rather than ignored -- see
+        :meth:`StreamFrontend.run_worker` for why. ``serve_static``
+        binds one address.
+        """
+        if extra_fds:
+            return
         try:
             run_reactor_loop_static_shared(
                 listener_fd,

@@ -14,9 +14,9 @@ Cases (4):
   (primary first).
 * ``test_bind_many_empty_addrs_raises`` -- the API rejects an
   empty addr list with a clear error message.
-* ``test_bind_many_multi_worker_raises`` -- combining
-  ``bind_many`` with ``num_workers >= 2`` is rejected (single-
-  worker only in v0.7).
+* ``test_bind_many_multi_worker_serves_every_address`` -- the
+  N x M cross product: two addresses x two workers, both
+  addresses served. This combination raised until v0.10.
 """
 
 from std.testing import assert_equal, assert_true
@@ -115,29 +115,73 @@ def test_bind_many_empty_addrs_raises() raises:
     assert_true(raised, "bind_many([]) must raise")
 
 
-def test_bind_many_multi_worker_raises() raises:
-    """Combining bind_many with num_workers>=2 is rejected in v0.7
-    -- multi-listener is single-worker; multi-worker uses
-    SO_REUSEPORT (N fds on one address). The error message
-    explains the distinction."""
+def test_bind_many_multi_worker_serves_every_address() raises:
+    """N addresses x M workers: every address is served.
+
+    This raised until v0.10 ("bind_many is single-worker only").
+    Each (address, worker) pair now owns its own SO_REUSEPORT
+    listener, so two addresses across two workers means four
+    listeners.
+
+    The gap this guards against is an address that binds but is
+    never accepted on -- the server would come up, answer on the
+    primary, and hang every client of the extra. So both addresses
+    are driven, several times each, rather than just checking the
+    server starts.
+    """
     var addrs = List[SocketAddr]()
     addrs.append(SocketAddr.localhost(0))
     addrs.append(SocketAddr.localhost(0))
     var srv = HttpServer.bind_many(addrs^)
-    var raised = False
+
+    var port_a = UInt16(srv.local_addrs()[0].port)
+    var port_b = UInt16(srv.local_addrs()[1].port)
+
+    var pid = fork()
+    if pid == 0:
+        try:
+            srv.serve(_hello, num_workers=2)
+        except:
+            pass
+        exit()
+    usleep(400000)
+
+    var ok_a = 0
+    var ok_b = 0
     try:
-        srv.serve(_hello, num_workers=2)
+        with HttpClient() as c:
+            # Several round trips per address: with two workers the
+            # kernel hashes connections between them, so one request
+            # could be served by a single worker and hide a listener
+            # that was never registered on the other.
+            for _ in range(4):
+                if (
+                    c.get(
+                        "http://127.0.0.1:" + String(Int(port_a)) + "/from-a"
+                    ).text()
+                    == "hello multi-listener: /from-a"
+                ):
+                    ok_a += 1
+                if (
+                    c.get(
+                        "http://127.0.0.1:" + String(Int(port_b)) + "/from-b"
+                    ).text()
+                    == "hello multi-listener: /from-b"
+                ):
+                    ok_b += 1
     except:
-        raised = True
-    assert_true(
-        raised,
-        "bind_many + num_workers=2 must raise (single-worker only in v0.7)",
-    )
+        pass
+
+    _ = kill(pid, SIGKILL)
+    waitpid(pid)
+
+    assert_equal(ok_a, 4, "primary address did not serve under 2 workers")
+    assert_equal(ok_b, 4, "extra address did not serve under 2 workers")
 
 
 def main() raises:
     test_bind_many_two_ports_serve_both()
     test_bind_many_local_addrs_returns_in_order()
     test_bind_many_empty_addrs_raises()
-    test_bind_many_multi_worker_raises()
+    test_bind_many_multi_worker_serves_every_address()
     print("test_multi_listener: 4 passed")

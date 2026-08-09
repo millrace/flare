@@ -1008,19 +1008,22 @@ def _run_unified_loop_for_fd[
     stats_addr: Int = 0,
     ws_hooks: Optional[WsH2Hooks] = None,
     tls_ctx_addr: Int = 0,
+    extra_fds: List[Int] = List[Int](),
 ) raises:
-    """Shared body for the single-listener unified reactor loops.
+    """Shared body for the unified reactor loops.
 
     Identical poll-and-dispatch core for the dedicated
     (``is_shared=False``) and shared (``is_shared=True``) variants;
     the only listener-side difference is ``register`` vs
-    ``register_exclusive``. Both register the listener under
-    ``token = 0`` and route every other event by ``conns`` lookup.
+    ``register_exclusive``.
 
-    The multi-listener variant doesn't share this body because it
-    routes accept events by ``fd in listener_fds_dict`` instead of
-    ``token == 0`` -- that fd-set discriminator is structurally
-    different enough to warrant its own outer loop.
+    ``listener_fd`` registers under ``token = 0``, which keeps the
+    single-listener path a straight token compare. ``extra_fds`` (the
+    N x M case: this worker's own listener on each *additional*
+    address) register under ``token = fd`` and are routed through an
+    fd set consulted before the ``conns`` lookup. When ``extra_fds`` is
+    empty -- the overwhelmingly common case -- the set is never built
+    and the dispatch is byte-for-byte what it was.
     """
     var reactor = Reactor()
     var wheel = TimerWheel(now_ms=UInt64(_monotonic_ms()))
@@ -1031,6 +1034,15 @@ def _run_unified_loop_for_fd[
         reactor.register_exclusive(c_int(listener_fd), UInt64(0), INTEREST_READ)
     else:
         reactor.register(c_int(listener_fd), UInt64(0), INTEREST_READ)
+
+    var listener_fds = Dict[Int, Bool]()
+    for i in range(len(extra_fds)):
+        var xf = c_int(extra_fds[i])
+        listener_fds[Int(xf)] = True
+        comptime if is_shared:
+            reactor.register_exclusive(xf, UInt64(Int(xf)), INTEREST_READ)
+        else:
+            reactor.register(xf, UInt64(Int(xf)), INTEREST_READ)
 
     var events = List[Event]()
     var exit_status = WORKER_STATUS_CLEAN
@@ -1061,6 +1073,15 @@ def _run_unified_loop_for_fd[
                 )
                 continue
             var fd = Int(evt.token)
+            if len(listener_fds) > 0 and fd in listener_fds:
+                _accept_loop_unified_fd(
+                    fd,
+                    reactor,
+                    conns,
+                    config.max_connections,
+                    tls_ctx_addr,
+                )
+                continue
             if fd not in conns:
                 continue
             var packed = conns[fd]
@@ -1260,6 +1281,7 @@ def run_unified_reactor_loop_shared[
     ref stopping: Bool,
     stats_addr: Int = 0,
     tls_ctx_addr: Int = 0,
+    extra_fds: List[Int] = List[Int](),
 ) raises:
     """Multi-worker variant of :func:`run_unified_reactor_loop`.
 
@@ -1269,6 +1291,13 @@ def run_unified_reactor_loop_shared[
     degrades to plain ``register`` -- the wakeup pattern is
     "wake-all, one-wins" but practical behaviour is similar
     because ``accept(2)`` on the losers returns ``EAGAIN``).
+
+    ``extra_fds`` carries this worker's listeners on the *additional*
+    addresses of a :meth:`HttpServer.bind_many` server -- one fd per
+    extra address, per worker. That is the N x M shape: N addresses
+    times M workers, each pairing owning its own ``SO_REUSEPORT``
+    listener, rather than N addresses on one worker (multi-listener)
+    or one address across M workers (multi-worker).
 
     Delegates to :func:`_run_unified_loop_for_fd[H, True]`.
     """
@@ -1281,4 +1310,5 @@ def run_unified_reactor_loop_shared[
         stats_addr,
         None,
         tls_ctx_addr,
+        extra_fds,
     )

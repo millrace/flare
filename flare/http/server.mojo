@@ -253,14 +253,17 @@ struct HttpServer(Movable):
         (already-bound listeners are dropped + closed by the
         ``TcpListener.__deinit__``).
 
-        Multi-listener mode is **single-worker only** today.
-        ``HttpServer.serve(handler, num_workers=N)`` with
-        ``N >= 2`` raises when extras are present; the
-        ``SO_REUSEPORT`` multi-worker path is N-fds-on-one-
-        address and is orthogonal. A cross-product
-        N-listeners x M-workers shape is a future addition;
-        today the right multi-worker path stays through
-        ``bind`` + ``num_workers``.
+        Composes with multi-worker serving: ``serve(handler,
+        num_workers=M)`` on a ``bind_many`` server gives N addresses
+        x M workers, where each pairing owns its own
+        ``SO_REUSEPORT`` listener (N*M in total, bound serially on
+        the scheduler thread). The listeners created here are closed
+        first, because ``SO_REUSEPORT`` only composes with other
+        ``SO_REUSEPORT`` sockets and these are plain binds.
+
+        Still single-listener: the WebSocket-over-h2 sidecar and
+        ``serve_streaming``, both of which raise when extras are
+        present rather than leaving an address unserved.
 
         Args:
             addrs: One or more local addresses to listen on.
@@ -732,14 +735,6 @@ struct HttpServer(Movable):
                     self._tls_ctx_addr(),
                 )
         else:
-            if len(self._extra_listener_fds) > 0:
-                raise Error(
-                    "HttpServer.bind_many is single-worker only;"
-                    " pass num_workers=1 (or omit it). Multi-worker uses"
-                    " SO_REUSEPORT (N fds on one address); multi-listener"
-                    " is N distinct addresses on one worker. The cross"
-                    " product (N x M) is a future addition."
-                )
             self._serve_multicore[FnHandler](h^, num_workers, pin_cores)
 
     def serve[H: Handler](mut self, var handler: H) raises:
@@ -1117,14 +1112,6 @@ struct HttpServer(Movable):
                     self._stopping,
                 )
         else:
-            if len(self._extra_listener_fds) > 0:
-                raise Error(
-                    "HttpServer.bind_many is single-worker only;"
-                    " pass num_workers=1 (or omit it). Multi-worker uses"
-                    " SO_REUSEPORT (N fds on one address); multi-listener"
-                    " is N distinct addresses on one worker. The cross"
-                    " product (N x M) is a future addition."
-                )
             self._serve_multicore[H](handler^, num_workers, pin_cores)
 
     def _serve_multicore[
@@ -1140,7 +1127,14 @@ struct HttpServer(Movable):
         from .frontend import HttpFrontend
 
         var addr = self._listener.local_addr()
+        # N x M: each worker binds its own SO_REUSEPORT listener on
+        # every address, so every listener bound by bind_many has to be
+        # closed first -- SO_REUSEPORT only composes with other
+        # SO_REUSEPORT sockets, and bind_many's originals are plain
+        # binds holding the address.
+        var extra_addrs = self._extra_local_addrs.copy()
         self._listener.close()
+        self._close_extras()
 
         # Read FLARE_BUFRING_HANDLER once at startup before
         # passing the config off to per-worker scheduler threads.
@@ -1160,6 +1154,7 @@ struct HttpServer(Movable):
             frontend=frontend^,
             num_workers=num_workers,
             pin_cores=pin_cores,
+            extra_addrs=extra_addrs^,
         )
 
         # Block until the caller flips _stopping via close() or until

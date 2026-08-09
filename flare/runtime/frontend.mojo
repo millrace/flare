@@ -68,7 +68,11 @@ trait Frontend(Copyable, Deinitable, Movable):
     """
 
     def run_worker(
-        mut self, listener_fd: Int, mut stopping: Bool, stats_addr: Int
+        mut self,
+        listener_fd: Int,
+        mut stopping: Bool,
+        stats_addr: Int,
+        extra_fds: List[Int],
     ):
         """Run this worker's accept-and-serve loop until ``stopping`` flips.
 
@@ -83,6 +87,12 @@ trait Frontend(Copyable, Deinitable, Movable):
                 exit status), or 0 to disable. The frontend forwards
                 it into the reactor loop so the Scheduler can read a
                 real drain report and detect worker crashes.
+            extra_fds: This worker's listeners on any *additional*
+                bind addresses, one fd per extra address. Empty for
+                the single-address case. A frontend that cannot
+                accept on more than one address must not silently
+                ignore a non-empty list -- an address the caller
+                bound would then never be served.
         """
         ...
 

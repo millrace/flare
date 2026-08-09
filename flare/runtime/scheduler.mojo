@@ -262,6 +262,15 @@ struct _WorkerCtx[F: Frontend & Copyable](Movable):
       can't happen) and handed to this specific worker; owned
       by the Scheduler's per-worker listener table for cleanup.
     """
+    var extra_fds: List[Int]
+    """This worker's listeners on the *additional* bind addresses,
+    one fd per extra address, in the order the addresses were passed
+    to :meth:`Scheduler.start`. Empty for a single-address scheduler.
+
+    Each fd is this worker's own ``SO_REUSEPORT`` listener, not a
+    shared one: N addresses x M workers means N*M listeners, all
+    bound serially on the scheduler thread. Owned by the Scheduler;
+    workers must not close them."""
     var bind_addr: SocketAddr
     """Bind address (the same one the Scheduler resolved). Kept
     for diagnostics + future use; the actual fd is in
@@ -283,6 +292,7 @@ struct _WorkerCtx[F: Frontend & Copyable](Movable):
         worker_idx: Int,
         pin_cores: Bool,
         stats_addr: Int,
+        var extra_fds: List[Int] = List[Int](),
     ):
         self.listener_fd = listener_fd
         self.bind_addr = bind_addr
@@ -291,6 +301,7 @@ struct _WorkerCtx[F: Frontend & Copyable](Movable):
         self.worker_idx = worker_idx
         self.pin_cores = pin_cores
         self.stats_addr = stats_addr
+        self.extra_fds = extra_fds^
 
 
 # ── Worker entry point (comptime-specialised per F) ─────────────────────────
@@ -348,6 +359,7 @@ def _worker_entry[F: Frontend & Copyable](arg: _OpaquePtr) -> _OpaquePtr:
         ctx_ptr[].listener_fd,
         stopping_ptr[],
         ctx_ptr[].stats_addr,
+        ctx_ptr[].extra_fds.copy(),
     )
 
     # Ctx ownership: the Scheduler main thread destroys + frees every
@@ -478,6 +490,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
         var frontend: Self.F,
         num_workers: Int,
         pin_cores: Bool = True,
+        extra_addrs: List[SocketAddr] = List[SocketAddr](),
     ) raises -> Scheduler[Self.F]:
         """Spawn ``num_workers`` threads sharing one listener.
 
@@ -500,6 +513,13 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 runaway ``pthread_create`` + heap allocation.
             pin_cores: If ``True`` (default), pin worker N to core
                 ``N % num_cpus``. No-op on macOS.
+            extra_addrs: Additional addresses to serve. Each worker
+                gets its own ``SO_REUSEPORT`` listener on every one,
+                so N addresses x M workers binds N*M listeners, all
+                serially on this thread. Empty (default) preserves
+                the single-address behaviour exactly. Every extra
+                address must be bindable with ``SO_REUSEPORT``, so
+                any earlier listener on it must already be closed.
 
         Returns:
             A running ``Scheduler`` whose workers will continue to
@@ -586,9 +606,28 @@ struct Scheduler[F: Frontend & Copyable](Movable):
         # reuseport mode pre-bind per-worker SO_REUSEPORT listeners
         # on this thread (serialised binds avoid concurrent-bind
         # races) and skip the shared listener.
+        # Several addresses means per-worker SO_REUSEPORT listeners on
+        # every one of them: there is no shared-listener shape for
+        # N addresses x M workers, and mixing a shared primary with
+        # per-worker extras would give the two halves different accept
+        # semantics on the same server.
         var prebind_per_worker = (
-            frontend_demands_per_worker or use_reuseport_workers
+            frontend_demands_per_worker
+            or use_reuseport_workers
+            or len(extra_addrs) > 0
         )
+
+        # Probe-bind each extra address on this thread so an unusable
+        # one raises here rather than inside an opaque pthread, and
+        # before any listener has been heap-stored.
+        for j in range(len(extra_addrs)):
+            try:
+                var xprobe = bind_reuseport(extra_addrs[j])
+                _ = xprobe^
+            except e:
+                _scheduler_free_raw(stop_raw)
+                s._stopping_addr = 0
+                raise e^
         if prebind_per_worker:
             # Probe-bind to validate the addr (raises on the
             # caller's thread if AddressInUse / etc.); the probe
@@ -660,6 +699,27 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 except:
                     pass
 
+        # Extra addresses, same serial-bind discipline. Appended to
+        # _per_worker_listener_addrs AFTER the primaries so indices
+        # 0..num_workers-1 keep pointing at each worker's primary
+        # listener (the pick below indexes by worker number), while
+        # shutdown still frees every listener from the one list.
+        var extra_worker_fds = List[List[Int]]()
+        for _ in range(num_workers):
+            var per_worker = List[Int]()
+            for j in range(len(extra_addrs)):
+                try:
+                    var xl = bind_reuseport(extra_addrs[j])
+                    xl._socket.set_nonblocking(True)
+                    var xfd = Int(xl.as_raw_fd())
+                    var xptr = alloc[TcpListener](1)
+                    xptr.unsafe_write(xl^)
+                    s._per_worker_listener_addrs.append(Int(xptr))
+                    per_worker.append(xfd)
+                except:
+                    pass
+            extra_worker_fds.append(per_worker^)
+
         for i in range(num_workers):
             var frontend_copy = frontend.copy()
             # Pick this worker's listener fd: either the shared
@@ -674,6 +734,9 @@ struct Scheduler[F: Frontend & Copyable](Movable):
             var worker_stats_addr = (
                 s._stats_addrs[i] if i < len(s._stats_addrs) else 0
             )
+            var worker_extra_fds = List[Int]()
+            if i < len(extra_worker_fds):
+                worker_extra_fds = extra_worker_fds[i].copy()
             var ctx = _WorkerCtx[Self.F](
                 worker_listener_fd,
                 addr,
@@ -682,6 +745,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                 i,
                 pin_cores,
                 worker_stats_addr,
+                worker_extra_fds^,
             )
             # Native Mojo allocator (see _scheduler_free_raw for why).
             var ctx_ptr = alloc[_WorkerCtx[Self.F]](1)
