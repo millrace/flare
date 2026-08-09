@@ -24,6 +24,7 @@ follow-up; the box + framing here are what it builds on.
 """
 
 from std.collections import Optional
+from std.memory import unsafe_memcpy
 
 from ..runtime import Pool
 from .body import ChunkSource
@@ -105,16 +106,20 @@ def _hex_len_into(mut buf: List[UInt8], n: Int):
     if n <= 0:
         buf.append(48)  # '0'
         return
-    var digits = List[UInt8](capacity=16)
+    # A chunk size is at most 16 hex digits (64-bit). Emit into a stack
+    # scratch, least-significant first, then copy it out reversed.
+    var digits = InlineArray[UInt8, 16](uninitialized=True)
+    var ndigits = 0
     var x = n
     while x > 0:
         var d = x & 0xF
         if d < 10:
-            digits.append(UInt8(48 + d))  # '0'..'9'
+            digits[ndigits] = UInt8(48 + d)  # '0'..'9'
         else:
-            digits.append(UInt8(97 + d - 10))  # 'a'..'f'
+            digits[ndigits] = UInt8(97 + d - 10)  # 'a'..'f'
+        ndigits += 1
         x >>= 4
-    for i in range(len(digits) - 1, -1, -1):
+    for i in range(ndigits - 1, -1, -1):
         buf.append(digits[i])
 
 
@@ -125,11 +130,16 @@ def frame_chunk_into(mut buf: List[UInt8], chunk: List[UInt8]):
     (see :func:`frame_terminator_into`), so callers skip empty chunks
     rather than framing them here.
     """
-    _hex_len_into(buf, len(chunk))
+    var n = len(chunk)
+    _hex_len_into(buf, n)
     buf.append(13)  # \r
     buf.append(10)  # \n
-    for i in range(len(chunk)):
-        buf.append(chunk[i])
+    # Bulk-copy the payload: the reactor frames every chunk of every
+    # streaming response through here, so a per-byte append loop is the
+    # hot path's dominant cost.
+    var off = len(buf)
+    buf.resize(unsafe_uninit_length=off + n)
+    unsafe_memcpy(dest=buf.unsafe_ptr() + off, src=chunk.unsafe_ptr(), count=n)
     buf.append(13)
     buf.append(10)
 
