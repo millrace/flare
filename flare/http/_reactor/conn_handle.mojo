@@ -228,10 +228,10 @@ struct ConnHandle(Movable):
     var body_src: Optional[ChunkSourceBox]
     """Active streaming body source (K1), ``None`` for the buffered
     path. Set from ``Response.body_stream`` at response completion; the
-    ``on_writable`` refill loop pulls one chunk per writable edge,
-    frames it as ``Transfer-Encoding: chunked``, and clears this after
-    the terminator flushes. Freed with the ConnHandle if the peer
-    disconnects mid-stream."""
+    ``on_writable`` refill loop pulls a bounded batch of chunks per
+    writable edge, frames them as ``Transfer-Encoding: chunked``, and
+    clears this after the terminator flushes. Freed with the ConnHandle
+    if the peer disconnects mid-stream."""
 
     var tls: Optional[TlsTransport]
     """``SSL*`` for a TLS-terminated connection, moved in from the

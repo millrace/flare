@@ -33,8 +33,8 @@ Status (K1 landed):
 - Streaming a ``Response`` through the normal ``Handler`` path on
   HTTP/1.1 works: ``Response.body_stream`` carries a
   ``ChunkSourceBox`` and the epoll reactor's chunked write loop
-  (``flare/http/_reactor/conn_handle.mojo``) pulls the next framed
-  chunk on each writable edge -- the "100MB without 100MB
+  (``flare/http/_reactor/conn_handle.mojo``) frames a bounded batch
+  of chunks per writable edge -- the "100MB without 100MB
   allocation" path. Use ``stream_response(source)`` to build one.
 
 Pieces still open:
@@ -66,11 +66,18 @@ from .cancel import Cancel
 trait ChunkSource(Deinitable, Movable):
     """A source of byte chunks.
 
-    Implementors yield successive chunks via ``next(cancel)``;
-    a ``None`` return signals end-of-stream. The ``cancel`` token
-    lets long-running sources short-circuit when the client
-    disconnects (peer FIN), the request times out, or the server
-    drains.
+    Implementors yield successive chunks via ``next(cancel)``. The
+    return has three meanings: a non-empty chunk is data, ``None`` is
+    end-of-stream, and an **empty** chunk means "alive, but nothing
+    right now". The ``cancel`` token lets long-running sources
+    short-circuit when the client disconnects (peer FIN), the request
+    times out, or the server drains.
+
+    The reactor drains a bounded batch per writable edge rather than a
+    single chunk, so a source that is merely idle must say so with an
+    empty chunk instead of manufacturing filler: an empty chunk ends the
+    batch and the connection retries on the next edge. Returning filler
+    means the reactor emits a whole batch of it per edge.
 
     Implementors may own buffer state across calls (an SSE source
     might rewrite its internal buffer in place); the chunk
@@ -86,8 +93,8 @@ trait ChunkSource(Deinitable, Movable):
                 ``cancel.cancelled()`` between expensive steps.
 
         Returns:
-            The next chunk's bytes, or ``None`` to terminate the
-            stream.
+            The next chunk's bytes, an empty chunk for "nothing right
+            now", or ``None`` to terminate the stream.
 
         Raises:
             Error: On unrecoverable source error; the reactor will
@@ -129,8 +136,9 @@ trait Body(Deinitable, Movable):
     def next_chunk(mut self, cancel: Cancel) raises -> Optional[List[UInt8]]:
         """Produce the next chunk, or ``None`` to signal end-of-stream.
 
-        Same contract as ``ChunkSource.next``; the reactor calls
-        this on each writable edge.
+        Same three-state contract as ``ChunkSource.next``; the reactor
+        calls this repeatedly within one writable edge, up to its batch
+        budget.
         """
         ...
 

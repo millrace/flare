@@ -489,9 +489,9 @@ historical accident or an unfinished migration:
   and pulls with `StreamConn.read_body()`.
 
 Outbound streaming needs no such split. A `Handler` returns a
-`Response` carrying a `body_stream`, and the reactor pulls one chunk
-per writable edge — the handler has already returned, so nothing
-blocks.
+`Response` carrying a `body_stream`, and the reactor pulls a bounded
+batch of chunks per writable edge — the handler has already returned,
+so nothing blocks.
 
 **Inbound** streaming is the asymmetric case. To hand a handler a body
 that is still arriving, the handler must be able to wait for more

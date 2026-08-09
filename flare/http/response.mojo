@@ -97,8 +97,8 @@ struct ResponseImpl[B: Body = InlineBody](Movable):
     buffered response (the ``body`` field carries the bytes); ``Some``
     when a handler returns a streaming response, in which case the
     reactor emits ``Transfer-Encoding: chunked`` headers and pulls this
-    source chunk-by-chunk on each writable edge instead of sending
-    ``body``. Move-only, so ``Response`` stays move-only."""
+    source a bounded batch of chunks at a time per writable edge instead
+    of sending ``body``. Move-only, so ``Response`` stays move-only."""
 
     def __init__(
         out self,
@@ -312,9 +312,10 @@ def stream_response[
     """Build a streaming ``Response`` backed by ``source`` (K1).
 
     The reactor serves this with ``Transfer-Encoding: chunked``,
-    pulling ``source.next(cancel)`` on each writable edge until it
-    returns ``None`` (end-of-stream), so an open-ended or large body
-    never has to materialise in memory. Set response headers (e.g.
+    pulling ``source.next(cancel)`` in bounded batches per writable edge
+    until it returns ``None`` (end-of-stream), so an open-ended or large
+    body never has to materialise in memory. A source with nothing ready
+    returns an empty chunk to end the batch. Set response headers (e.g.
     ``Content-Type: text/event-stream`` for SSE) on the returned value
     before returning it from a handler.
 

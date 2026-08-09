@@ -16,9 +16,9 @@ normal ``Handler`` / ``Router`` returns::
         ch.close()                      # or keep open for a live stream
         return stream_sse_response(ch^)
 
-and the reactor streams one SSE record per writable edge -- over HTTP/1.1
-(chunked transfer-encoding) and HTTP/2 (DATA frames) with no
-SSE-specific reactor code. Backpressure is implicit (when the kernel
+and the reactor drains the buffered SSE records on each writable edge --
+over HTTP/1.1 (chunked transfer-encoding) and HTTP/2 (DATA frames) with
+no SSE-specific reactor code. Backpressure is implicit (when the kernel
 send buffer fills, the reactor stops calling ``next``); cancellation is
 cooperative (``cancel.cancelled()`` ends the source).
 

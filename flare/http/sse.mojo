@@ -10,7 +10,8 @@ demonstrated to a first-class flare primitive:
   <https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream>`__.
 - :class:`SseChannel` — a small in-memory FIFO + cancel-aware
   ``ChunkSource`` wrapper. The handler ``push``-es events; the
-  reactor pulls one event per writable edge.
+  reactor drains buffered events on each writable edge and gets an
+  empty chunk once the FIFO runs dry.
 - :func:`sse_response` — the canonical "give me a Response with
   the right headers wired up" helper, paired with
   :class:`SseStreamingResponse[B]` for the streaming-body variant.
@@ -173,8 +174,8 @@ struct SseChannel(ChunkSource, Copyable, Movable):
        background pthread; the channel itself is **not**
        thread-safe — wrap with a mutex if you cross threads).
     3. Handler ``close``-s the channel when the stream ends.
-    4. Reactor pulls one event per writable edge via
-       :meth:`next`; when the buffer is empty AND the channel is
+    4. Reactor drains buffered events via :meth:`next` on each
+       writable edge; when the buffer is empty AND the channel is
        closed, ``next`` returns ``None`` to signal end-of-stream.
 
     For an open-ended stream (heartbeat / metric tap / ...), don't
@@ -348,15 +349,15 @@ def stream_sse_response(
 
     This is the canonical way to serve SSE through the normal
     ``Handler`` / ``Router`` path: the returned ``Response`` carries the
-    channel on ``body_stream`` (one SSE record per writable edge) plus
-    the spec-correct SSE headers, and streams over both HTTP/1.1 (chunked
-    transfer-encoding) and HTTP/2 (DATA frames) with no SSE-specific
-    reactor code.
+    channel on ``body_stream`` plus the spec-correct SSE headers, and
+    streams over both HTTP/1.1 (chunked transfer-encoding) and HTTP/2
+    (DATA frames) with no SSE-specific reactor code.
 
     Unlike :func:`sse_response` (a synchronous, ``Content-Length``
     snapshot that requires a closed channel), the channel may stay open:
-    the reactor pulls ``next(cancel)`` per writable edge -- yielding the
-    ``": keep-alive"`` heartbeat while empty -- until the channel is
+    the reactor drains whatever is buffered on each writable edge and
+    keeps the connection warm with a ``": keep-alive"`` comment at most
+    once per ``SSE_HEARTBEAT_MS`` while idle, until the channel is
     closed or the peer disconnects. Prefer this over the legacy
     :class:`SseStreamingResponse`, which only fed the ``serve_streaming``
     entry point.
@@ -373,17 +374,17 @@ struct SseStreamingResponse(Movable):
 
     Pairs ``response`` (status + headers) with ``body``
     (:class:`ChunkedBody[SseChannel]`) so the reactor's streaming
-    code path can pull one event per writable edge. Unlike
+    code path can drain buffered events on a writable edge. Unlike
     :func:`sse_response`, this never blocks the handler — it
     captures the channel and returns immediately; events pushed
     to the channel after the handler returns are flushed by the
     reactor on the next writable edge.
 
     Reactor adoption: a Router/Handler can stream SSE by returning
-    ``stream_response(channel)`` -- the reactor pulls one framed chunk
-    per writable edge via ``Response.body_stream``, on HTTP/1.1,
-    HTTP/2, HTTP/3 and TLS alike. This ``SseStreamingResponse``
-    wrapper remains for the ``serve_streaming`` entry point.
+    ``stream_response(channel)`` -- the reactor pulls framed chunks in
+    bounded batches via ``Response.body_stream``, on HTTP/1.1, HTTP/2,
+    HTTP/3 and TLS alike. This ``SseStreamingResponse`` wrapper remains
+    for the ``serve_streaming`` entry point.
     """
 
     var response: Response

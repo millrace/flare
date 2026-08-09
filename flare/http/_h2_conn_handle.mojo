@@ -90,8 +90,8 @@ struct H2StreamOut(Deinitable, Movable):
     """
 
     var src: ChunkSourceBox
-    """Chunk source, pulled one chunk per writable edge and window-framed
-    into DATA frames."""
+    """Chunk source, pulled a bounded batch per writable edge and
+    window-framed into DATA frames."""
 
     var pending: List[UInt8]
     """Unsent tail of the current chunk when the send window ran out
@@ -209,8 +209,8 @@ struct Http2ConnHandle(Movable):
     # HTTP/2 multiplexes: N handlers can each return a streaming Response
     # concurrently on one connection. Each active streaming stream is
     # boxed in _stream_out keyed on its stream id and pumped fairly (one
-    # chunk per stream per writable edge) subject to the shared connection
-    # send window + per-stream window (see _stream_pump).
+    # bounded batch per stream per writable edge) subject to the shared
+    # connection send window + per-stream window (see _stream_pump).
 
     var _stream_out: Dict[Int, Int]
     """Active concurrent streaming responses keyed on stream id.

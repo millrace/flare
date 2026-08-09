@@ -4,8 +4,8 @@ The reactor serves a buffered ``Response`` by serialising its whole
 ``body`` up front. To stream an open-ended body (SSE, a log tail, a
 large download, incremental gRPC) through the *same*
 ``Handler.serve -> Response`` contract, a ``Response`` can carry a
-type-erased chunk source that the reactor pulls on each writable edge
-and frames as ``Transfer-Encoding: chunked``.
+type-erased chunk source that the reactor pulls in bounded batches per
+writable edge and frames as ``Transfer-Encoding: chunked``.
 
 This module is the source-side foundation, deliberately free of any
 reactor coupling so it can land and be tested on its own:
@@ -78,8 +78,8 @@ struct ChunkSourceBox(Movable):
     the box exactly once on drop (or when moved-from, ownership
     transfers so the destructor runs only on the final owner). The
     reactor takes the box out of a ``Response`` onto its per-connection
-    state and pulls ``next(cancel)`` per writable edge until it returns
-    ``None`` (end-of-stream).
+    state and pulls ``next(cancel)`` in bounded batches per writable
+    edge until it returns ``None`` (end-of-stream).
     """
 
     var addr: Int

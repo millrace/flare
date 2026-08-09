@@ -119,32 +119,47 @@ streaming write path.
 Both routes return the same 4096 bytes from the same running server, so
 there is no binary, startup or payload difference between them --
 `/4kb` sends it with `Content-Length`, `/stream` sends it as 16 chunked
-writes of 256 B. `flare_mc`, 4 workers, wrk `-t4 -c64 -d30s`, three
-alternating reps on an idle 64-core box.
+writes of 256 B. `flare_mc`, 4 workers, `pixi run -e bench
+bench-streaming` (calibrated peak, 5 x 30 s), idle 64-core box.
 
-- `/stream` (chunked): 22195, 21795, 21744 req/s -- median **21795**
-- `/4kb` (buffered): 164925, 168731, 163763 req/s -- median **164925**
-- Streaming retains **13.2 %** of buffered throughput: a **7.6x** penalty.
+| Route | Before coalescing | After |
+|---|---:|---:|
+| `/stream` (16 x 256 B chunked) | 16,999 | **78,216** |
+| `/4kb` (same bytes, Content-Length) | 106,099 | 114,141 |
+| Streaming retains | 16.0 % | **68.5 %** |
 
-Spread was under 3 % on both sides across the three reps, so this is a
-real effect and not box noise.
+Streaming was a **6.2x** penalty and is now **1.5x**. The first
+measurement of this pair, taken with a manual three-rep protocol rather
+than the calibrated harness, read 21,795 vs 164,925 -- a 7.6x penalty.
+The absolute numbers differ because the protocol does; the shape of the
+finding did not.
 
-**Why, and what the number does not mean.** The reactor pulls one chunk
-per writable edge by design (`ConnHandle`, "the `on_writable` refill
-loop pulls one chunk per writable edge"). A 16-chunk response therefore
-costs 16 reactor round-trips and 16 writes where the buffered path
-costs one, which is the right order of magnitude for what was measured.
+**What was wrong.** The reactor pulled exactly one chunk per writable
+edge: `on_writable` flushed `write_buf`, called `_stream_refill` once,
+and returned to `epoll_wait` to send what it had just queued. A 16-chunk
+response therefore cost 17 loop turns and 17 writes where the buffered
+path costs one.
 
-So this is a per-chunk cost, not a per-byte one, and the ratio is a
-function of how finely the response is chunked. A response streamed in
-4 chunks of 1 KiB would land much closer to buffered; this config picks
-16 x 256 B deliberately, to make the per-chunk overhead visible rather
-than to flatter it. Read it as "what small chunks cost today", not as
-"streaming is 7.6x slower" in general.
+It now drains a bounded batch per edge -- up to `STREAM_BATCH_CHUNKS`
+chunks or `STREAM_BATCH_BYTES` bytes, at most `STREAM_EDGE_PASSES` times
+before yielding to the connection's peers, so one endless source cannot
+hold a worker. `tests/http/test_stream_coalescing.mojo` pins the
+invariant: 16 chunks cost 1 writable edge, and it fails at 18 against
+the old reactor. HTTP/2's `_stream_pump` batches the same way, still
+bounded by the connection and per-stream send windows.
 
-The obvious lever is coalescing whatever chunks are ready into a single
-writable edge instead of one per edge. Not attempted in v0.10; the
-measurement is the prerequisite and it now exists.
+Two thirds of the gain came from the batching itself (16,999 ->
+93,352 measured by direct probe) and the rest from framing each chunk
+with one `memcpy` instead of a per-byte append loop (-> 108,808).
+`writev` was considered and rejected on a profile: at 70k req/s
+`on_writable`, which inlines the framing copy, is 2.05 % of cycles
+against `__send`'s 61.7 % inclusive, so the copy is not the cost center
+and a second cleartext-only send path is not worth it.
+
+This is still a per-chunk cost, not a per-byte one, so the residual
+ratio remains a function of how finely the response is chunked. This
+config picks 16 x 256 B deliberately, to make per-chunk overhead visible
+rather than to flatter it.
 
 ## Server throughput (TFB plaintext)
 
