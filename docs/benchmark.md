@@ -110,6 +110,42 @@ under load.
 
 ---
 
+## Streaming vs buffered at equal payload (v0.10)
+
+The number this release is actually about, measured for the first time.
+Every other table here is a buffered response; none of them touch the
+streaming write path.
+
+Both routes return the same 4096 bytes from the same running server, so
+there is no binary, startup or payload difference between them --
+`/4kb` sends it with `Content-Length`, `/stream` sends it as 16 chunked
+writes of 256 B. `flare_mc`, 4 workers, wrk `-t4 -c64 -d30s`, three
+alternating reps on an idle 64-core box.
+
+- `/stream` (chunked): 22195, 21795, 21744 req/s -- median **21795**
+- `/4kb` (buffered): 164925, 168731, 163763 req/s -- median **164925**
+- Streaming retains **13.2 %** of buffered throughput: a **7.6x** penalty.
+
+Spread was under 3 % on both sides across the three reps, so this is a
+real effect and not box noise.
+
+**Why, and what the number does not mean.** The reactor pulls one chunk
+per writable edge by design (`ConnHandle`, "the `on_writable` refill
+loop pulls one chunk per writable edge"). A 16-chunk response therefore
+costs 16 reactor round-trips and 16 writes where the buffered path
+costs one, which is the right order of magnitude for what was measured.
+
+So this is a per-chunk cost, not a per-byte one, and the ratio is a
+function of how finely the response is chunked. A response streamed in
+4 chunks of 1 KiB would land much closer to buffered; this config picks
+16 x 256 B deliberately, to make the per-chunk overhead visible rather
+than to flatter it. Read it as "what small chunks cost today", not as
+"streaming is 7.6x slower" in general.
+
+The obvious lever is coalescing whatever chunks are ready into a single
+writable edge instead of one per edge. Not attempted in v0.10; the
+measurement is the prerequisite and it now exists.
+
 ## Server throughput (TFB plaintext)
 
 The workload spec is `GET /plaintext` returning the 13-byte
