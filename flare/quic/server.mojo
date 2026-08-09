@@ -2648,15 +2648,40 @@ struct QuicListener(Movable):
     def _on_pto_expired(mut self, slot: Int) raises:
         """RFC 9002 sec 6.2 probe-timeout action for ``slot``.
 
-        Server-side 1-RTT response retransmit is not wired
-        yet -- it needs the per-slot sent-packet bookkeeping +
-        RTT-estimated PTO scheduling that lands with the full RFC 9002
-        loss-recovery work (the ``flare.quic.cc`` track). Until then a
-        fired PTO re-flushes whatever 1-RTT egress is still pending so
-        an owed ACK / response that never reached the wire gets another
-        chance, which is strictly better than dropping the timer. The
-        upgrade path: track ack-eliciting 1-RTT sends in a per-slot
-        ``LossRecovery`` and retransmit the oldest unacked frames here.
+        Server-side 1-RTT retransmit is not wired. A fired PTO
+        re-flushes whatever 1-RTT egress is still pending, so an owed
+        ACK or response that never reached the wire gets another
+        chance -- strictly better than dropping the timer, but not
+        loss recovery.
+
+        Scoped properly during v0.10 and found larger than the
+        "wire up LossRecovery" one-liner it looks like. The server
+        does not parse inbound ACK frames **at all**: ``on_ack`` and
+        ``acked_packets`` appear only in ``flare/quic/client.mojo``,
+        and nothing on the server side reads an ACK range off the
+        wire. So the work is not "attach a controller", it is, in
+        order:
+
+        1. inbound 1-RTT frame ingestion on the server, at minimum
+           ACK-range extraction;
+        2. a per-slot ``LossRecovery`` slab parallel to
+           :attr:`connections`;
+        3. ``on_sent`` at datagram emit in
+           :meth:`_build_1rtt_response`, which also needs an
+           ack-eliciting determination (a packet carrying only ACK and
+           PADDING must not be tracked);
+        4. RTT sampling plus real PTO scheduling here;
+        5. retransmission of the oldest unacked frames.
+
+        Only after (1)-(5) is there a congestion budget to gate egress
+        on, which is what QUIC GSO needs to cap a bundle against --
+        ``send_segmented`` exists and is tested in
+        ``flare/udp/batch.mojo``, but shipping it without a budget is
+        the naked-GSO shape that gets whole bundles tail-dropped.
+
+        Deliberately not started rather than half-landed: HTTP/3 works
+        today precisely because the server never tracks or retransmits,
+        and a partial loss-recovery path would regress it.
         """
         if slot < 0 or slot >= len(self.peer_addrs):
             return
