@@ -10,14 +10,27 @@ the same bit-exact fixtures every other conforming implementation does.
 
 | Subdir | RFC / spec | Status |
 |---|---|---|
-| `h1/` | RFC 9112 (HTTP/1.1 wire grammar) | in-house fixtures (10) |
-| `h2/` | RFC 9113 (HTTP/2 frame codec) | TODO — vendor from `python-hyper/hyperframe` |
-| `hpack/` | RFC 7541 (HPACK) | TODO — vendor from `python-hyper/hpack` |
-| `ws/` | RFC 6455 + permessage-deflate | TODO — vendor from `crossbario/autobahn-testsuite` |
+| `h1/` | RFC 9112 (HTTP/1.1 wire grammar) | in-house fixtures (19), driven through the parser |
+| `ws/` | RFC 6455 + permessage-deflate | in-house fixtures (13), driven through `WsFrame.decode_one`; still worth vendoring the full `crossbario/autobahn-testsuite` corpus |
+| `h2/` | RFC 9113 (HTTP/2 frame codec) | no corpus — but h2spec now runs against the live server, see below |
+| `hpack/` | RFC 7541 (HPACK) | no corpus — h2spec covers part of this against the live server |
 | `cache/` | RFC 9111 (HTTP caching) | TODO — vendor from `mnot/cache-tests` |
 | `quic/` | RFC 9000 + RFC 9001 (QUIC v1) | TODO — vendor from `aioquic` + `quiche` |
 | `qpack/` | RFC 9204 (QPACK) | TODO |
-| `h3/` | RFC 9114 (HTTP/3) | TODO |
+| `h3/` | RFC 9114 (HTTP/3) | no JSON corpus; 7 inline server wire-shape cases in `tests/conformance/test_conformance_h3_server.mojo` |
+
+## Fixture corpora vs live-server suites
+
+These corpora test the sans-I/O parsers directly. They do not replace
+running a third-party suite against a live server, which is the only
+thing that catches "our parser and our client agree with each other and
+both are wrong". `pixi run conformance` covers that half:
+
+| Suite | Provisioned | What it drives |
+|---|---|---|
+| h2spec (RFC 9113 + 7541) | yes, `pixi run install-h2spec` | the h2c server |
+| autobahn (RFC 6455 + 7692) | no — needs `wstest` and a `tools/conformance/autobahn.json` that does not exist yet | the WsServer |
+| quic-interop | no — flare has no runner integration yet | the QuicListener |
 
 The in-house fixtures under `h1/` are the bootstrap set: they cover the
 grammar corners flare's own parser exercises today (LF-only line endings,
@@ -41,8 +54,9 @@ Vendoring policy:
    instead.
 2. **Verbatim copies, no edits.** Fixture data files are mirrored
    bit-exact from upstream. Format conversions (e.g. Python `pytest`
-   parametrize → flat JSON) live in `tools/conformance_*.py` and run
-   at vendoring time, not at test time.
+   parametrize → flat JSON) belong in a `tools/conformance_*.py`
+   script run at vendoring time, not at test time. No such script
+   exists yet; the first corpus to need one writes it.
 3. **Snapshot the commit hash.** `ORIGIN.md` records the exact upstream
    commit the fixtures came from. Refresh by re-running the conversion
    script against a newer hash + updating `ORIGIN.md`.
@@ -81,4 +95,7 @@ Each fixture is a JSON file with a flat top-level structure:
 
 The conformance runner (`tests/conformance/test_conformance_h1.mojo`)
 loads every `*.json` file under `conformance/h1/`, runs flare's parser
-on the hex bytes, and asserts the expected outcome.
+on the hex bytes, and asserts the expected outcome. The WebSocket
+runner (`tests/conformance/test_conformance_ws.mojo`) does the same for
+`conformance/ws/` through `WsFrame.decode_one`, asserting opcode, FIN,
+post-unmask payload and close code on accept and a raise on reject.

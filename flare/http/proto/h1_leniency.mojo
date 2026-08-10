@@ -33,12 +33,12 @@ conformance corpus under ``conformance/h1/`` carries one accept
 
 The two chunked-extension flags --
 ``accept_empty_chunk_extensions`` and
-``accept_invalid_chunk_extension_chars`` -- govern server-side
-``Transfer-Encoding: chunked`` request-body decoding, which the
-server rejects up-front (no chunked request decoder is mounted
-yet). The flags are present so deployment configuration
-that anticipates chunked support compiles today; they become
-load-bearing alongside the chunked-decoder audit pass.
+``accept_invalid_chunk_extension_chars`` -- are the exception: they
+are declared and settable but nothing reads them. The server does
+decode ``Transfer-Encoding: chunked`` request bodies (see
+``flare.http.proto.chunked``), it simply applies strict extension
+rules regardless of how these two are set. Wiring them into the
+decoder is the remaining step.
 
 ## Flags
 
