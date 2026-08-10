@@ -9,11 +9,12 @@ the hex bytes, and validates the schema:
 - reject-fixtures declare only the expected failure mode through
   the ``expect_reason`` field; the schema check is structural.
 
-Wiring the fixture outcomes to :meth:`flare.ws.frame.WsFrame.decode_one`
-is the next conformance step. Today the runner validates that
-every fixture is loadable and self-consistent (the same shape
-:func:`test_conformance_h1` settled on) which is what
-``test-conformance-ws`` asserts.
+Fixture outcomes are driven through
+:meth:`flare.ws.frame.WsFrame.decode_one`, the same shape
+:func:`test_conformance_h1` settled on: accept-fixtures must decode
+and match their declared opcode / FIN / payload / close code, and
+reject-fixtures must raise. Schema validation still runs first, so a
+malformed fixture fails as a fixture bug rather than a parser bug.
 
 Autobahn case-number prefixes (e.g. ``1.1.1``, ``5.4.1``,
 ``7.7.1``) are preserved in the ``name`` field as anchors to the
@@ -25,6 +26,8 @@ flare must accept and reject.
 from std.pathlib import Path
 from std.testing import assert_equal, assert_false, assert_true
 from json import loads, Value, Null
+
+from flare.ws.frame import WsFrame
 
 
 def _digit(c: UInt8) raises -> Int:
@@ -101,11 +104,12 @@ def _bool_or(j: Value, key: String, default: Bool) raises -> Bool:
 
 
 def _validate_fixture(j: Value) raises:
-    """Validate one fixture's schema + hex decoding.
+    """Validate one fixture's schema, then run it through the parser.
 
     Raises if any required field is missing, the ``expect`` value
-    is unknown, the hex pairs are malformed, or an accept-fixture
-    omits its expected-opcode declaration.
+    is unknown, the hex pairs are malformed, an accept-fixture
+    omits its expected-opcode declaration, or the parser's verdict
+    disagrees with the fixture.
     """
     assert_true(_has_key(j, "name"))
     assert_true(_has_key(j, "spec"))
@@ -133,19 +137,40 @@ def _validate_fixture(j: Value) raises:
         var opcode = _int_or(j, "expected_opcode", -1)
         assert_true(opcode >= 0)
         assert_true(opcode <= 0xF)
-        # ``expected_fin`` is required so the runner can future-
-        # wire fragmentation assertions.
         assert_true(_has_key(j, "expected_fin"))
-        var fin_unused = _bool_or(j, "expected_fin", True)
-        _ = fin_unused
+        var fin = _bool_or(j, "expected_fin", True)
         # CLOSE-fixtures (opcode 0x8) MUST declare their status
-        # code so the runner can assert it once parser wiring
-        # lands. Status codes are 2-byte big-endian per §5.5.1.
+        # code. Status codes are 2-byte big-endian per §5.5.1.
+        var close_code = -1
         if opcode == 0x8:
             assert_true(_has_key(j, "expected_close_code"))
-            var code = _int_or(j, "expected_close_code", -1)
-            assert_true(code >= 0)
-            assert_true(code <= 0xFFFF)
+            close_code = _int_or(j, "expected_close_code", -1)
+            assert_true(close_code >= 0)
+            assert_true(close_code <= 0xFFFF)
+
+        var res = WsFrame.decode_one(Span[UInt8, _](bytes))
+        assert_equal(Int(res.frame.opcode), opcode)
+        assert_equal(res.frame.fin, fin)
+        # Payload is compared post-unmask: a masked fixture declares
+        # the plaintext it should decode to, not its wire bytes.
+        if _has_key(j, "expected_payload_hex"):
+            var want = _decode_hex(j["expected_payload_hex"].string_value())
+            assert_equal(len(res.frame.payload), len(want))
+            for k in range(len(want)):
+                assert_equal(res.frame.payload[k], want[k])
+        if close_code >= 0:
+            assert_true(len(res.frame.payload) >= 2)
+            var got_code = (Int(res.frame.payload[0]) << 8) | Int(
+                res.frame.payload[1]
+            )
+            assert_equal(got_code, close_code)
+    else:
+        var raised = False
+        try:
+            _ = WsFrame.decode_one(Span[UInt8, _](bytes))
+        except:
+            raised = True
+        assert_true(raised)
 
 
 def _conformance_dir() -> Path:

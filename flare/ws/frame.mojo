@@ -337,11 +337,19 @@ struct WsFrame(Movable, Writable):
     # ── Wire decoding ─────────────────────────────────────────────────────────
 
     @staticmethod
-    def decode_one(data: Span[UInt8, _]) raises -> _DecodeResult:
+    def decode_one(
+        data: Span[UInt8, _], allow_rsv1: Bool = False
+    ) raises -> _DecodeResult:
         """Parse one frame from ``data``.
 
         Args:
             data: Raw bytes from the socket (may contain more than one frame).
+            allow_rsv1: Accept a set RSV1 bit. Pass ``True`` only on a
+                connection that negotiated an extension defining it
+                (permessage-deflate, RFC 7692); the default rejects it
+                per RFC 6455 sec 5.2, which requires a receiver to fail
+                the connection on a reserved bit no negotiated extension
+                gives meaning to.
 
         Returns:
             A ``_DecodeResult`` with the parsed frame and bytes consumed.
@@ -370,6 +378,11 @@ struct WsFrame(Movable, Writable):
 
         if rsv2 or rsv3:
             raise WsProtocolError("RSV2/RSV3 must be zero without extension")
+        if rsv1 and not allow_rsv1:
+            raise WsProtocolError(
+                "RSV1 must be zero without a negotiated extension (RFC 6455"
+                " sec 5.2)"
+            )
 
         # ── Parse extended payload length ─────────────────────────────────────
         var pos = 2
