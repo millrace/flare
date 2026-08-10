@@ -28,6 +28,9 @@
 #   quic-interop: https://github.com/quic-interop/quic-interop-runner
 set -uo pipefail
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${REPO_ROOT}"
+
 SUITES="${*:-h2spec autobahn quic-interop}"
 FAIL=0
 RAN=0
@@ -35,21 +38,67 @@ SKIP=0
 
 _have() { command -v "$1" >/dev/null 2>&1; }
 
+H2SPEC_BIN="${H2SPEC_BIN:-build/h2spec/h2spec}"
+H2SPEC_PORT="${H2SPEC_PORT:-18692}"
+H2C_SERVER_BIN="target/conformance/flare_h2c"
+
+_h2spec_cmd() {
+  if [ -x "${REPO_ROOT}/${H2SPEC_BIN}" ]; then
+    echo "${REPO_ROOT}/${H2SPEC_BIN}"
+  elif _have h2spec; then
+    echo "h2spec"
+  fi
+}
+
+# Block until the port answers, so the suite never races the server.
+_wait_for_port() {
+  local port="$1" tries=0
+  while [ "$tries" -lt 100 ]; do
+    if curl -s -o /dev/null --http2-prior-knowledge \
+        "http://127.0.0.1:${port}/plaintext" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.2
+    tries=$((tries + 1))
+  done
+  return 1
+}
+
 run_h2spec() {
-  if ! _have h2spec; then
-    echo "── h2spec: NOT PROVISIONED (install from summerwind/h2spec); skipping"
+  local h2spec
+  h2spec="$(_h2spec_cmd)"
+  if [ -z "${h2spec}" ]; then
+    echo "── h2spec: NOT PROVISIONED (run: pixi run install-h2spec); skipping"
     SKIP=$((SKIP + 1))
     return 0
   fi
   echo "── h2spec: starting flare h2c server + running suite"
-  # Spawn the h2c server example on an ephemeral port, then point h2spec
-  # at it. The example prints its port on the first line of stdout.
-  pixi run mojo -I . examples/intermediate/h2c_server.mojo &
+  # Reuse the same server the interop smoke drives: it serves h2c
+  # prior-knowledge on FLARE_BENCH_PORT and is already proven to answer
+  # curl --http2-prior-knowledge with a 200.
+  mkdir -p target/conformance
+  if ! pixi run mojo build -D ASSERT=none -I . \
+       benchmark/baselines/flare_mc/main.mojo -o "${H2C_SERVER_BIN}" \
+       > target/conformance/build.log 2>&1; then
+    echo "   h2c server BUILD FAILED"
+    cat target/conformance/build.log
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  FLARE_BENCH_PORT="${H2SPEC_PORT}" FLARE_BENCH_WORKERS=1 \
+    "${H2C_SERVER_BIN}" > target/conformance/h2c-server.log 2>&1 &
   local srv=$!
-  sleep 2
-  h2spec -p 8080 -h 127.0.0.1
-  local rc=$?
-  kill "${srv}" 2>/dev/null || true
+  if ! _wait_for_port "${H2SPEC_PORT}"; then
+    echo "   h2c server never came up on ${H2SPEC_PORT}"
+    cat target/conformance/h2c-server.log
+    kill -9 "${srv}" 2>/dev/null || true
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  "${h2spec}" -h 127.0.0.1 -p "${H2SPEC_PORT}" -P /plaintext \
+    --strict --timeout 5 | tee target/conformance/h2spec.txt
+  local rc=${PIPESTATUS[0]}
+  kill -9 "${srv}" 2>/dev/null || true
   RAN=$((RAN + 1))
   [ $rc -ne 0 ] && FAIL=$((FAIL + 1))
   return 0
@@ -61,8 +110,14 @@ run_autobahn() {
     SKIP=$((SKIP + 1))
     return 0
   fi
+  if [ ! -f "${REPO_ROOT}/tools/conformance/autobahn.json" ]; then
+    echo "── autobahn: wstest present but tools/conformance/autobahn.json is"
+    echo "   missing; cannot run. Skipping."
+    SKIP=$((SKIP + 1))
+    return 0
+  fi
   echo "── autobahn: starting flare WsServer + running fuzzingclient"
-  pixi run mojo -I . examples/intermediate/websocket_echo.mojo &
+  pixi run mojo -I . examples/basic/websocket_echo.mojo &
   local srv=$!
   sleep 2
   wstest -m fuzzingclient -s tools/conformance/autobahn.json
@@ -79,9 +134,12 @@ run_quic_interop() {
     SKIP=$((SKIP + 1))
     return 0
   fi
-  echo "── quic-interop: driving the QuicListener under the interop runner"
-  echo "   (runner integration is host-specific; see the repo README)"
-  RAN=$((RAN + 1))
+  # The runner is present but nothing drives it yet. Count this as a
+  # skip, never a pass: reporting a suite as "ran" without invoking it
+  # is worse than reporting it missing.
+  echo "── quic-interop: runner found, but flare has no integration yet;"
+  echo "   skipping (tracked as open work, not a pass)"
+  SKIP=$((SKIP + 1))
   return 0
 }
 

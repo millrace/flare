@@ -615,6 +615,7 @@ tests-asserts-all = { cmd = "bash -c 'set -e; for f in tests/runtime/test_io_uri
 tests-asan        = "bash tools/run_sanitizer_tests.sh asan"
 tests-tsan        = "bash tools/run_sanitizer_tests.sh tsan"
 conformance       = "bash tools/run_conformance.sh"   # h2spec/autobahn/quic-interop (skips legs whose binary isn't provisioned)
+install-h2spec    = "bash tools/install_h2spec.sh"    # fetch the pinned h2spec release into build/h2spec/
 
 # ── Scheduler stress driver (non-mozz; runnable under the lean default env) ──
 # Hammers Scheduler.start/shutdown with random (num_workers, pin_cores, churn)
