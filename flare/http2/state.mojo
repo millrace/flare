@@ -110,6 +110,8 @@ comptime _DEFAULT_HARD_HEADER_CAP: Int = 1 << 20
 """Fallback header-list byte ceiling when ``max_header_list_size``
 is unset (0), so an unbounded HEADERS+CONTINUATION accumulation
 still cannot grow without limit."""
+comptime _MAX_WINDOW: Int = 2147483647
+"""RFC 9113 sec 6.9.1: a flow-control window may not exceed 2^31-1."""
 comptime _RST_FLOOD_THRESHOLD: Int = 500
 """Connection-lifetime inbound RST_STREAM count that trips a
 GOAWAY(ENHANCE_YOUR_CALM) (CVE-2023-44487 rapid reset).
@@ -794,6 +796,20 @@ struct Connection(Copyable, Defaultable, Movable):
                 return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
             if plen != 5:
                 return self._conn_error(Http2ErrorCode.FRAME_SIZE_ERROR().value)
+            # sec 5.3.1: a stream cannot depend on itself.
+            var dep = (
+                (Int(f.payload[0]) << 24)
+                | (Int(f.payload[1]) << 16)
+                | (Int(f.payload[2]) << 8)
+                | Int(f.payload[3])
+            ) & 0x7FFFFFFF
+            if dep == sid:
+                out.append(
+                    self._rst_stream_frame(
+                        sid, Http2ErrorCode.PROTOCOL_ERROR().value
+                    )
+                )
+                return out^
         elif ft == FrameType.RST_STREAM().value:
             if sid == 0:
                 return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
@@ -808,6 +824,11 @@ struct Connection(Copyable, Defaultable, Movable):
         elif ft == FrameType.DATA().value:
             if sid == 0:
                 return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+        elif ft == FrameType.PUSH_PROMISE().value:
+            # sec 8.4: we advertise SETTINGS_ENABLE_PUSH = 0, so a
+            # client sending one is a protocol violation. flare never
+            # originates push either.
+            return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
 
         # sec 4.2: any frame larger than the size we advertised.
         if plen > self.local_max_frame_size:
@@ -860,7 +881,24 @@ struct Connection(Copyable, Defaultable, Movable):
                         )
 
                 if id == 0x4:  # SETTINGS_INITIAL_WINDOW_SIZE
+                    # sec 6.9.2: the change is a delta applied to every
+                    # existing stream's send window, and the result may
+                    # legitimately go negative (the peer over-sent
+                    # against the older, larger window).
+                    var delta = v - self.initial_window_size
                     self.initial_window_size = v
+                    if delta != 0:
+                        var ids = List[Int]()
+                        for entry in self.streams.items():
+                            ids.append(entry[0])
+                        for k in range(len(ids)):
+                            var st2 = self.streams[ids[k]].copy()
+                            if st2.send_window + delta > _MAX_WINDOW:
+                                return self._conn_error(
+                                    Http2ErrorCode.FLOW_CONTROL_ERROR().value
+                                )
+                            st2.send_window += delta
+                            self._put_stream(st2^)
                 elif id == 0x5:  # SETTINGS_MAX_FRAME_SIZE
                     self.max_frame_size = v
                 elif id == 0x1:  # SETTINGS_HEADER_TABLE_SIZE
@@ -889,8 +927,6 @@ struct Connection(Copyable, Defaultable, Movable):
             return out^
 
         if ft == FrameType.WINDOW_UPDATE().value:
-            if len(f.payload) != 4:
-                raise Error("h2: WINDOW_UPDATE payload != 4")
             var inc = (
                 (Int(f.payload[0]) << 24)
                 | (Int(f.payload[1]) << 16)
@@ -898,14 +934,45 @@ struct Connection(Copyable, Defaultable, Movable):
                 | Int(f.payload[3])
             ) & 0x7FFFFFFF
             if inc == 0:
-                raise Error("h2: WINDOW_UPDATE increment 0")
-            if f.header.stream_id == 0:
+                # sec 6.9: zero is a connection error on stream 0 and a
+                # stream error otherwise.
+                if sid == 0:
+                    return self._conn_error(
+                        Http2ErrorCode.PROTOCOL_ERROR().value
+                    )
+                out.append(
+                    self._rst_stream_frame(
+                        sid, Http2ErrorCode.PROTOCOL_ERROR().value
+                    )
+                )
+                return out^
+            if sid == 0:
+                # sec 6.9.1: a window may not grow past 2^31-1.
+                if self.send_window + inc > _MAX_WINDOW:
+                    return self._conn_error(
+                        Http2ErrorCode.FLOW_CONTROL_ERROR().value
+                    )
                 self.send_window += inc
             else:
-                if f.header.stream_id in self.streams:
-                    var s = self.streams[f.header.stream_id].copy()
-                    s.send_window += inc
+                if sid not in self.streams:
+                    # sec 5.1: WINDOW_UPDATE on an idle stream.
+                    if sid > self.last_peer_stream_id:
+                        return self._conn_error(
+                            Http2ErrorCode.PROTOCOL_ERROR().value
+                        )
+                    return out^
+                var s = self.streams[sid].copy()
+                if s.send_window + inc > _MAX_WINDOW:
+                    out.append(
+                        self._rst_stream_frame(
+                            sid, Http2ErrorCode.FLOW_CONTROL_ERROR().value
+                        )
+                    )
+                    s.state = StreamState.CLOSED()
                     self._put_stream(s^)
+                    return out^
+                s.send_window += inc
+                self._put_stream(s^)
             return out^
 
         if ft == FrameType.HEADERS().value:
@@ -958,6 +1025,20 @@ struct Connection(Copyable, Defaultable, Movable):
                     )
                 )
                 return out^
+            # sec 5.3.1: the priority prefix must not name this stream.
+            if f.header.flags.has(FrameFlags.PRIORITY()):
+                var off = 1 if f.header.flags.has(FrameFlags.PADDED()) else 0
+                if len(f.payload) >= off + 4:
+                    var hdep = (
+                        (Int(f.payload[off]) << 24)
+                        | (Int(f.payload[off + 1]) << 16)
+                        | (Int(f.payload[off + 2]) << 8)
+                        | Int(f.payload[off + 3])
+                    ) & 0x7FFFFFFF
+                    if hdep == f.header.stream_id:
+                        return self._conn_error(
+                            Http2ErrorCode.PROTOCOL_ERROR().value
+                        )
             var frag: List[UInt8]
             try:
                 frag = self._strip_pad_and_priority(f, True)
@@ -983,15 +1064,53 @@ struct Connection(Copyable, Defaultable, Movable):
             return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
 
         if ft == FrameType.DATA().value:
-            if f.header.stream_id == 0:
-                raise Error("h2: DATA on stream 0")
-            if f.header.stream_id not in self.streams:
-                raise Error("h2: DATA on unknown stream")
-            var s = self.streams[f.header.stream_id].copy()
-            for j in range(len(f.payload)):
-                s.data.append(f.payload[j])
+            if sid not in self.streams:
+                # sec 5.1: DATA on a stream that was never opened is
+                # PROTOCOL_ERROR; on one already gone, STREAM_CLOSED.
+                if sid > self.last_peer_stream_id:
+                    return self._conn_error(
+                        Http2ErrorCode.PROTOCOL_ERROR().value
+                    )
+                return self._conn_error(Http2ErrorCode.STREAM_CLOSED().value)
+            var s = self.streams[sid].copy()
+            var st = s.state.value
+            if (
+                st == StreamState.CLOSED().value
+                or st == StreamState.HALF_CLOSED_REMOTE().value
+            ):
+                # The peer already ended its half; more DATA is not
+                # allowed to arrive on it.
+                return self._conn_error(Http2ErrorCode.STREAM_CLOSED().value)
+            var body: List[UInt8]
+            try:
+                body = self._strip_pad_and_priority(f, False)
+            except:
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+            # Flow control is accounted on the whole frame payload,
+            # padding included (sec 6.9.1).
             s.recv_window -= len(f.payload)
+            if s.recv_window < 0:
+                out.append(
+                    self._rst_stream_frame(
+                        sid, Http2ErrorCode.FLOW_CONTROL_ERROR().value
+                    )
+                )
+                s.state = StreamState.CLOSED()
+                self._put_stream(s^)
+                return out^
+            for j in range(len(body)):
+                s.data.append(body[j])
             if f.header.flags.has(FrameFlags.END_STREAM()):
+                # sec 8.1.2.6: content-length must match what arrived.
+                if s.content_length >= 0 and len(s.data) != s.content_length:
+                    out.append(
+                        self._rst_stream_frame(
+                            sid, Http2ErrorCode.PROTOCOL_ERROR().value
+                        )
+                    )
+                    s.state = StreamState.CLOSED()
+                    self._put_stream(s^)
+                    return out^
                 s.data_complete = True
                 # Client-side: a stream we've already half-closed
                 # locally that the peer ends fully closes.
