@@ -325,6 +325,10 @@ struct Http2Connection(Defaultable, Movable):
         out.conn.send_window = out.config.initial_window_size
         out.conn.recv_window = out.config.initial_window_size
         out.conn.max_frame_size = out.config.max_frame_size
+        # What we advertise is also the largest frame we accept; the
+        # peer's SETTINGS may later move max_frame_size but must not
+        # move this one.
+        out.conn.local_max_frame_size = out.config.max_frame_size
         out.conn.max_header_list_size = out.config.max_header_list_size
         out.conn.hpack_decoder.max_size = out.config.header_table_size
         out.conn.hpack_decoder.allow_huffman = out.config.allow_huffman_decode

@@ -276,6 +276,19 @@ struct Connection(Copyable, Defaultable, Movable):
     var goaway_sent: Bool
     """Set once the driver has queued a GOAWAY so it is emitted at
     most once."""
+    var last_peer_stream_id: Int
+    """Highest peer-initiated stream id seen. Feeds the GOAWAY
+    last-stream-id field and the RFC 9113 sec 5.1.1 monotonicity check
+    (a peer must not open a stream numbered below one it already
+    opened)."""
+    var local_max_frame_size: Int
+    """The SETTINGS_MAX_FRAME_SIZE *we* advertise, and therefore the
+    largest inbound frame we accept (RFC 9113 sec 4.2).
+
+    Distinct from ``max_frame_size``, which the peer's SETTINGS
+    overwrites to describe what *it* accepts and which egress sizes
+    against. Sharing one field would let a peer raise our own inbound
+    ceiling by advertising a large value."""
     var reset_streams: List[Int]
     """Stream ids that received an inbound RST_STREAM since the
     last :meth:`take_reset_streams` call (RFC 9113 §6.4). Drained
@@ -304,6 +317,8 @@ struct Connection(Copyable, Defaultable, Movable):
         self.peer_enable_connect_protocol = False
         self.rst_stream_count = 0
         self.goaway_sent = False
+        self.last_peer_stream_id = 0
+        self.local_max_frame_size = H2_DEFAULT_FRAME_SIZE
         self.reset_streams = List[Int]()
 
     def _make_settings(self, ack: Bool) -> Frame:
@@ -431,10 +446,83 @@ struct Connection(Copyable, Defaultable, Movable):
         f.header.length = len(f.payload)
         return f^
 
+    def _conn_error(mut self, code: Int) -> List[Frame]:
+        """Queue a GOAWAY carrying ``code`` and return it as the frame
+        list for a connection error.
+
+        RFC 9113 sec 5.4.1: a connection error is reported with GOAWAY
+        before closing. Raising instead drops the connection with no
+        frame at all, which leaves a conforming peer unable to tell a
+        protocol rejection from a crash or a dead network."""
+        var out = List[Frame]()
+        if not self.goaway_sent:
+            self.goaway_sent = True
+            out.append(self._goaway_frame(self.last_peer_stream_id, code))
+        return out^
+
     def handle_frame(mut self, var f: Frame) raises -> List[Frame]:
         """Apply ``f`` to the connection state, return reply frames."""
         var out = List[Frame]()
         var ft = f.header.type.value
+        var sid = f.header.stream_id
+        # Payload length, not ``header.length``: the wire decoder keeps
+        # the two in step, but in-process callers build a frame by
+        # setting ``payload`` alone and leave the header field at zero.
+        var plen = len(f.payload)
+
+        # ── RFC 9113 sec 6 frame-shape validation ────────────────────
+        # Each of these is a connection error the peer must be told
+        # about. Checked before any per-type handling so a malformed
+        # frame never reaches state that assumes it is well-formed.
+        if ft == FrameType.PING().value:
+            if sid != 0:
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+            if plen != 8:
+                return self._conn_error(Http2ErrorCode.FRAME_SIZE_ERROR().value)
+        elif ft == FrameType.GOAWAY().value:
+            if sid != 0:
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+        elif ft == FrameType.SETTINGS().value:
+            if sid != 0:
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+            if f.header.flags.has(FrameFlags.ACK()) and plen != 0:
+                return self._conn_error(Http2ErrorCode.FRAME_SIZE_ERROR().value)
+            if (plen % 6) != 0:
+                return self._conn_error(Http2ErrorCode.FRAME_SIZE_ERROR().value)
+        elif ft == FrameType.PRIORITY().value:
+            if sid == 0:
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+            if plen != 5:
+                return self._conn_error(Http2ErrorCode.FRAME_SIZE_ERROR().value)
+        elif ft == FrameType.RST_STREAM().value:
+            if sid == 0:
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+            if plen != 4:
+                return self._conn_error(Http2ErrorCode.FRAME_SIZE_ERROR().value)
+            # sec 6.4: RST_STREAM on a stream the peer never opened.
+            if sid not in self.streams and sid > self.last_peer_stream_id:
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+        elif ft == FrameType.WINDOW_UPDATE().value:
+            if plen != 4:
+                return self._conn_error(Http2ErrorCode.FRAME_SIZE_ERROR().value)
+        elif ft == FrameType.DATA().value:
+            if sid == 0:
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+
+        # sec 4.2: any frame larger than the size we advertised.
+        if plen > self.local_max_frame_size:
+            return self._conn_error(Http2ErrorCode.FRAME_SIZE_ERROR().value)
+
+        # sec 5.1.1: peer-initiated stream ids are odd and must only
+        # increase. A lower id that is not still in the table refers to
+        # a stream the peer already finished with.
+        if ft == FrameType.HEADERS().value and not self.is_client:
+            if sid != 0 and (sid % 2) == 0:
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+            if sid < self.last_peer_stream_id and sid not in self.streams:
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+            if sid > self.last_peer_stream_id:
+                self.last_peer_stream_id = sid
 
         if ft == FrameType.SETTINGS().value:
             if f.header.flags.has(FrameFlags.ACK()):
@@ -452,6 +540,25 @@ struct Connection(Copyable, Defaultable, Movable):
                     | (Int(f.payload[i + 4]) << 8)
                     | Int(f.payload[i + 5])
                 )
+                # RFC 9113 sec 6.5.2 bounds. Out-of-range values are
+                # connection errors, not values to clamp: accepting one
+                # silently desynchronises both ends' idea of the window.
+                if id == 0x2:  # SETTINGS_ENABLE_PUSH
+                    if v != 0 and v != 1:
+                        return self._conn_error(
+                            Http2ErrorCode.PROTOCOL_ERROR().value
+                        )
+                elif id == 0x4:  # SETTINGS_INITIAL_WINDOW_SIZE
+                    if v > 0x7FFFFFFF:
+                        return self._conn_error(
+                            Http2ErrorCode.FLOW_CONTROL_ERROR().value
+                        )
+                elif id == 0x5:  # SETTINGS_MAX_FRAME_SIZE
+                    if v < H2_DEFAULT_FRAME_SIZE or v > 16777215:
+                        return self._conn_error(
+                            Http2ErrorCode.PROTOCOL_ERROR().value
+                        )
+
                 if id == 0x4:  # SETTINGS_INITIAL_WINDOW_SIZE
                     self.initial_window_size = v
                 elif id == 0x5:  # SETTINGS_MAX_FRAME_SIZE

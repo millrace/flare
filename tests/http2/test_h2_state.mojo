@@ -245,6 +245,11 @@ def test_continuation_flood_rsts() raises:
 
 def test_rst_flood_triggers_goaway() raises:
     var c = Connection()
+    # The peer opened stream 1 before flooding. Without this the very
+    # first RST_STREAM is a connection error under RFC 9113 sec 6.4
+    # (RST on an idle stream), which is a different -- and stricter --
+    # rejection than the rapid-reset guard being tested here.
+    c.last_peer_stream_id = 1
     var goaway_seen = False
     for _ in range(501):
         var rf = Frame()
