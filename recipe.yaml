@@ -41,7 +41,7 @@ source:
   # json source (inlined).
   - git: https://github.com/ehsanmok/json.git
     target_directory: json-src
-    tag: v0.2.1
+    tag: v0.3.0
 
 build:
   script:
@@ -76,7 +76,7 @@ requirements:
     - ca-certificates
     - simdjson >=4.2.4,<5    # json's simdjson FFI wrapper
   run:
-    - mojo ==1.0.0rc0
+    - mojo >=1.0.0,<1.1.0
     - openssl >=3.0,<4
     - ca-certificates
     - simdjson >=4.2.4,<5    # libsimdjson_wrapper.so is loaded at runtime
