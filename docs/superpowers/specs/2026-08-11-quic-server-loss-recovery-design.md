@@ -203,6 +203,26 @@ Mirrors the client's existing coverage shape:
   (`rustls_config` opt-in) and already has its own anti-replay
   admission logic this pass doesn't touch.
 
+## Docs to update
+
+No new public symbols ship (only a new field on the already-exported
+`QuicServerConfig`), so `flare/quic/__init__.mojo` and the top-level
+`flare/__init__.mojo` need no changes, and no example demonstrates
+new API. Three existing doc claims go stale once this lands and need
+correcting in the same pass:
+
+- `docs/features.md`, congestion-control row -- currently describes
+  the RTT/loss/PTO/CC path as client-only; note the server now
+  shares it.
+- `docs/features.md`, QUIC server reactor row -- currently says PTO
+  "re-flushes 1-RTT egress" and that "full server-side loss-driven
+  retransmit ... [is] tracked v0.9.x follow-ups"; rewrite to describe
+  the real retransmit path, keep pacing noted as still deferred (see
+  Non-goals).
+- `docs/architecture.md` (~line 141-144) -- currently claims "CC +
+  pacing budget gate the egress path" for the server; correct to say
+  CC gates egress, pacing does not (yet).
+
 ## Open implementation decisions for the plan phase
 
 - Exact enumeration of every `_build_1rtt_response` call site and its
