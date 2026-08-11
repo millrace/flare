@@ -1,0 +1,32 @@
+# h2spec cases flare knowingly does not pass.
+#
+# One entry per line: the case id as h2spec numbers it. Blank lines and
+# `#` comments ignored. tools/run_conformance.sh fails the run when a
+# case outside this list fails, so the suite gates on "no new
+# failures" while these stay documented rather than silent.
+#
+# Keep this list short and justified. An entry is a claim that the test
+# is wrong for flare, not a place to park work.
+
+# ---------------------------------------------------------------------
+# http2/3.5/2 -- "Sends invalid connection preface"
+#
+# h2spec sends `INVALID CONNECTION PREFACE\r\n\r\n` and requires either
+# GOAWAY(PROTOCOL_ERROR) or a silent close, because it assumes an
+# HTTP/2-only endpoint where any non-preface byte is a protocol error.
+#
+# flare's cleartext port auto-detects: it peeks 24 bytes, and anything
+# that is not the preface is HTTP/1.1. Those bytes parse as a request
+# line (method INVALID, target CONNECTION, version PREFACE), and since
+# v0.10 the version token is validated, so flare answers
+# `400 Bad Request` with `Connection: close` and closes -- the correct
+# RFC 9112 sec 2.3 response for a malformed HTTP/1.1 request line, and
+# what nginx does with the same bytes.
+#
+# Passing this case would mean dropping malformed HTTP/1.1 requests
+# with no response at all, which is worse for every real h1 client to
+# satisfy an assumption that does not hold for this endpoint. The
+# ambiguity is real only on the cleartext port; over TLS with ALPN h2
+# the peer has committed to HTTP/2 and an invalid preface is answered
+# with GOAWAY.
+http2/3.5/2

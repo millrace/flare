@@ -97,11 +97,52 @@ run_h2spec() {
   fi
   "${h2spec}" -h 127.0.0.1 -p "${H2SPEC_PORT}" -P /plaintext \
     --strict --timeout 5 | tee target/conformance/h2spec.txt
-  local rc=${PIPESTATUS[0]}
   kill -9 "${srv}" 2>/dev/null || true
   RAN=$((RAN + 1))
-  [ $rc -ne 0 ] && FAIL=$((FAIL + 1))
+  _h2spec_verdict || FAIL=$((FAIL + 1))
   return 0
+}
+
+# Compare the failing case ids against the documented allowlist, so the
+# gate is "no new failures" rather than "no failures". h2spec numbers
+# each case as <suite>/<section>/<index>; reconstruct that from the
+# report's indented section headings.
+_h2spec_verdict() {
+  local report="target/conformance/h2spec.txt"
+  local allow="tools/conformance/h2spec-known-fail.txt"
+  [ -f "${report}" ] || return 1
+
+  local failed
+  failed="$(awk '
+    /^Failures:/ { infail = 1; next }
+    !infail { next }
+    /^[A-Za-z]/ {
+      if ($0 ~ /^Hypertext/) suite = "http2"
+      else if ($0 ~ /^HPACK/) suite = "hpack"
+      else if ($0 ~ /^Generic/) suite = "generic"
+      next
+    }
+    /^ *[0-9]+(\.[0-9]+)*\. / { sec = $1; sub(/\.$/, "", sec); next }
+    /^ *× [0-9]+:/ { n = $2; sub(/:$/, "", n); print suite "/" sec "/" n }
+  ' "${report}" | sort -u)"
+
+  if [ -z "${failed}" ]; then
+    echo "── h2spec: all cases passed"
+    return 0
+  fi
+
+  local unexpected=0
+  while IFS= read -r case_id; do
+    [ -z "${case_id}" ] && continue
+    if grep -qxF "${case_id}" "${allow}" 2>/dev/null; then
+      echo "── h2spec: ${case_id} fails (known, see ${allow})"
+    else
+      echo "── h2spec: ${case_id} FAILS and is not in ${allow}" >&2
+      unexpected=1
+    fi
+  done <<< "${failed}"
+
+  [ "${unexpected}" -eq 0 ]
 }
 
 run_autobahn() {

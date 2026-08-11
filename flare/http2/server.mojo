@@ -347,6 +347,9 @@ struct Http2Connection(Defaultable, Movable):
         out.conn.local_max_frame_size = out.config.max_frame_size
         out.conn.max_header_list_size = out.config.max_header_list_size
         out.conn.hpack_decoder.max_size = out.config.header_table_size
+        # The ceiling a peer size update may restore to is what we
+        # advertise, not the table's current size.
+        out.conn.hpack_decoder.settings_max_size = out.config.header_table_size
         out.conn.hpack_decoder.allow_huffman = out.config.allow_huffman_decode
         out.conn.hpack_encoder.allow_huffman = out.config.allow_huffman_encode
         out.conn.enable_connect_protocol = out.config.enable_connect_protocol
@@ -505,7 +508,20 @@ struct Http2Connection(Defaultable, Movable):
             var pp = preface.unsafe_ptr()
             for i in range(24):
                 if self.inbox[i] != pp[i]:
-                    raise Error("h2: bad preface")
+                    # RFC 9113 sec 3.4: answer a bad preface with
+                    # GOAWAY(PROTOCOL_ERROR) and close. Raising instead
+                    # dropped the connection with no frame, leaving the
+                    # peer to time out rather than learn why.
+                    if not self.conn.goaway_sent:
+                        self.conn.goaway_sent = True
+                        var ga = self.conn._goaway_frame(
+                            0, Http2ErrorCode.PROTOCOL_ERROR().value
+                        )
+                        var gb = encode_frame(ga)
+                        for k in range(len(gb)):
+                            self.outbox.append(gb[k])
+                    self.inbox = List[UInt8]()
+                    return
             # Drop the preface from the inbox.
             var rest = List[UInt8](capacity=len(self.inbox) - 24)
             for i in range(24, len(self.inbox)):

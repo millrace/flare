@@ -558,6 +558,11 @@ struct Http2ConnHandle(Movable):
                 self.write_buf.append(out[i])
         if self.h2.conn.goaway_received:
             self.should_close = True
+        if self.h2.conn.goaway_sent:
+            # RFC 9113 sec 5.4.1: a connection error is GOAWAY *and*
+            # then close. The frame is already in write_buf, so the
+            # reactor flushes it before this takes effect.
+            self.should_close = True
         # Decide reactor interest: write if there are bytes to
         # flush, otherwise stay on read for the next frame.
         var has_outbound = len(self.write_buf) > self.write_pos

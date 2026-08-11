@@ -265,9 +265,13 @@ def test_decode_dynamic_size_update_shrinks() raises:
 
 
 def test_decode_size_update_above_cap_raises() raises:
-    """Size update larger than ``max_size`` is a decoding error."""
+    """Size update above the advertised SETTINGS cap is a decoding
+    error. The bound is ``settings_max_size`` (what the decoder told
+    the peer it can handle), not the table's current ``max_size``:
+    RFC 7541 sec 6.3 explicitly allows restoring a shrunk table."""
     var dec = HpackDecoder()
     dec.max_size = 64
+    dec.settings_max_size = 64
     var b = List[UInt8]()
     # 0x3F + 0x81 0x01 -> size update value 31 + 0x80 = 159
     b.append(UInt8(0x3F))

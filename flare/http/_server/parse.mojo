@@ -32,6 +32,32 @@ from .parse_util import (
 )
 
 
+def _is_valid_http_version(v: String) raises -> Bool:
+    """RFC 9112 sec 2.3: ``HTTP/<DIGIT>.<DIGIT>`` and nothing else.
+
+    Without this any third token parses as a version, so a garbage
+    request line is answered 404 instead of 400 -- and a peer that
+    opened with something like an invalid HTTP/2 preface is left
+    holding a keep-alive connection it cannot interpret."""
+    if v.byte_length() != 8:
+        return False
+    var p = v.unsafe_ptr()
+    if (
+        p[0] != UInt8(ord("H"))
+        or p[1] != UInt8(ord("T"))
+        or p[2] != UInt8(ord("T"))
+        or p[3] != UInt8(ord("P"))
+        or p[4] != UInt8(ord("/"))
+        or p[6] != UInt8(ord("."))
+    ):
+        return False
+    if p[5] < UInt8(ord("0")) or p[5] > UInt8(ord("9")):
+        return False
+    if p[7] < UInt8(ord("0")) or p[7] > UInt8(ord("9")):
+        return False
+    return True
+
+
 def _parse_http_request_bytes(
     data: Span[UInt8, _],
     max_header_size: Int = 8_192,
@@ -157,6 +183,9 @@ def _parse_http_request_bytes(
     else:
         path = _ascii_unchecked_string(req_line.as_bytes()[sp1 + 1 : sp2])
         version = _ascii_unchecked_string(req_line.as_bytes()[sp2 + 1 :])
+
+    if not _is_valid_http_version(version):
+        raise Error("malformed HTTP version in request line: " + version)
 
     if (
         not leniency.allow_oversized_request_uri
@@ -403,6 +432,9 @@ def _parse_http_request_bytes_minimal(
     else:
         path = _ascii_unchecked_string(req_line.as_bytes()[sp1 + 1 : sp2])
         version = _ascii_unchecked_string(req_line.as_bytes()[sp2 + 1 :])
+
+    if not _is_valid_http_version(version):
+        raise Error("malformed HTTP version in request line: " + version)
 
     if path.byte_length() > max_uri_length:
         raise Error(

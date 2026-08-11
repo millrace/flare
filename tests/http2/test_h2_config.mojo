@@ -47,7 +47,7 @@ def test_default_config_matches_rfc_and_v0_6_shape() raises:
     assert_equal(cfg.max_concurrent_streams, 100)
     assert_equal(cfg.initial_window_size, 65535)
     assert_equal(cfg.max_frame_size, 16384)
-    assert_equal(cfg.max_header_list_size, 8192)
+    assert_equal(cfg.max_header_list_size, 16384)
     assert_equal(cfg.header_table_size, 4096)
     # Huffman *decode* defaults on: RFC 7541 sec 5.2 makes Huffman the
     # encoder's choice, signalled by the H bit, so a decoder that
@@ -69,8 +69,8 @@ def test_with_config_default_emits_extra_max_header_list_size() raises:
     """``Http2Connection()`` (bare) emits one SETTINGS pair
     (MAX_CONCURRENT_STREAMS = 100). ``Http2Connection.with_config(
     Http2Config())`` emits two: the same MAX_CONCURRENT_STREAMS = 100
-    plus the defensive default MAX_HEADER_LIST_SIZE = 8192. The
-    extra pair (id 0x6, value 8192) is the additive contract: bare
+    plus the defensive default MAX_HEADER_LIST_SIZE = 16384. The
+    extra pair (id 0x6, value 16384) is the additive contract: bare
     callers stay on the original wire bytes; opt-in via
     ``Http2Config`` advertises the new cap."""
     var preface = List[UInt8](String(H2_PREFACE).as_bytes())
@@ -105,7 +105,7 @@ def test_with_config_default_emits_extra_max_header_list_size() raises:
     )
     assert_equal(sid2a, 0x3)
     assert_equal(sval2a, 100)
-    # Second pair: MAX_HEADER_LIST_SIZE = 8192 (the new defensive default)
+    # Second pair: MAX_HEADER_LIST_SIZE = 16384 (defensive default)
     var sid2b = (Int(f2.payload[6]) << 8) | Int(f2.payload[7])
     var sval2b = (
         (Int(f2.payload[8]) << 24)
@@ -114,7 +114,7 @@ def test_with_config_default_emits_extra_max_header_list_size() raises:
         | Int(f2.payload[11])
     )
     assert_equal(sid2b, 0x6)  # SETTINGS_MAX_HEADER_LIST_SIZE
-    assert_equal(sval2b, 8192)
+    assert_equal(sval2b, 16384)
 
 
 def test_with_config_zero_header_list_byte_matches_h2connection() raises:

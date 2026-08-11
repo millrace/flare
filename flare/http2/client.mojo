@@ -288,6 +288,9 @@ struct Http2ClientConnection(Defaultable, Movable):
         out.conn.max_frame_size = out.config.max_frame_size
         out.conn.max_header_list_size = out.config.max_header_list_size
         out.conn.hpack_decoder.max_size = out.config.header_table_size
+        # The ceiling a peer size update may restore to is what we
+        # advertise, not the table's current size.
+        out.conn.hpack_decoder.settings_max_size = out.config.header_table_size
         out.conn.hpack_decoder.allow_huffman = out.config.allow_huffman_decode
         out.conn.hpack_encoder.allow_huffman = out.config.allow_huffman_encode
         out.conn.enable_connect_protocol = out.config.enable_connect_protocol

@@ -224,12 +224,11 @@ jobs:
         run: pixi run interop-smoke
       - name: Install h2spec (pinned release)
         run: pixi run install-h2spec
-      # NOT GATING YET. The first real h2spec run against flare scored
-      # 71/147, and the failures are being triaged before any of them
-      # block a build. Flip continue-on-error off once that triage
-      # lands, so a regression past the agreed baseline goes red.
+      # Gating. h2spec is at 146/147; the one exception is documented
+      # with its reasoning in tools/conformance/h2spec-known-fail.txt
+      # and the harness fails on any case outside that list, so a
+      # conformance regression goes red.
       - name: Run provisioned conformance suites
-        continue-on-error: true
         run: pixi run conformance
       - name: Upload h2spec report
         if: always()

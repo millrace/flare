@@ -242,12 +242,20 @@ struct HpackDecoder(Copyable, Defaultable, Movable):
     var dynamic: List[HpackHeader]
     var dynamic_size: Int
     var max_size: Int
+    var settings_max_size: Int
+    """Ceiling a peer's size update may raise ``max_size`` back to.
+
+    RFC 7541 sec 6.3 bounds an update by the value the decoder
+    advertised in SETTINGS_HEADER_TABLE_SIZE, not by the current
+    ``max_size``. Comparing against ``max_size`` alone would reject the
+    legal shrink-then-restore pair (``0`` followed by ``4096``)."""
     var allow_huffman: Bool
 
     def __init__(out self):
         self.dynamic = List[HpackHeader]()
         self.dynamic_size = 0
         self.max_size = 4096
+        self.settings_max_size = 4096
         self.allow_huffman = False
 
     def _entry_size(self, h: HpackHeader) -> Int:
@@ -359,8 +367,12 @@ struct HpackDecoder(Copyable, Defaultable, Movable):
                 # 6.3 Dynamic Table Size Update
                 var pair = decode_integer(buf, off, 5)
                 off = pair.offset
-                if pair.value > self.max_size:
+                if pair.value > self.settings_max_size:
                     raise Error("hpack: size update exceeds settings cap")
+                # sec 4.2: an update is only legal at the very start of
+                # a header block, before any field.
+                if len(headers) > 0:
+                    raise Error("hpack: size update after a header field")
                 self.max_size = pair.value
                 self._evict_to_fit(0)
             else:

@@ -77,16 +77,21 @@ def test_preface_only_emits_settings() raises:
     assert_equal(Int(f.header.type.value), 0x4)  # SETTINGS
 
 
-def test_bad_preface_raises() raises:
+def test_bad_preface_goaways() raises:
+    """RFC 9113 sec 3.4: a bad preface is answered with
+    GOAWAY(PROTOCOL_ERROR) and a close, not a bare disconnect. Raising
+    left the peer to time out with no idea why."""
     var c = Http2Connection()
     var bad = String("PRI * HTTP/2.0\r\n\r\nXX\r\n\r\n")
     var bytes = List[UInt8](bad.as_bytes())
-    var raised = False
-    try:
-        c.feed(Span[UInt8, _](bytes))
-    except:
-        raised = True
-    assert_true(raised)
+    c.feed(Span[UInt8, _](bytes))
+    assert_true(c.conn.goaway_sent)
+    var out = c.drain()
+    var frames = _walk_frames(out)
+    assert_true(len(frames) >= 1)
+    var last = frames[len(frames) - 1].copy()
+    assert_equal(Int(last.header.type.value), 0x7)  # GOAWAY
+    assert_equal(Int(last.payload[7]), 0x1)  # PROTOCOL_ERROR
 
 
 def test_request_round_trip() raises:
@@ -267,7 +272,7 @@ def main() raises:
     test_alpn_dispatch()
     test_h2c_upgrade_detection()
     test_preface_only_emits_settings()
-    test_bad_preface_raises()
+    test_bad_preface_goaways()
     test_request_round_trip()
     test_stream_response_incremental_frames()
     test_stream_response_no_trailers_ends_with_empty_data()
