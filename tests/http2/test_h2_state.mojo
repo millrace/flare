@@ -67,6 +67,7 @@ def test_headers_on_stream_0_raises() raises:
     var enc = HpackEncoder()
     var hdrs = List[HpackHeader]()
     hdrs.append(HpackHeader(":method", "GET"))
+    hdrs.append(HpackHeader(":scheme", "http"))
     hdrs.append(HpackHeader(":path", "/"))
     var f = Frame()
     f.header.type = FrameType.HEADERS()
@@ -84,6 +85,7 @@ def test_headers_end_stream_transitions_to_half_closed_remote() raises:
     var enc = HpackEncoder()
     var hdrs = List[HpackHeader]()
     hdrs.append(HpackHeader(":method", "GET"))
+    hdrs.append(HpackHeader(":scheme", "http"))
     hdrs.append(HpackHeader(":path", "/api"))
     var f = Frame()
     f.header.type = FrameType.HEADERS()
@@ -98,7 +100,7 @@ def test_headers_end_stream_transitions_to_half_closed_remote() raises:
     assert_equal(s.state.value, StreamState.HALF_CLOSED_REMOTE().value)
     assert_true(s.headers_complete)
     assert_true(s.data_complete)
-    assert_equal(len(s.headers), 2)
+    assert_equal(len(s.headers), 3)
 
 
 def test_data_appends_and_emits_window_update() raises:
@@ -107,6 +109,7 @@ def test_data_appends_and_emits_window_update() raises:
     var enc = HpackEncoder()
     var hdrs = List[HpackHeader]()
     hdrs.append(HpackHeader(":method", "POST"))
+    hdrs.append(HpackHeader(":scheme", "http"))
     hdrs.append(HpackHeader(":path", "/upload"))
     var hf = Frame()
     hf.header.type = FrameType.HEADERS()
@@ -222,13 +225,18 @@ def test_continuation_flood_rsts() raises:
     var enc = HpackEncoder()
     var hdrs = List[HpackHeader]()
     hdrs.append(HpackHeader(":method", "GET"))
+    hdrs.append(HpackHeader(":scheme", "http"))
     var hf = Frame()
     hf.header.type = FrameType.HEADERS()
     hf.header.stream_id = 1
     hf.header.flags = FrameFlags(UInt8(0))  # END_HEADERS not set
     hf.payload = enc.encode(Span[HpackHeader, _](hdrs))
     _ = c.handle_frame(hf^)
-    var rst_seen = False
+    # The flood is answered with GOAWAY, not RST_STREAM: an
+    # unterminated header block leaves the connection-wide HPACK
+    # context unresynchronisable, so there is no safe way to keep
+    # serving the other streams.
+    var goaway_seen = False
     for _ in range(70):
         var cf = Frame()
         cf.header.type = FrameType.CONTINUATION()
@@ -236,11 +244,11 @@ def test_continuation_flood_rsts() raises:
         cf.header.flags = FrameFlags(UInt8(0))
         cf.payload = List[UInt8]()
         var out = c.handle_frame(cf^)
-        if len(out) > 0 and Int(out[0].header.type.value) == 0x3:
-            assert_equal(Int(out[0].payload[3]), 0xB)
-            rst_seen = True
+        if len(out) > 0 and Int(out[0].header.type.value) == 0x7:
+            assert_equal(Int(out[0].payload[7]), 0xB)
+            goaway_seen = True
             break
-    assert_true(rst_seen)
+    assert_true(goaway_seen)
 
 
 def test_rst_flood_triggers_goaway() raises:

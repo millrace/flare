@@ -196,6 +196,10 @@ struct Stream(Copyable, Defaultable, Movable):
     var continuation_count: Int
     """CONTINUATION frames seen for this stream's header block;
     capped to stop a CONTINUATION flood."""
+    var content_length: Int
+    """Declared ``content-length``, or ``-1`` when absent. RFC 9113
+    sec 8.1.2.6 makes a mismatch against the DATA actually received a
+    malformed request."""
     var extended_connect_protocol: String
     """RFC 8441 ``:protocol`` pseudo-header value when the stream
     was opened with ``:method = CONNECT``. Empty string otherwise.
@@ -215,6 +219,7 @@ struct Stream(Copyable, Defaultable, Movable):
         self.data_complete = False
         self.header_list_bytes = 0
         self.continuation_count = 0
+        self.content_length = -1
         self.extended_connect_protocol = ""
 
 
@@ -289,6 +294,20 @@ struct Connection(Copyable, Defaultable, Movable):
     overwrites to describe what *it* accepts and which egress sizes
     against. Sharing one field would let a peer raise our own inbound
     ceiling by advertising a large value."""
+    var continuing_stream: Int
+    """Stream whose header block is still open, ``0`` when none.
+
+    RFC 9113 sec 6.10 makes a header block an atomic unit: between a
+    HEADERS without END_HEADERS and the CONTINUATION that carries it,
+    no other frame -- on any stream -- may appear."""
+    var header_block: List[UInt8]
+    """Accumulated header-block fragments for ``continuing_stream``.
+
+    Decoding must wait for END_HEADERS: HPACK is a stream cipher over
+    the whole block, so a field can straddle the HEADERS/CONTINUATION
+    boundary and per-fragment decoding corrupts it."""
+    var header_block_end_stream: Bool
+    """END_STREAM seen on the HEADERS that opened ``header_block``."""
     var reset_streams: List[Int]
     """Stream ids that received an inbound RST_STREAM since the
     last :meth:`take_reset_streams` call (RFC 9113 §6.4). Drained
@@ -319,6 +338,9 @@ struct Connection(Copyable, Defaultable, Movable):
         self.goaway_sent = False
         self.last_peer_stream_id = 0
         self.local_max_frame_size = H2_DEFAULT_FRAME_SIZE
+        self.continuing_stream = 0
+        self.header_block = List[UInt8]()
+        self.header_block_end_stream = False
         self.reset_streams = List[Int]()
 
     def _make_settings(self, ack: Bool) -> Frame:
@@ -460,6 +482,251 @@ struct Connection(Copyable, Defaultable, Movable):
             out.append(self._goaway_frame(self.last_peer_stream_id, code))
         return out^
 
+    def _strip_pad_and_priority(
+        self, f: Frame, has_priority_field: Bool
+    ) raises -> List[UInt8]:
+        """Return the frame's real payload with the RFC 9113 sec 6.1 /
+        sec 6.2 padding and priority prefixes removed.
+
+        Raises when the declared pad length does not leave room for
+        itself, which sec 6.1 makes a connection error."""
+        var p = f.payload.copy()
+        var start = 0
+        var end = len(p)
+        if f.header.flags.has(FrameFlags.PADDED()):
+            if end < 1:
+                raise Error("h2: PADDED frame with empty payload")
+            var pad = Int(p[0])
+            start = 1
+            if pad > end - 1:
+                raise Error("h2: pad length exceeds payload")
+            end -= pad
+        if has_priority_field and f.header.flags.has(FrameFlags.PRIORITY()):
+            if end - start < 5:
+                raise Error("h2: PRIORITY prefix truncated")
+            start += 5
+        var out = List[UInt8](capacity=end - start)
+        for i in range(start, end):
+            out.append(p[i])
+        return out^
+
+    @staticmethod
+    def _is_connection_specific(name: String) -> Bool:
+        """RFC 9113 sec 8.2.2: fields that carry HTTP/1.1 connection
+        semantics and are malformed in HTTP/2."""
+        return (
+            name == "connection"
+            or name == "keep-alive"
+            or name == "proxy-connection"
+            or name == "transfer-encoding"
+            or name == "upgrade"
+        )
+
+    @staticmethod
+    def _is_request_pseudo(name: String) -> Bool:
+        return (
+            name == ":method"
+            or name == ":scheme"
+            or name == ":path"
+            or name == ":authority"
+            or name == ":protocol"
+        )
+
+    def _validate_request_headers(
+        self, hdrs: List[HpackHeader], is_trailers: Bool
+    ) -> Bool:
+        """Return ``True`` when ``hdrs`` is a well-formed HTTP/2 request
+        header list (RFC 9113 sec 8.1.2 and sec 8.3).
+
+        A ``False`` return is a malformed request: the caller answers
+        with RST_STREAM(PROTOCOL_ERROR) rather than serving it."""
+        var seen_regular = False
+        var n_method = 0
+        var n_scheme = 0
+        var n_path = 0
+        var n_authority = 0
+        var path_empty = False
+        var is_connect = False
+        var has_protocol = False
+        for i in range(len(hdrs)):
+            var name = hdrs[i].name
+            if name.byte_length() == 0:
+                return False
+            # sec 8.2.1: field names are lowercase on the wire.
+            var np = name.unsafe_ptr()
+            for k in range(name.byte_length()):
+                var c = np[k]
+                if c >= UInt8(ord("A")) and c <= UInt8(ord("Z")):
+                    return False
+            if name.unsafe_ptr()[0] == UInt8(ord(":")):
+                # sec 8.3: pseudo-headers never appear in trailers, and
+                # sec 8.1.2.1 puts them all before the regular fields.
+                if is_trailers or seen_regular:
+                    return False
+                if not Connection._is_request_pseudo(name):
+                    return False
+                if name == ":method":
+                    n_method += 1
+                    is_connect = hdrs[i].value == "CONNECT"
+                elif name == ":scheme":
+                    n_scheme += 1
+                elif name == ":path":
+                    n_path += 1
+                    path_empty = hdrs[i].value.byte_length() == 0
+                elif name == ":authority":
+                    n_authority += 1
+                elif name == ":protocol":
+                    has_protocol = True
+            else:
+                seen_regular = True
+                if Connection._is_connection_specific(name):
+                    return False
+                # sec 8.2.2: TE is allowed, but only as "trailers".
+                if name == "te" and hdrs[i].value != "trailers":
+                    return False
+        if is_trailers:
+            return True
+        if n_method != 1:
+            return False
+        if n_scheme > 1 or n_path > 1 or n_authority > 1:
+            return False
+        if is_connect and not has_protocol:
+            # sec 8.5: a classic CONNECT carries :authority only, and
+            # omitting :scheme / :path is required rather than a fault.
+            return n_scheme == 0 and n_path == 0 and n_authority == 1
+        # Extended CONNECT (RFC 8441) and every other method need the
+        # full request triple.
+        if n_scheme != 1 or n_path != 1:
+            return False
+        if path_empty:
+            return False
+        return True
+
+    @staticmethod
+    def _declared_content_length(hdrs: List[HpackHeader]) -> Int:
+        """The request's ``content-length``, or ``-1`` when absent or
+        unparseable."""
+        for i in range(len(hdrs)):
+            if hdrs[i].name == "content-length":
+                var v = hdrs[i].value
+                if v.byte_length() == 0:
+                    return -1
+                var acc = 0
+                var p = v.unsafe_ptr()
+                for k in range(v.byte_length()):
+                    var c = Int(p[k])
+                    if c < 48 or c > 57:
+                        return -1
+                    acc = acc * 10 + (c - 48)
+                return acc
+        return -1
+
+    def _active_stream_count(self) -> Int:
+        """Streams that count against SETTINGS_MAX_CONCURRENT_STREAMS
+        (RFC 9113 sec 5.1.2: open plus either half-closed state)."""
+        var n = 0
+        for entry in self.streams.items():
+            var st = entry[1].state.value
+            if (
+                st == StreamState.OPEN().value
+                or st == StreamState.HALF_CLOSED_LOCAL().value
+                or st == StreamState.HALF_CLOSED_REMOTE().value
+            ):
+                n += 1
+        return n
+
+    def _commit_header_block(mut self, sid: StreamId) raises -> List[Frame]:
+        """Decode the accumulated header block for ``sid``, validate it,
+        and apply the resulting stream-state transition.
+
+        Decoding happens here rather than per frame because HPACK is
+        stateful across the whole block."""
+        var out = List[Frame]()
+        var block = self.header_block^
+        self.header_block = List[UInt8]()
+        var end_stream = self.header_block_end_stream
+        self.header_block_end_stream = False
+
+        var hdrs: List[HpackHeader]
+        try:
+            hdrs = self.hpack_decoder.decode(Span[UInt8, _](block))
+        except:
+            # sec 4.3: the HPACK context is connection-wide, so a
+            # decode failure poisons every later block.
+            return self._conn_error(Http2ErrorCode.COMPRESSION_ERROR().value)
+
+        var s = self._ensure_stream(sid)
+        var is_trailers = s.headers_complete
+
+        # Size cap first: it is the DoS guard, so it should fire on an
+        # oversized list whether or not the list is also malformed.
+        var cap = self._header_list_cap()
+        for j in range(len(hdrs)):
+            s.header_list_bytes += (
+                hdrs[j].name.byte_length() + hdrs[j].value.byte_length() + 32
+            )
+            if s.header_list_bytes > cap:
+                out.append(
+                    self._rst_stream_frame(
+                        sid, Http2ErrorCode.ENHANCE_YOUR_CALM().value
+                    )
+                )
+                s.state = StreamState.CLOSED()
+                self._put_stream(s^)
+                return out^
+
+        if not self.is_client:
+            if not self._validate_request_headers(hdrs, is_trailers):
+                out.append(
+                    self._rst_stream_frame(
+                        sid, Http2ErrorCode.PROTOCOL_ERROR().value
+                    )
+                )
+                s.state = StreamState.CLOSED()
+                self._put_stream(s^)
+                return out^
+
+        for j in range(len(hdrs)):
+            s.headers.append(hdrs[j].copy())
+            # RFC 8441 sec 4: capture ``:protocol`` on Extended CONNECT
+            # so the WsServer bridge can route it.
+            if hdrs[j].name == ":protocol":
+                s.extended_connect_protocol = hdrs[j].value
+        if not is_trailers:
+            s.content_length = Connection._declared_content_length(hdrs)
+        s.headers_complete = True
+
+        if end_stream:
+            # sec 8.1.2.6: a declared content-length must match the DATA
+            # actually delivered.
+            if s.content_length >= 0 and len(s.data) != s.content_length:
+                out.append(
+                    self._rst_stream_frame(
+                        sid, Http2ErrorCode.PROTOCOL_ERROR().value
+                    )
+                )
+                s.state = StreamState.CLOSED()
+                self._put_stream(s^)
+                return out^
+            s.data_complete = True
+            if (
+                self.is_client
+                and s.state.value == StreamState.HALF_CLOSED_LOCAL().value
+            ):
+                s.state = StreamState.CLOSED()
+            else:
+                s.state = StreamState.HALF_CLOSED_REMOTE()
+        else:
+            if (
+                self.is_client
+                and s.state.value == StreamState.HALF_CLOSED_LOCAL().value
+            ):
+                pass
+            else:
+                s.state = StreamState.OPEN()
+        self._put_stream(s^)
+        return out^
+
     def handle_frame(mut self, var f: Frame) raises -> List[Frame]:
         """Apply ``f`` to the connection state, return reply frames."""
         var out = List[Frame]()
@@ -469,6 +736,39 @@ struct Connection(Copyable, Defaultable, Movable):
         # the two in step, but in-process callers build a frame by
         # setting ``payload`` alone and leave the header field at zero.
         var plen = len(f.payload)
+
+        # ── RFC 9113 sec 6.10: an open header block is atomic ────────
+        # Between a HEADERS without END_HEADERS and its closing
+        # CONTINUATION nothing else may arrive, on this stream or any
+        # other. Checked before everything else because a frame that
+        # interleaves here is a connection error whatever else is wrong
+        # with it.
+        if self.continuing_stream != 0:
+            if ft != FrameType.CONTINUATION().value or sid != (
+                self.continuing_stream
+            ):
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+            var cs = self.streams[sid].copy()
+            cs.continuation_count += 1
+            if cs.continuation_count > _CONTINUATION_FRAME_CAP:
+                # CONTINUATION flood (CVE-2024-27316).
+                self.continuing_stream = 0
+                self.header_block = List[UInt8]()
+                return self._conn_error(
+                    Http2ErrorCode.ENHANCE_YOUR_CALM().value
+                )
+            self._put_stream(cs^)
+            var cfrag: List[UInt8]
+            try:
+                cfrag = self._strip_pad_and_priority(f, False)
+            except:
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+            for i in range(len(cfrag)):
+                self.header_block.append(cfrag[i])
+            if not f.header.flags.has(FrameFlags.END_HEADERS()):
+                return out^
+            self.continuing_stream = 0
+            return self._commit_header_block(sid)
 
         # ── RFC 9113 sec 6 frame-shape validation ────────────────────
         # Each of these is a connection error the peer must be told
@@ -611,77 +911,76 @@ struct Connection(Copyable, Defaultable, Movable):
         if ft == FrameType.HEADERS().value:
             if f.header.stream_id == 0:
                 raise Error("h2: HEADERS on stream 0")
-            var hdrs = self.hpack_decoder.decode(Span[UInt8, _](f.payload))
-            var s = self._ensure_stream(f.header.stream_id)
-            var cap = self._header_list_cap()
-            for j in range(len(hdrs)):
-                # RFC 9113 §6.5.2 header-list size accounting; reject
-                # an oversized block with RST(ENHANCE_YOUR_CALM) before
-                # it can grow the per-stream buffer without bound.
-                s.header_list_bytes += (
-                    hdrs[j].name.byte_length()
-                    + hdrs[j].value.byte_length()
-                    + 32
-                )
-                if s.header_list_bytes > cap:
+            # sec 5.1: a stream the peer already ended, or one it has
+            # closed, must not carry another HEADERS. A second HEADERS
+            # on an open stream is trailers and must end the stream.
+            if f.header.stream_id in self.streams:
+                var prev = self.streams[f.header.stream_id].copy()
+                var st = prev.state.value
+                if st == StreamState.CLOSED().value:
+                    return self._conn_error(
+                        Http2ErrorCode.STREAM_CLOSED().value
+                    )
+                if (
+                    not self.is_client
+                    and st == StreamState.HALF_CLOSED_REMOTE().value
+                ):
+                    return self._conn_error(
+                        Http2ErrorCode.STREAM_CLOSED().value
+                    )
+                if (
+                    not self.is_client
+                    and prev.headers_complete
+                    and not f.header.flags.has(FrameFlags.END_STREAM())
+                ):
+                    # sec 8.1: trailers must carry END_STREAM.
                     out.append(
                         self._rst_stream_frame(
                             f.header.stream_id,
-                            Http2ErrorCode.ENHANCE_YOUR_CALM().value,
+                            Http2ErrorCode.PROTOCOL_ERROR().value,
                         )
                     )
-                    s.state = StreamState.CLOSED()
-                    self._put_stream(s^)
+                    prev.state = StreamState.CLOSED()
+                    self._put_stream(prev^)
                     return out^
-                s.headers.append(hdrs[j].copy())
-                # RFC 8441 §4: capture the ``:protocol``
-                # pseudo-header on Extended CONNECT so the
-                # higher-level dispatcher (``Http2Connection`` ->
-                # WsServer bridge) can route it. We snapshot
-                # eagerly here rather than scanning the headers
-                # list later because the field stays
-                # well-defined even if a future trailers feature
-                # mutates ``s.headers``.
-                if hdrs[j].name == ":protocol":
-                    s.extended_connect_protocol = hdrs[j].value
-            if f.header.flags.has(FrameFlags.END_HEADERS()):
-                s.headers_complete = True
-            # Stream-state transition on HEADERS receipt depends on
-            # whose perspective we're driving (RFC 9113 §5.1):
-            #  * Server-side (``is_client = False``, default): receiving
-            #    HEADERS opens an inbound request stream;
-            #    ``+ END_STREAM`` puts it in HALF_CLOSED_REMOTE
-            #    (request fully buffered, response still to come).
-            #  * Client-side (``is_client = True``): we sent HEADERS
-            #    first (transitioning IDLE -> OPEN or
-            #    HALF_CLOSED_LOCAL); receiving HEADERS is the response
-            #    headers. ``+ END_STREAM`` from a HALF_CLOSED_LOCAL
-            #    stream closes it; from OPEN it transitions to
-            #    HALF_CLOSED_REMOTE (server still has DATA to send,
-            #    but typically a HEADERS-only response carries
-            #    END_STREAM directly).
-            if f.header.flags.has(FrameFlags.END_STREAM()):
-                s.data_complete = True
-                if (
-                    self.is_client
-                    and s.state.value == StreamState.HALF_CLOSED_LOCAL().value
-                ):
-                    s.state = StreamState.CLOSED()
-                else:
-                    s.state = StreamState.HALF_CLOSED_REMOTE()
-            else:
-                if (
-                    self.is_client
-                    and s.state.value == StreamState.HALF_CLOSED_LOCAL().value
-                ):
-                    # We've sent END_STREAM, peer responded with HEADERS
-                    # but hasn't ended the stream yet (DATA frames to
-                    # follow). Stay in HALF_CLOSED_LOCAL.
-                    pass
-                else:
-                    s.state = StreamState.OPEN()
+            # sec 5.1.2: refuse a stream past the concurrency limit we
+            # advertised instead of serving it.
+            if (
+                not self.is_client
+                and f.header.stream_id not in self.streams
+                and self.max_concurrent_streams > 0
+                and self._active_stream_count() >= self.max_concurrent_streams
+            ):
+                out.append(
+                    self._rst_stream_frame(
+                        f.header.stream_id,
+                        Http2ErrorCode.REFUSED_STREAM().value,
+                    )
+                )
+                return out^
+            var frag: List[UInt8]
+            try:
+                frag = self._strip_pad_and_priority(f, True)
+            except:
+                return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
+            self.header_block = frag^
+            self.header_block_end_stream = f.header.flags.has(
+                FrameFlags.END_STREAM()
+            )
+            var s = self._ensure_stream(f.header.stream_id)
+            s.continuation_count = 0
             self._put_stream(s^)
-            return out^
+            if not f.header.flags.has(FrameFlags.END_HEADERS()):
+                # Block stays open; only CONTINUATION on this stream may
+                # follow (sec 6.10).
+                self.continuing_stream = f.header.stream_id
+                return out^
+            return self._commit_header_block(f.header.stream_id)
+
+        if ft == FrameType.CONTINUATION().value:
+            # Reaching here means no block is open: a CONTINUATION that
+            # matched ``continuing_stream`` was handled above.
+            return self._conn_error(Http2ErrorCode.PROTOCOL_ERROR().value)
 
         if ft == FrameType.DATA().value:
             if f.header.stream_id == 0:
@@ -748,49 +1047,6 @@ struct Connection(Copyable, Defaultable, Movable):
 
         if ft == FrameType.PRIORITY().value:
             # Accept and ignore (RFC 9113 §5.3.2 deprecated).
-            return out^
-
-        if ft == FrameType.CONTINUATION().value:
-            if f.header.stream_id == 0:
-                raise Error("h2: CONTINUATION on stream 0")
-            if f.header.stream_id not in self.streams:
-                raise Error("h2: CONTINUATION on unknown stream")
-            var hdrs = self.hpack_decoder.decode(Span[UInt8, _](f.payload))
-            var s = self.streams[f.header.stream_id].copy()
-            # CONTINUATION flood cap (CVE-2024-27316): bound the number
-            # of CONTINUATION frames per header block.
-            s.continuation_count += 1
-            if s.continuation_count > _CONTINUATION_FRAME_CAP:
-                out.append(
-                    self._rst_stream_frame(
-                        f.header.stream_id,
-                        Http2ErrorCode.ENHANCE_YOUR_CALM().value,
-                    )
-                )
-                s.state = StreamState.CLOSED()
-                self._put_stream(s^)
-                return out^
-            var cap = self._header_list_cap()
-            for j in range(len(hdrs)):
-                s.header_list_bytes += (
-                    hdrs[j].name.byte_length()
-                    + hdrs[j].value.byte_length()
-                    + 32
-                )
-                if s.header_list_bytes > cap:
-                    out.append(
-                        self._rst_stream_frame(
-                            f.header.stream_id,
-                            Http2ErrorCode.ENHANCE_YOUR_CALM().value,
-                        )
-                    )
-                    s.state = StreamState.CLOSED()
-                    self._put_stream(s^)
-                    return out^
-                s.headers.append(hdrs[j].copy())
-            if f.header.flags.has(FrameFlags.END_HEADERS()):
-                s.headers_complete = True
-            self._put_stream(s^)
             return out^
 
         # Unknown frame types MUST be ignored (RFC 9113 §4.1).
