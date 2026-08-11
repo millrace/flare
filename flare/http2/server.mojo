@@ -79,11 +79,17 @@ comptime _H2_DEFAULT_MAX_FRAME_SIZE: Int = 16384
 """RFC 9113 §6.5.2 mandates 16384 (2^14) as both the protocol
 default and the minimum any peer must accept."""
 
-comptime _H2_DEFAULT_MAX_HEADER_LIST_SIZE: Int = 8192
-"""RFC 9113 §6.5.2 default is unbounded; flare ships 8192 (8 KiB)
-because every production proxy / origin we'd reasonably ship behind
-caps the header list aggressively to defang request smuggling +
-header pollution shaped at h2."""
+comptime _H2_DEFAULT_MAX_HEADER_LIST_SIZE: Int = 16384
+"""RFC 9113 §6.5.2 default is unbounded; flare caps it because every
+production proxy / origin we'd reasonably ship behind caps the header
+list aggressively to defang request smuggling + header pollution
+shaped at h2.
+
+16 KiB rather than the 8 KiB flare shipped through v0.9: the size is
+accounted with RFC 7541 §4.1's +32 bytes per field, so 8 KiB rejected
+header lists that every other implementation accepts -- h2spec's
+CONTINUATION test sends one at 8269 accounted bytes. 16 KiB matches
+hyper's default and still bounds the accumulation hard."""
 
 comptime _H2_DEFAULT_HEADER_TABLE_SIZE: Int = 4096
 """RFC 7541 §4.2 default for the HPACK dynamic table size."""
@@ -282,6 +288,14 @@ struct Http2Connection(Defaultable, Movable):
     individual fields per-stream (e.g. the
     ``max_header_list_size`` cap when applying inbound HEADERS)
     without threading it through every per-frame call site."""
+    var pending_body: Dict[Int, List[UInt8]]
+    """Response bytes for a stream that the send window would not take.
+
+    RFC 9113 sec 6.9: a peer that advertises a small window must not be
+    handed more than it asked for. Whatever does not fit waits here and
+    is re-pumped when a WINDOW_UPDATE arrives."""
+    var pending_pos: Dict[Int, Int]
+    """Offset already flushed out of the matching ``pending_body``."""
 
     def __init__(out self):
         """Default-construct with :class:`Http2Config` defaults.
@@ -296,6 +310,8 @@ struct Http2Connection(Defaultable, Movable):
         self.outbox = List[UInt8]()
         self.greeted = False
         self.config = Http2Config()
+        self.pending_body = Dict[Int, List[UInt8]]()
+        self.pending_pos = Dict[Int, Int]()
 
     @staticmethod
     def with_config(var config: Http2Config) raises -> Http2Connection:
@@ -515,6 +531,9 @@ struct Http2Connection(Defaultable, Movable):
                 var rb = encode_frame(reply[i])
                 for j in range(len(rb)):
                     self.outbox.append(rb[j])
+            # A WINDOW_UPDATE in that frame may have unparked response
+            # bytes; nothing else re-drives them.
+            self.pump_pending()
 
     def drain(mut self) -> List[UInt8]:
         """Return all queued outbound bytes and clear the buffer."""
@@ -608,6 +627,34 @@ struct Http2Connection(Defaultable, Movable):
         """
         if sid not in self.conn.streams:
             raise Error("h2: emit_response on unknown stream")
+        # Window-aware buffered response (RFC 9113 sec 6.9 / sec 4.2): a
+        # peer that advertised a 1-byte window gets 1 byte now and the
+        # rest on its WINDOW_UPDATE, and a body past max_frame_size is
+        # split rather than sent as one oversized frame.
+        #
+        # Only taken when the body does not fit; the common case keeps
+        # the one-shot framing below, END_STREAM riding the single DATA
+        # frame, so the wire shape is unchanged for ordinary responses.
+        if len(resp.trailers._keys) == 0 and len(resp.body) > 0:
+            var st = self.conn.streams[sid].copy()
+            var budget = (
+                self.conn.send_window if self.conn.send_window
+                < st.send_window else st.send_window
+            )
+            var too_big = (
+                len(resp.body) > budget
+                or len(resp.body) > self.conn.max_frame_size
+            )
+            if too_big:
+                var body = resp.body.copy()
+                self.begin_stream_response(sid, resp^)
+                var n = self.queue_stream_data(sid, Span[UInt8, _](body))
+                if n < len(body):
+                    self.pending_body[sid] = body^
+                    self.pending_pos[sid] = n
+                    return  # open until the remainder drains
+                self.end_stream_response(sid, List[String](), List[String]())
+                return
         # Build HpackHeader list from the response's HeaderMap.
         # HTTP/2 forbids ``Connection`` / ``Transfer-Encoding`` / ``Keep-Alive``
         # / ``Proxy-Connection`` / ``Upgrade`` per RFC 9113 §8.2.2.
@@ -663,6 +710,31 @@ struct Http2Connection(Defaultable, Movable):
         var s = self.conn.streams[sid].copy()
         s.state = StreamState.CLOSED()
         self.conn.streams[sid] = s^
+
+    def pump_pending(mut self) raises:
+        """Flush response bytes parked by a closed send window.
+
+        Called after every inbound frame: a WINDOW_UPDATE is what
+        unblocks them, and nothing else re-drives the stream."""
+        if len(self.pending_body) == 0:
+            return
+        var sids = List[Int]()
+        for entry in self.pending_body.items():
+            sids.append(entry.key)
+        for i in range(len(sids)):
+            var sid = sids[i]
+            var body = self.pending_body[sid].copy()
+            var pos = self.pending_pos[sid]
+            var rest = List[UInt8](capacity=len(body) - pos)
+            for k in range(pos, len(body)):
+                rest.append(body[k])
+            var n = self.queue_stream_data(sid, Span[UInt8, _](rest))
+            if pos + n >= len(body):
+                _ = self.pending_body.pop(sid)
+                _ = self.pending_pos.pop(sid)
+                self.end_stream_response(sid, List[String](), List[String]())
+            else:
+                self.pending_pos[sid] = pos + n
 
     # ── WebSocket-over-HTTP/2 bridge (RFC 8441) ────────────────────────────
 
