@@ -482,7 +482,7 @@ struct WsAutoClient(Movable):
             var n = tls.read(scratch.unsafe_ptr(), 4096)
             if n <= 0:
                 break
-            # Mojo 1.0.0b1 destructor scheduling drops the temporary
+            # Destructor scheduling drops the temporary
             # ``scratch[:n]`` List before ``h2.feed`` returns, letting
             # the heap reuse the storage and double the parsed bytes
             # on the next ``tls.read`` (same shape as the fix in

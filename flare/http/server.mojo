@@ -1176,10 +1176,11 @@ struct HttpServer(Movable):
         # the scheduler's own shutdown path is the normal exit).
         #
         # Routes through ``libc_nanosleep_ms`` (50ms) rather than
-        # the inferred-signature ``usleep`` because the # pinned Mojo nightly mis-passes the c_uint argument and
-        # ends up sleeping ~50 seconds instead of 50 ms — the
-        # rolled-own FFI in ``flare.runtime._libc_time`` has
-        # explicit Int32 / pointer-to-Int64 signatures.
+        # the inferred-signature ``usleep`` because Mojo mis-passes
+        # the c_uint argument and ends up sleeping ~50 seconds
+        # instead of 50 ms — the rolled-own FFI in
+        # ``flare.runtime._libc_time`` has explicit Int32 /
+        # pointer-to-Int64 signatures.
         while not self._stopping and scheduler.is_running():
             # Coarse wait: the HttpServer loop on the main thread
             # doesn't need to be responsive the way the worker reactor

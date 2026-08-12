@@ -373,9 +373,9 @@ def _dict_get_list(
 
 
 def _dict_set_string(mut d: Dict[String, String], name: String, value: String):
-    """``Dict[String, String].__setitem__`` is non-raising on the
-    pinned Mojo nightly; this helper exists for symmetry with
-    ``_dict_get_string`` so renderer call sites read uniformly."""
+    """``Dict[String, String].__setitem__`` is non-raising; this
+    helper exists for symmetry with ``_dict_get_string`` so renderer
+    call sites read uniformly."""
     d[name.copy()] = value.copy()
 
 
@@ -578,9 +578,8 @@ def _parse_segment(
 
 
 def _list(s: String) -> List[String]:
-    """Build a single-element ``List[String]`` literal — Mojo
-    nightly's list-literal-from-comprehension story isn't
-    consistent yet."""
+    """Build a single-element ``List[String]`` literal — Mojo's
+    list-literal-from-comprehension story isn't consistent yet."""
     var out = List[String]()
     out.append(s)
     return out^

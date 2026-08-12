@@ -34,8 +34,8 @@ def test_resolve_async_empty_host_raises() raises:
 
 def test_resolve_async_preflipped_cancel_raises() raises:
     # The flipped cell is passed across a function-call boundary into
-    # resolve_async; on Linux x86_64 the pinned Mojo nightly does not
-    # propagate that flip through the new Cancel value (documented in
+    # resolve_async; on Linux x86_64 Mojo does not propagate that
+    # flip through the new Cancel value (documented in
     # flare/http/cancel.mojo + gated identically in test_block_in_pool).
     if not CompilationTarget.is_macos():
         print(" [SKIP] Mojo nightly Cancel-across-boundary anomaly on Linux")

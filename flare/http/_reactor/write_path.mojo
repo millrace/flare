@@ -114,9 +114,9 @@ def serialize_static_into(
     write_pos = 0
     # Pick the keep-alive or close variant by branch rather than via
     # a conditional expression. ``List[UInt8]`` is not
-    # ``ImplicitlyCopyable`` under current Mojo, so binding the
-    # selected variant to a single ``var`` would force an implicit
-    # copy that the compiler now rejects. Splitting the branch
+    # ``ImplicitlyCopyable``, so binding the selected variant to a
+    # single ``var`` would force an implicit copy that the compiler
+    # rejects. Splitting the branch
     # keeps both arms in pure borrow + ``unsafe_ptr()`` form and
     # avoids any copy at all.
     var n: Int

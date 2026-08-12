@@ -323,10 +323,9 @@ def _v2_sig_byte(i: Int) -> UInt8:
     Literal bytes (verbatim from §2.2): ``0x0D 0x0A 0x0D 0x0A 0x00
     0x0D 0x0A 0x51 0x55 0x49 0x54 0x0A`` — i.e. ``\\r\\n\\r\\n\\x00
     \\r\\nQUIT\\n``. Returned per-index instead of materialising a
-    ``List[UInt8]`` because Mojo ``1.0.0b1.dev2026042717`` rejects
-    ``comptime`` lists at runtime (the ``List[UInt8]`` is not
-    ``ImplicitlyCopyable``); a 12-iteration index loop is the
-    cheapest correct shape on this nightly.
+    ``List[UInt8]`` because a ``comptime`` list is not
+    ``ImplicitlyCopyable`` at runtime; a 12-iteration index loop
+    is the cheapest correct shape.
     """
     if i == 0:
         return UInt8(0x0D)

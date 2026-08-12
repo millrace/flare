@@ -31,7 +31,7 @@ Pieces:
 Typed-state model
 -----------------
 
-Mojo (1.0.0b2) has neither parameterized traits nor associated types,
+Mojo has neither parameterized traits nor associated types,
 so a single ``StreamHandler`` cannot carry a per-handler "state type
 S" or "per-connection type U" in its method signatures and still let
 the method *body* read those typed fields. The model that is both

@@ -49,9 +49,9 @@ struct ResponseImpl[B: Body = InlineBody](Movable):
     UX) but does not change the runtime layout. The body is always carried
     by the erased carrier fields ``body`` (buffered bytes) or
     ``body_stream`` (a boxed streaming source), which is the single
-    representation every wire driver consumes. On the pinned
-    ``mojo == 1.0.0b2`` a bare defaulted struct name is not concrete, so
-    the ergonomic public spelling is the ``comptime Response =
+    representation every wire driver consumes. Because a bare
+    defaulted struct name is not itself concrete, the ergonomic
+    public spelling is the ``comptime Response =
     ResponseImpl[InlineBody]`` alias below; all existing call sites keep
     working unchanged through it. Typed authoring builds
     ``ResponseImpl[SomeBody]`` and calls :meth:`lower` at the wire
@@ -298,8 +298,8 @@ comptime Response = ResponseImpl[InlineBody]
 """The concrete, body-type-erased HTTP response every wire driver consumes.
 
 This is the ergonomic public spelling of :struct:`ResponseImpl` bound to
-:struct:`InlineBody`. On the pinned ``mojo == 1.0.0b2`` a bare defaulted
-struct name (``ResponseImpl``) is not itself concrete, so ``Response`` is
+:struct:`InlineBody`. Because a bare defaulted struct name
+(``ResponseImpl``) is not itself concrete, ``Response`` is
 provided as a ``comptime`` alias -- all existing ``Response(...)`` /
 ``-> Response`` / ``Optional[Response]`` sites resolve through it
 unchanged. Handlers that want the typed authoring surface build a

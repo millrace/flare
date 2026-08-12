@@ -108,9 +108,8 @@ Bad Request** with the error message in the body; the handler's
 ``serve`` is never called on a bad extraction.
 """
 
-# reflect[T] is auto-imported via the prelude in Mojo 1.0.0b2
-# (replaces the legacy struct_field_count free function and the
-# __struct_field_ref builtin; field access is reflect[T].field_ref[idx]).
+# reflect[T] is auto-imported via the prelude; field access is
+# reflect[T].field_ref[idx].
 from std.builtin.rebind import trait_downcast
 from std.collections import Optional
 from json import loads, Value, Null

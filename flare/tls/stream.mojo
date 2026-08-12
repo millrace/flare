@@ -5,7 +5,7 @@ activation via ``flare/tls/ffi/build.sh`` and installed to
 ``$CONDA_PREFIX/lib/`` when using the packaged distribution.
 
 Opaque C pointers (SSL_CTX*, SSL*) are held as ``Int`` values since Mojo
-nightly requires all ``UnsafePointer`` type parameters to have an explicit
+requires all ``UnsafePointer`` type parameters to have an explicit
 ``mut`` parameter which is not inferable for ``NoneType``. Using ``Int``
 (64-bit on all supported platforms) stores pointer values safely.
 
@@ -375,8 +375,8 @@ def _build_ssl_ctx(imm lib: OwnedDLHandle, config: TlsConfig) raises -> Int:
     _ = _do_ssl_ctx_set_verify_peer(lib, ctx, c_int(config.verify))
 
     # Skip CA bundle load in insecure mode — see the matching comment in
-    # flare/tls/config.mojo's module docstring for the Mojo 0.26
-    # String-concat aliasing quirk that motivates the gate.
+    # flare/tls/config.mojo's module docstring for the String-concat
+    # aliasing quirk that motivates the gate.
     if config.verify != TlsVerify.NONE:
         if _do_ssl_ctx_load_ca_bundle(lib, ctx, config.ca_bundle) != 0:
             var err = _c_err(lib)
@@ -450,7 +450,7 @@ struct TlsStream(Movable, Readable):
     performed in ``connect``; all subsequent I/O is routed through OpenSSL.
 
     Opaque C pointers (``SSL_CTX*``, ``SSL*``) are stored as ``Int`` values —
-    the canonical approach in Mojo nightly for FFI-managed handles.
+    the canonical approach in Mojo for FFI-managed handles.
 
     The connection is shut down with a ``close_notify`` alert when destroyed
     or when ``close()`` is called explicitly.

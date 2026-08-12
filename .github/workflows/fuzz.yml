@@ -20,8 +20,7 @@ jobs:
         # 2.35). On the latest ``ubuntu-latest`` runner image
         # (``ubuntu-24.04 / 20260413.86.1``, kernel 6.17.0, glibc
         # 2.39) the ``libKGENCompilerRTShared.so`` runtime crash that
-        # was previously fixed in the pinned Mojo nightly
-        # (``mojo == 1.0.0b1.dev2026042717``) reproduces again — the
+        # was previously fixed reproduces again — the
         # fuzzer's tight mutate / JIT-execute loop trips it on the
         # very first run, before any harness work happens (see run
         # 25351119595). ``pixi run tests`` on the same image is

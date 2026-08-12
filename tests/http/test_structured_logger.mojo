@@ -17,7 +17,7 @@ Coverage:
 Note: ``StructuredLogger.serve`` writes to stdout via ``print``;
 we test the line-builder helpers directly to avoid coupling to
 stdout-capture machinery (which doesn't exist in the standard
-``TestSuite`` harness on this Mojo nightly). The serve path is
+``TestSuite`` harness). The serve path is
 covered in the example by inspection.
 """
 

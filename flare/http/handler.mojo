@@ -373,8 +373,8 @@ trait CancelHandler(Deinitable, Movable):
     The handler reads ``cancel.cancelled()`` between expensive steps
     and returns early when the cell flips.
 
-    Mojo as of .dev2026042205 cannot express "trait B refines
-    trait A by adding an extra parameter to the same method," so
+    Mojo cannot express "trait B refines trait A by adding an
+    extra parameter to the same method," so
     ``CancelHandler`` is a sibling trait to ``Handler`` rather than a
     subtype. Adapter ``WithCancel[H: Handler]`` forwards a plain
     ``Handler`` to a ``CancelHandler`` shape (ignoring ``cancel``);

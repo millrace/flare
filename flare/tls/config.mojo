@@ -10,7 +10,7 @@ picks up OpenSSL's compiled-in ``OPENSSLDIR``. conda-forge's OpenSSL
 sets ``OPENSSLDIR=$PREFIX/ssl``, so the pixi-managed ``cacert.pem`` is
 discovered automatically without flare ever constructing a
 ``CONDA_PREFIX + "/ssl/cacert.pem"`` string in Mojo. This sidesteps a
-Mojo 0.26 ``String + String`` aliasing bug where two sequential
+``String + String`` aliasing bug where two sequential
 ``getenv("CONDA_PREFIX") + literal`` concats can share backing memory,
 clobbering the CA path mid-TLS-handshake (observed under strace as
 ``SSL_CTX_load_verify_locations`` being called with

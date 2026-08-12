@@ -224,8 +224,7 @@ struct Cache[
     :class:`flare.http.Metrics` already use. The cell is leaked
     at process exit (worker pthreads live the lifetime of the
     server, so nothing meaningful to free); a future
-    ``ArcPointer`` upgrade can swap the leak for ref-counting
-    once nightly surfaces a stable shared-pointer type.
+    ``ArcPointer`` upgrade can swap the leak for ref-counting.
 
     Parameters:
         Inner: the inner handler.

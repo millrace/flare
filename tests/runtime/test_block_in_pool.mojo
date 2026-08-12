@@ -34,13 +34,13 @@ from flare.http import Cancel, CancelCell, CancelReason
 # On Linux x86_64 (the GH ubuntu-latest runner) the same path stops
 # raising — ``cancel.cancelled()`` returns False inside ``block_in_pool``
 # even though ``cell.flip(...)`` was called in the parent scope. The
-# documented Mojo nightly anomaly — see ``flare/http/cancel.mojo``'s
+# documented Mojo anomaly — see ``flare/http/cancel.mojo``'s
 # module docstring — is the leading suspect: ``Cancel`` is a single-
 # field ``struct ... { var _addr: Int }`` and ``cell.handle()`` returns
 # a ``Cancel(self._addr)``; one of the steps between the assignment to
 # ``_addr`` in ``handle()``, the value-copy at the call site, and the
 # read in ``Cancel.cancelled()`` is being optimised differently per
-# target on the pinned nightly. The ``Int``-sized cell + heap-stable
+# target. The ``Int``-sized cell + heap-stable
 # address pattern is the workaround that survives macOS; the same
 # pattern is not enough on Linux.
 #
@@ -178,8 +178,8 @@ def test_post_flight_cancel_with_pre_flipped_cell_raises() raises:
     deferred per the existing module's documentation.
 
     macOS-only for the same reason the three pre-flip tests
-    above are macOS-only: the Mojo nightly's cross-platform
-    behaviour for ``Cancel`` value-copy across a function-call
+    above are macOS-only: Mojo's cross-platform behaviour for
+    ``Cancel`` value-copy across a function-call
     boundary is not yet reliable on Linux x86_64.
     """
     if not _is_macos():

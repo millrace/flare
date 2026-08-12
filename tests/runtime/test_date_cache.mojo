@@ -7,9 +7,8 @@ from flare.runtime import DateCache, libc_nanosleep_ms
 
 def _slice_str(s: String, start: Int, end: Int) -> String:
     """Helper: build a fresh String from the byte range [start, end)
-    of ``s``. The Mojo nightly we're pinned to does not expose
-    byte-positional slicing through ``s[a:b]``; callers go through
-    this byte-level helper instead.
+    of ``s``. Mojo does not expose byte-positional slicing through
+    ``s[a:b]``; callers go through this byte-level helper instead.
     """
     var sp = s.unsafe_ptr()
     var buf = List[UInt8]()

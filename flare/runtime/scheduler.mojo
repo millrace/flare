@@ -222,8 +222,8 @@ struct Scheduler[F: Frontend & Copyable](Movable):
 
     # Workers are stored in a heap-allocated block of exactly
     # ``num_workers`` slots rather than a ``List[ThreadHandle]``.
-    # ``List[T]`` in Mojo 0.26.3 still requires ``T: Copyable``, but
-    # ``ThreadHandle`` is *intentionally* move-only: ``pthread_t`` is
+    # ``List[T]`` requires ``T: Copyable``, but ``ThreadHandle`` is
+    # *intentionally* move-only: ``pthread_t`` is
     # a unique OS resource and copying the handle would let the same
     # thread be ``pthread_join``'d twice, which is UB per POSIX. So
     # we own the memory directly here instead.
@@ -271,7 +271,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
 
     def __init__(out self):
         """Build an empty scheduler; use ``Scheduler.start`` instead."""
-        # b2: UnsafePointer is non-nullable; build C NULL from a runtime 0.
+        # UnsafePointer is non-nullable; build C NULL from a runtime 0.
         var null_addr = 0
         self._workers_ptr = UnsafePointer[ThreadHandle, MutUntrackedOrigin](
             unsafe_from_address=null_addr
@@ -398,7 +398,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
             use_reuseport_workers = False
 
         var listener_fd: Int = -1
-        # b2: UnsafePointer is non-nullable; build C NULL from a runtime 0.
+        # UnsafePointer is non-nullable; build C NULL from a runtime 0.
         var null_addr = 0
         var listener_ptr = UnsafePointer[TcpListener, MutUntrackedOrigin](
             unsafe_from_address=null_addr
@@ -576,7 +576,7 @@ struct Scheduler[F: Frontend & Copyable](Movable):
                         pass
                     s._workers_ptr.unsafe_offset(j).unsafe_deinit_pointee()
                 _scheduler_free_raw(s._workers_ptr.unsafe_bitcast[UInt8]())
-                # b2: UnsafePointer is non-nullable; C NULL from a runtime 0.
+                # UnsafePointer is non-nullable; C NULL from a runtime 0.
                 var null_addr = 0
                 s._workers_ptr = UnsafePointer[
                     ThreadHandle, MutUntrackedOrigin

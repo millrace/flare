@@ -140,9 +140,9 @@ def _send_h2_over_tls(
                 "HttpClient(h2): peer closed connection mid-response on stream "
                 + String(sid)
             )
-        # Mojo 1.0.0b1: name the slice's lifetime via ``buf``
-        # itself; ``buf[:n]`` was an anonymous temporary whose
-        # storage could be freed before ``feed`` returned.
+        # Name the slice's lifetime via ``buf`` itself; ``buf[:n]``
+        # was an anonymous temporary whose storage could be freed
+        # before ``feed`` returned.
         conn.feed(Span[UInt8, _](unsafe_ptr=buf.unsafe_ptr(), length=n))
         var ack_bytes = conn.drain()
         if len(ack_bytes) > 0:
@@ -220,9 +220,8 @@ def _send_h2_over_tcp(
                 " stream "
                 + String(sid)
             )
-        # Mojo 1.0.0b1 Span lifetime: same fix as the h2-over-tls
-        # path -- bind to the named ``buf`` rather than the
-        # slice temporary.
+        # Span lifetime: same fix as the h2-over-tls path -- bind
+        # to the named ``buf`` rather than the slice temporary.
         conn.feed(Span[UInt8, _](unsafe_ptr=buf.unsafe_ptr(), length=n))
         var ack_bytes = conn.drain()
         if len(ack_bytes) > 0:
@@ -393,9 +392,9 @@ def _send_h2c_via_upgrade(
                 "HttpClient(h2c-upgrade): peer closed connection mid-response"
                 " on stream 1"
             )
-        # Mojo 1.0.0b1 stricter destructor scheduling: ``buf[:n]``
-        # allocated a temporary ``List`` whose backing storage was
-        # destroyed before ``feed`` returned, which the kernel /
+        # Stricter destructor scheduling: ``buf[:n]`` allocated a
+        # temporary ``List`` whose backing storage was destroyed
+        # before ``feed`` returned, which the kernel /
         # heap could re-use, doubling the response body on the
         # next ``read`` slice. Construct the ``Span`` directly
         # over ``buf``'s backing storage so the lifetime is the

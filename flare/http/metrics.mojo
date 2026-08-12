@@ -32,8 +32,7 @@ contract — Caddy, nginx-prometheus-exporter, Envoy stats):
 
 Concurrency note:
 
-The current Mojo nightly (``1.0.0b1.dev2026042717``) ships
-``Atomic[DType.*]`` cells but they are NOT ``Copyable``, so they
+Mojo's ``Atomic[DType.*]`` cells are NOT ``Copyable``, so they
 can't live inside a ``List`` / ``InlineArray``. Putting 160
 ``Atomic`` cells as separate struct fields would explode the
 declaration; an ``UnsafePointer[Atomic, ...]`` heap allocation
@@ -49,9 +48,9 @@ worker threads, no atomic increment required.
 For multi-worker aggregation (i.e. exposing a process-wide
 ``/metrics``), caller wires a small aggregator that snapshots
 every worker's registry and concatenates the rendered text. A
-follow-up will swap the per-cell type to ``Atomic`` once the
-nightly lifts the ``Copyable`` requirement on ``Atomic`` (or
-once we land an ``UnsafePointer``-backed ``AtomicArray``).
+follow-up will swap the per-cell type to ``Atomic`` once it
+drops the ``Copyable`` requirement (or once we land an
+``UnsafePointer``-backed ``AtomicArray``).
 
 Cardinality discipline:
 
@@ -500,8 +499,7 @@ struct Metrics[Inner: Handler & Copyable & Defaultable](
     mutate the cell through it. The cell is leaked at process
     exit (the worker pthread lives the lifetime of the server,
     so nothing meaningful to free); a future ``ArcPointer``
-    upgrade can swap the leak for ref-counting once the nightly
-    surfaces a stable shared-pointer type.
+    upgrade can swap the leak for ref-counting.
 
     Pair with a small handler that returns
     ``Pool[MetricsRegistry].get_ptr(metrics.registry_addr)[].render()``

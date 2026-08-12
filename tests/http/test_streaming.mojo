@@ -177,8 +177,8 @@ def test_chunked_body_drain_runs_to_completion_with_never_cancel() raises:
 
 def main() raises:
     # Explicit dispatch rather than ``TestSuite.discover_tests`` here:
-    # on Mojo 1.0.0b2 the ``TestSuite.run()`` report-formatting path
-    # intermittently trips a SIGSEGV for this module -- an
+    # the ``TestSuite.run()`` report-formatting path intermittently
+    # trips a SIGSEGV for this module -- an
     # out-of-bounds ``memcpy`` while concatenating the report String
     # (``String._iadd`` at string.mojo:1034, via
     # ``TestSuiteReport.write_to`` -> ``_writeln`` in

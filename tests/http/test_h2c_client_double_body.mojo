@@ -1,12 +1,12 @@
 """Regression: h2c-via-Upgrade client must not double-count the
 response body when the server's reply lands in a single recv blob.
 
-The bug (Mojo `1.0.0b1` Span-lifetime tightening): the client read
-loop in :func:`flare.http.client._h2c_upgrade_request_via_stream`
-fed each recv chunk into the in-process HTTP/2 decoder via
+The bug (Span-lifetime tightening): the client read loop in
+:func:`flare.http.client._h2c_upgrade_request_via_stream` fed each
+recv chunk into the in-process HTTP/2 decoder via
 ``Span[UInt8, _](buf[:n])``. ``buf[:n]`` allocates a temporary
 ``List`` whose backing storage was destroyed before
-``h2_conn.feed`` returned under 1.0.0b1's stricter destructor
+``h2_conn.feed`` returned under Mojo's stricter destructor
 scheduling, so the heap could re-publish the slot to the same
 ``read`` call's next iteration -- doubling the response body the
 next time the loop appended into ``buf``. Fixed by feeding via
@@ -48,9 +48,9 @@ def _echo_method(req: Request) raises -> Response:
 
 def test_post_body_not_doubled() raises:
     """POST with a 12-byte body should round-trip ``POST:12``,
-    NOT ``POST:12POST:12``. Pre-fix this was a flaky failure on
-    Mojo 1.0.0b1 because the Span over the slice temporary read
-    freed storage on the second loop iteration."""
+    NOT ``POST:12POST:12``. Pre-fix this was a flaky failure
+    because the Span over the slice temporary read freed storage
+    on the second loop iteration."""
     var srv = HttpServer.bind(SocketAddr.localhost(0))
     var port = UInt16(srv.local_addr().port)
     var pid = fork_server(srv^, _echo_method)

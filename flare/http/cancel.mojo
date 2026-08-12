@@ -35,9 +35,9 @@ A ``CancelCell`` heap-allocates a single ``Int`` and owns its
 lifetime. ``Cancel`` carries the cell's address as an ``Int`` and
 rebuilds a fresh ``UnsafePointer[Int, MutUntrackedOrigin]`` per access
 — the same pattern the multicore ``Scheduler`` uses for the
-``stopping`` flag, and the only one that survives Mojo's current
-(current Mojo nightly) origin / aliasing model when passing the
-cancel handle across function-call boundaries. Reads / writes go
+``stopping`` flag, and the only one that survives Mojo's origin /
+aliasing model when passing the cancel handle across function-call
+boundaries. Reads / writes go
 through ``Atomic[DType.int64]`` acquire-load / release-store (the
 cell can be flipped from a peer thread on shutdown), which lowers to
 a plain ``mov`` on x86-64 (TSO) and to ``ldar`` / ``stlr`` on ARM64:

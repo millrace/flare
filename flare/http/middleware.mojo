@@ -290,10 +290,9 @@ def _flare_fs_access(read lib: OwnedDLHandle, addr: Int) raises -> c_int:
     frame, so Mojo's ASAP destructor cannot drop the handle (and thus
     ``dlclose`` it) before the resolved function pointer is invoked.
     Without this, ``_file_exists`` segfaults inside the runtime call
-    helper on macOS arm64 / Mojo nightly 1.0.0b1.dev2026042717: the
-    function-local ``OwnedDLHandle`` is reclaimed after ``get_function``
-    and the cached pointer dangles into unmapped memory by the time we
-    call it.
+    helper on macOS arm64: the function-local ``OwnedDLHandle`` is
+    reclaimed after ``get_function`` and the cached pointer dangles
+    into unmapped memory by the time we call it.
     """
     var fn_access = dl_sym[def(Int) thin abi("C") -> c_int](
         lib, "flare_fs_access"

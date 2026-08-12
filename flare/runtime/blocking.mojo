@@ -25,10 +25,10 @@ immediately.
 
 Why per-call rather than a singleton pool:
 
-1. Mojo's nightly does not allow module-level mutable ``var``s
-   (``error: global variables are not supported``) — verified
-   on the pinned nightly. Without that, a process-global pool
-   needs either a libc mmap-backed flag-byte indirection or an
+1. Mojo does not allow module-level mutable ``var``s
+   (``error: global variables are not supported``). Without
+   that, a process-global pool needs either a libc mmap-backed
+   flag-byte indirection or an
    API change that threads pool-state through every call site.
 2. Per-call ``pthread_create`` overhead is ~30-50 µs on Linux
    x86_64. The API targets millisecond-scale blocking work
@@ -89,8 +89,8 @@ Why pthread_join rather than poll-on-done-flag:
 A previous iteration of this implementation polled a heap
 ``done_flag`` byte with a 1 ms ``libc_usleep`` between checks
 to surface mid-flight cancel without waiting for ``work()``
-to complete. On the pinned Mojo nightly, ``libc_usleep`` hits
-the documented 1000-1500x multiplier when the calling thread
+to complete. ``libc_usleep`` hits the documented 1000-1500x
+multiplier when the calling thread
 participates in multi-threaded contexts (and a ``block_in_pool``
 caller is, by construction, multi-threaded — the worker pthread
 exists). That made the 1 ms poll behave like a 1 second poll
@@ -220,9 +220,9 @@ struct _Task[T: Deinitable & Movable](Movable):
     Address fields are stored as ``Int`` rather than typed
     pointers because ``UnsafePointer[T, MutUntrackedOrigin]``
     survives the cross-function-call boundary unreliably on
-    Linux x86_64 in the pinned Mojo nightly (the same anomaly
-    that gates the ``test_pre_flipped_cancel_skips_work_*``
-    sub-tests in ``tests/test_block_in_pool.mojo``). The
+    Linux x86_64 (the same anomaly that gates the
+    ``test_pre_flipped_cancel_skips_work_*`` sub-tests in
+    ``tests/test_block_in_pool.mojo``). The
     ``Int``-address-stash pattern is what flare's multicore
     ``Scheduler`` already uses for its ``stopping`` byte.
     """
@@ -311,7 +311,7 @@ def _block_thunk[
     # _Task allocation itself.
     task_ptr.free()
 
-    # b2: UnsafePointer is non-nullable; build C NULL from a runtime 0.
+    # UnsafePointer is non-nullable; build C NULL from a runtime 0.
     var null_addr = 0
     return UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=null_addr
@@ -419,8 +419,8 @@ def block_in_pool[
     # is synchronous, so the submitter needs to wait until the worker
     # has finished writing the result/error buffers anyway. Polling
     # would mean either burning CPU (busy-wait) or going through
-    # libc_usleep, which on this Mojo nightly hits the documented
-    # 1000-1500x multiplier in multi-threaded contexts and inflates
+    # libc_usleep, which hits the documented 1000-1500x multiplier
+    # in multi-threaded contexts and inflates
     # per-call latency from ~50 us to ~1 s.
     var task_opaque = UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=Int(task_ptr)

@@ -97,9 +97,9 @@ struct Request(Movable):
     ``params()`` / ``param()`` / ``has_param()``, never through the
     raw pointer.
 
-    Modeled as ``Optional[UnsafePointer[...]]`` (Mojo 1.0.0b1: pointers
-    are non-null by design; nullable storage uses ``Optional`` with the
-    null address as the niche value)."""
+    Modeled as ``Optional[UnsafePointer[...]]`` (pointers are non-null
+    by design; nullable storage uses ``Optional`` with the null
+    address as the niche value)."""
 
     def __init__(
         out self,

@@ -51,8 +51,8 @@ from std.memory import unsafe_memcpy
 def ascii_unchecked_string(span: Span[UInt8, _]) -> String:
     """Construct a ``String`` from ASCII bytes without UTF-8 validation.
 
-    ``String(unsafe_from_utf8=span)`` in Mojo 1.0.0b1 unconditionally
-    runs ``_is_valid_utf8_runtime`` even though the constructor name
+    ``String(unsafe_from_utf8=span)`` unconditionally runs
+    ``_is_valid_utf8_runtime`` even though the constructor name
     suggests it skips validation -- a ``perf record`` on the H1
     plaintext bench surfaced ``_is_valid_utf8_runtime`` as the
     single hottest user-space symbol (~5% of CPU). This helper

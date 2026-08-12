@@ -921,9 +921,9 @@ def run_uring_bufring_reactor_loop_shared[
             var ch_ptr = _conn_ptr_from_int(conns[conn_id])
 
             # Stage the kernel bytes into the conn's ``read_buf``
-            # before the handler runs (Mojo 1.0.0b1 Span-origin
-            # narrowing -- see the matching block in the
-            # single-worker variant for the full rationale).
+            # before the handler runs (Span-origin narrowing -- see
+            # the matching block in the single-worker variant for
+            # the full rationale).
             ch_ptr[].read_buf.reserve(len(ch_ptr[].read_buf) + n)
             for i in range(n):
                 ch_ptr[].read_buf.append(buf.unsafe_offset(i).unsafe_load())

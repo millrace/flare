@@ -5,8 +5,8 @@ at the integration level. The reactor's
 peer-FIN / deadline / drain mechanics that flip the underlying cell
 are exercised here at the handler-call boundary (the production
 usage path); direct unit-level "flip-then-read on a fresh cell"
-tests are intentionally narrow because the Mojo nightly's pointer-
-load-after-write through ``UnsafePointer[Int, MutUntrackedOrigin]``
+tests are intentionally narrow because Mojo's pointer-load-after-
+write through ``UnsafePointer[Int, MutUntrackedOrigin]``
 behaves non-deterministically when several short-lived cells are
 allocated in close succession (a bug the development cycle
 will revisit; the production usage path — single cell per

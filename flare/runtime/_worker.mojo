@@ -148,7 +148,7 @@ def _worker_entry[F: Frontend & Copyable](arg: _OpaquePtr) -> _OpaquePtr:
 
     # Ctx ownership: the Scheduler main thread destroys + frees every
     # ctx AFTER joining the worker, so we don't touch it here.
-    # b2: UnsafePointer is non-nullable; build C NULL from a runtime 0.
+    # UnsafePointer is non-nullable; build C NULL from a runtime 0.
     var null_addr = 0
     return UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=null_addr

@@ -1,9 +1,9 @@
 """Closure-shape + send-discipline contract tests.
 
 Pins the surface area of what callable shapes flare's public API
-accepts on Mojo ``1.0.0b1.dev2026042717`` so a future Mojo nightly
-that lifts the capturing-closure runtime-materialisation block can
-be detected by the same test file (the additional shapes will start
+accepts today, so a future Mojo release that lifts the
+capturing-closure runtime-materialisation block can be detected
+by the same test file (the additional shapes will start
 compiling).
 
 The contract documented in :doc:`docs/concurrency.md` and pinned
@@ -98,7 +98,7 @@ struct _ShapeHandlerStruct(Copyable, Handler, Movable):
 def test_shape_handler_struct_state_capture() raises:
     """A ``Handler`` struct closes over state via fields. This is
     the documented workaround for "capture by value into a closure"
-    on the pinned Mojo nightly."""
+    in Mojo."""
     var h = _ShapeHandlerStruct("hi")
     var req = Request(method=Method.GET, url="/p")
     var resp = h.serve(req)
@@ -135,7 +135,7 @@ def test_shape_block_in_pool_accepts_thin_closure() raises:
     which would fail to bind here. This guarantees nothing
     Mojo-managed crosses the pthread boundary as a hidden capture —
     the discipline that makes the per-call detached pthread shape
-    sound on a Mojo nightly without a compiler-checked Send trait.
+    sound without a compiler-checked Send trait.
     """
     var got = block_in_pool[Int](_shape_block_work, Cancel.never())
     assert_equal(got, 42)
@@ -155,7 +155,7 @@ def test_shape_block_in_pool_propagates_raise() raises:
 
 # ── Negative-shape contract: documented Mojo-blocked path ───────────────────
 #
-# These are the shapes that DO NOT compile on the pinned Mojo nightly
+# These are the shapes that DO NOT compile on Mojo
 # and are documented in ``.cursor/rules/development.mdc`` §
 # Mojo-blocked items remaining. We do not try to compile them in this
 # file; the test module itself is the documentation that we attempted
@@ -184,8 +184,8 @@ def test_shape_block_in_pool_propagates_raise() raises:
 #       ``capturing``, which can't satisfy the trait's plain ``serve``
 #       signature.
 #
-# When the next Mojo nightly bump lands, re-probe each of the four
-# shapes above and add the now-passing ones as positive tests here.
+# As Mojo evolves, re-probe each of the four shapes above and add
+# the now-passing ones as positive tests here.
 
 
 def main() raises:

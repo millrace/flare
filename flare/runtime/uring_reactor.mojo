@@ -299,7 +299,7 @@ struct UringReactor(Movable):
             # free() when these are sentinel) so the no-wakeup
             # mode is fully no-op on shutdown too.
             self._wake_fd = INVALID_FD
-            # b2: UnsafePointer is non-nullable; C NULL from a runtime 0.
+            # UnsafePointer is non-nullable; C NULL from a runtime 0.
             var null_addr = 0
             self._wake_buf = UnsafePointer[UInt8, MutUntrackedOrigin](
                 unsafe_from_address=null_addr

@@ -165,7 +165,7 @@ rather than to flatter it.
 
 The workload spec is `GET /plaintext` returning the 13-byte
 body `Hello, World!` with `Content-Type: text/plain`,
-HTTP/1.1 keep-alive on, no gzip, no logging. Mojo nightly is
+HTTP/1.1 keep-alive on, no gzip, no logging. Mojo is
 pinned per the `[dependencies]` block in
 [`pixi.toml`](../pixi.toml). Workload definitions live in
 [`benchmark/configs/throughput.yaml`](../benchmark/configs/throughput.yaml).
@@ -508,7 +508,7 @@ Reading order:
 2. **Throughput: flare_mc lands at 64 % of the throughput
    leader** (170 K vs actix_web 265 K), 77 % of hyper 221 K, 85 %
    of axum 201 K. The remaining gap is per-request handler /
-   serializer constant overhead — Mojo nightly's allocator and
+   serializer constant overhead — Mojo's allocator and
    Mojo's `String` ref-count discipline are still measurably
    heavier than Rust's `Bytes::from_static` + `&'static [u8]`
    path. The 0.17 % stdev shows the gap is a steady cost, not

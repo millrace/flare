@@ -211,7 +211,7 @@ struct UpstreamChunkSource(AsyncChunkSource, Movable):
     ``FrameMux`` as shared state and driving it directly; a future
     ``FrameMux.open`` returning a lightweight per-stream handle is the
     multiplexed evolution (it needs a shared-mux reference the fixed
-    trait method cannot carry in the current Mojo).
+    trait method cannot carry).
     """
 
     var conn: UnixStream

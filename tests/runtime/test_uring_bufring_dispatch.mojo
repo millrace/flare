@@ -2,13 +2,13 @@
 bytes into the conn's owned ``read_buf`` BEFORE invoking the
 handler.
 
-The bug (Mojo `1.0.0b1` destructor reorder + stricter Span origin
-tracking): the bufring dispatch in
+The bug (destructor reorder + stricter Span origin tracking): the
+bufring dispatch in
 :func:`flare.http._server_reactor_impl.run_uring_bufring_reactor_loop`
 used to forward a ``Span[UInt8, _](unsafe_ptr=buf, length=n)`` over kernel-
 shared pool memory directly into ``_drive_handler_after_buf_recv``,
 then recycle the buffer slot once the handler returned. Under
-1.0.0b1's stricter scheduling, the kernel could re-issue the same
+Mojo's stricter scheduling, the kernel could re-issue the same
 buffer slot to a fresh recv before the handler finished reading
 it, surfacing as an io_uring multishot recv that silently stalled
 on this kernel after ~240 round-trips.

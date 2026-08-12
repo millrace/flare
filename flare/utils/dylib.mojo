@@ -58,12 +58,11 @@ Public API
     ``"zlib"``, ``"brotli"``, ``"fs"``).
 
 ``dl_sym[FT](lib: OwnedDLHandle, name: String) raises -> FT``
-    Resolve a C-ABI function symbol. Mojo 1.0.0rc0's
-    ``OwnedDLHandle.get_function`` returns an origin-bound
-    ``_DLCallable`` that cannot be called or stored the way plain
-    function pointers used to be; ``get_symbol`` + address
-    reinterpret is the replacement every FFI call site across
-    :mod:`flare` now shares.
+    Resolve a C-ABI function symbol. ``OwnedDLHandle.get_function``
+    returns an origin-bound ``_DLCallable`` that cannot be called
+    or stored the way plain function pointers used to be;
+    ``get_symbol`` + address reinterpret is the replacement every
+    FFI call site across :mod:`flare` now shares.
 """
 
 from std.os import getenv
@@ -76,9 +75,9 @@ def dl_sym[
 ](lib: OwnedDLHandle, name: String) raises -> FT:
     """Look up a C-ABI function symbol as a plain callable value.
 
-    Replaces the pre-1.0.0rc0 ``lib.get_function[FT](name)`` idiom,
-    whose return type (an origin-bound ``_DLCallable``) can no
-    longer be invoked directly or stored across scopes.
+    Replaces the ``lib.get_function[FT](name)`` idiom, whose return
+    type (an origin-bound ``_DLCallable``) can no longer be invoked
+    directly or stored across scopes.
     """
     var opt = lib.get_symbol[FT](name)
     if not opt:

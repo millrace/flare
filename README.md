@@ -49,7 +49,7 @@ def main() raises:
 
 ```toml
 [workspace]
-channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
+channels = ["https://conda.modular.com/max", "conda-forge"]
 preview = ["pixi-build"]
 
 [dependencies]
@@ -60,7 +60,7 @@ flare = { git = "https://github.com/ehsanmok/flare.git", tag = "<latest-release>
 pixi install
 ```
 
-Requires [pixi](https://pixi.sh) (pulls Mojo nightly automatically). Pin to a [released tag](https://github.com/ehsanmok/flare/releases) for reproducible builds.
+Requires [pixi](https://pixi.sh) (pulls Mojo automatically). Pin to a [released tag](https://github.com/ehsanmok/flare/releases) for reproducible builds.
 
 To track unreleased work (breaking changes possible between tags):
 

@@ -1,8 +1,8 @@
 """libc time FFI.
 
-The Mojo nightly we're pinned to has an empirically-observed
-anomaly when calling ``usleep`` via the inferred-signature
-overload of ``external_call``: ``usleep(c_uint(1000))`` (1 ms
+Mojo has an empirically-observed anomaly when calling ``usleep``
+via the inferred-signature overload of ``external_call``:
+``usleep(c_uint(1000))`` (1 ms
 expected) sleeps for ~1.5 seconds, and ``usleep(c_uint(50_000))``
 (50 ms expected) sleeps for ~56 seconds. The exact root cause
 hasn't been pinned down but the symptoms are consistent with a
@@ -120,7 +120,7 @@ def libc_nanosleep_ms(ms: Int) -> Int:
     # Use the same MutUntrackedOrigin we already use elsewhere for
     # libc-facing pointers; this keeps the optimiser from reordering
     # loads through the ``ts`` page across the syscall boundary.
-    # b2: UnsafePointer is non-nullable; build C NULL from a runtime 0.
+    # UnsafePointer is non-nullable; build C NULL from a runtime 0.
     var null_addr = 0
     var null_rem = UnsafePointer[Int64, MutUntrackedOrigin](
         unsafe_from_address=null_addr

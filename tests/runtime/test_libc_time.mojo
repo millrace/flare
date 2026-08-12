@@ -1,7 +1,7 @@
 """Tests for the rolled-own libc time FFI.
 
-The pinned Mojo nightly has an empirically-observed anomaly when
-calling ``usleep`` via the inferred-signature overload of
+Mojo has an empirically-observed anomaly when calling ``usleep``
+via the inferred-signature overload of
 ``external_call``: a 1 ms ``usleep`` call sleeps ~1.5 seconds
 instead. ``flare.runtime._libc_time`` rolls its own bindings
 with explicit ``Int32`` / pointer-to-``Int64`` signatures and
@@ -99,7 +99,7 @@ def test_nanosleep_negative_is_noop() raises:
 def test_nanosleep_50ms_within_budget() raises:
     """50 ms request takes 25-200 ms wall-clock — the lower bound
     catches "no sleep happened" and the upper bound catches a
-    Mojo-nightly regression of the original anomaly."""
+    regression of the original anomaly."""
     var t0 = monotonic()
     var rc = libc_nanosleep_ms(50)
     var elapsed_ms = _elapsed_ms_since(t0)

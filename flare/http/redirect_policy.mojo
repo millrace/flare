@@ -70,9 +70,9 @@ from .url import Url
 struct RedirectMode:
     """Cross-origin policy as a small enum-shaped namespace.
 
-    Mojo doesn't ship an ``enum`` keyword on this nightly; we
-    expose the constants as ``Int`` aliases so callers can
-    pattern-match in plain ``if`` chains.
+    Mojo doesn't ship an ``enum`` keyword; the constants are exposed
+    as ``Int`` aliases so callers can pattern-match in plain ``if``
+    chains.
     """
 
     comptime FOLLOW_ALL: Int = 0

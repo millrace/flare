@@ -724,7 +724,7 @@ def _ws_worker_entry(arg: _OpaquePtr) -> _OpaquePtr:
             _handle_ws_connection(stream^, peer, ctx_ptr[].handler)
     except:
         pass
-    # b2: UnsafePointer is non-nullable; build C NULL from a runtime 0.
+    # UnsafePointer is non-nullable; build C NULL from a runtime 0.
     var null_addr = 0
     return UnsafePointer[UInt8, MutUntrackedOrigin](
         unsafe_from_address=null_addr

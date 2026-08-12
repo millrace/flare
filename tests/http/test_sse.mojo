@@ -172,7 +172,7 @@ def test_channel_idle_heartbeat_is_rate_limited() raises:
 
 
 def test_channel_cancel_short_circuits_to_none() raises:
-    """Mojo nightly note: cell.handle() returns a Cancel that holds
+    """Note: cell.handle() returns a Cancel that holds
     the cell's heap address; the cell must be kept alive past the
     ch.next(handle) call or Mojo's ASAP destructor frees the
     underlying Int and the read is UB. Pin via cell.reset() after

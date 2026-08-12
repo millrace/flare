@@ -10,11 +10,11 @@
 #      version it was built with and refuses to load against any other
 #      version (``Mojo package is incompatible: package version X is
 #      newer/older than compiler version Y``). That tightly couples the
-#      published .conda artifact to a specific Mojo nightly, so even a
+#      published .conda artifact to a specific Mojo version, so even a
 #      benign Mojo bump on the consumer side invalidates flare overnight.
 #   2. ``mojo package`` also adds an extra Mojo run during the recipe
-#      build, which a stale build cache or a pre-release Mojo nightly
-#      can break in ways unrelated to flare's own source.
+#      build, which a stale build cache or an unrelated Mojo toolchain
+#      issue can break in ways unrelated to flare's own source.
 # Source distribution sidesteps both: the .conda has zero ABI-locked
 # binary content from Mojo, only the source files plus the C++ FFI .so's.
 # The ``run: mojo == ...`` pin in the requirements still tells solvers
@@ -23,7 +23,7 @@
 # a binary blob.
 #
 # json source is inlined at the v0.1.5 git tag (whose own recipe pins
-# the same Mojo nightly) until json publishes to a public conda channel;
+# the same Mojo version) until json publishes to a public conda channel;
 # at that point the inline ``json`` source step + the ``cp -r json-src/json``
 # can be replaced with a ``host: [json]`` requirement.
 
