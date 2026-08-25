@@ -177,12 +177,13 @@ struct ResponseImpl[B: Body = InlineBody](Movable):
         """
         if len(self.body) == 0:
             return ""
-        # Build string from raw bytes.
-        # Mojo String stores UTF-8 internally; slice copy is safe.
-        var out = String(capacity=len(self.body) + 1)
-        for b in self.body:
-            out += chr(Int(b))
-        return out^
+        # Bulk-copy the body in ONE pass. The previous loop appended
+        # ``chr(Int(b))`` per byte, which was wrong twice over: ``chr``
+        # maps each byte to its *code point*, so any multi-byte UTF-8
+        # sequence was re-encoded as Latin-1 (a 2-byte "é" came back as
+        # two mojibake characters); and ``String +=`` reallocates, making
+        # the decode O(n^2) -- a 358 KB body took 20s+ at 100% CPU.
+        return String(unsafe_from_utf8=Span[UInt8, _](self.body))
 
     def json(self) raises -> Value:
         """Parse the body as JSON and return a ``json.Value``.

@@ -60,6 +60,32 @@ def test_response_text_ascii() raises:
     assert_equal(r.text(), "Hello")
 
 
+def test_response_text_utf8_multibyte() raises:
+    """A multi-byte UTF-8 body must round-trip, not decode as Latin-1.
+
+    Regression: decoding byte-by-byte via ``chr`` treats every byte as a
+    code point, so "café — 日本語" came back as mojibake with one
+    character per *byte* instead of per code point.
+    """
+    var src = String("café — 日本語 😀")
+    var body = List[UInt8]()
+    var bs = src.as_bytes()
+    for i in range(len(bs)):
+        body.append(bs[i])
+    var r = Response(status=200, body=body^)
+    assert_equal(r.text(), src)
+
+
+def test_response_text_large_body() raises:
+    """A large body decodes in full (and in one pass, not O(n^2))."""
+    var n = 256 * 1024
+    var body = List[UInt8](capacity=n)
+    for _ in range(n):
+        body.append(UInt8(ord("x")))
+    var r = Response(status=200, body=body^)
+    assert_equal(len(r.text().as_bytes()), n)
+
+
 # ── Status constants ───────────────────────────────────────────────────────────
 
 
