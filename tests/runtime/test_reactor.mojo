@@ -104,6 +104,49 @@ def test_unregister_unknown_fd_raises() raises:
         r.unregister(c_int(999))
 
 
+def test_unregister_after_close_succeeds() raises:
+    """Unregister() must tolerate an fd the owner already closed.
+
+    Ownership hand-off (e.g. a WebSocket upgrade passing the socket to a
+    connection object that closes it) can close the fd before the
+    reactor unregisters it. The kernel auto-removes a closed fd from the
+    epoll set, so ``EPOLL_CTL_DEL`` then fails with EBADF; kqueue's
+    ``EV_DELETE`` returns ENOENT. Both mean "no longer watched", so
+    neither is fatal and the bookkeeping entry must still be dropped.
+    """
+    var r = Reactor()
+    var listener = TcpListener.bind(SocketAddr.localhost(0))
+    var fd = listener._socket.fd
+    r.register(fd, UInt64(1), INTEREST_READ)
+    listener.close()
+    r.unregister(fd)
+    assert_false(r.is_registered(fd))
+    assert_equal(r.registered_count(), 0)
+
+
+def test_unregister_after_close_frees_fd_for_reuse() raises:
+    """A stale entry left by a failed DEL would poison the recycled fd.
+
+    The kernel hands out the lowest free descriptor, so the next socket
+    very often reuses the number just closed. If ``unregister`` bailed
+    out before ``_registered.pop(fd)``, ``register`` would reject that
+    recycled fd as already-registered and the new connection would be
+    dropped.
+    """
+    var r = Reactor()
+    var first = TcpListener.bind(SocketAddr.localhost(0))
+    var fd = first._socket.fd
+    r.register(fd, UInt64(1), INTEREST_READ)
+    first.close()
+    r.unregister(fd)
+
+    var second = TcpListener.bind(SocketAddr.localhost(0))
+    r.register(second._socket.fd, UInt64(2), INTEREST_READ)
+    assert_true(r.is_registered(second._socket.fd))
+    r.unregister(second._socket.fd)
+    second.close()
+
+
 def test_modify_unknown_fd_raises() raises:
     """Modify() on a never-registered fd raises."""
     var r = Reactor()

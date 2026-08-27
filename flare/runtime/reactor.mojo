@@ -403,7 +403,7 @@ struct Reactor(Movable):
             fd: Previously-registered fd.
 
         Raises:
-            NetworkError: If ``fd`` is not registered or the syscall fails.
+            NetworkError: If ``fd`` is not registered.
         """
         if fd not in self._registered:
             raise NetworkError("fd " + String(fd) + " is not registered", 0)
@@ -412,8 +412,21 @@ struct Reactor(Movable):
             var ev = stack_allocation[EPOLL_EVENT_SIZE, UInt8]()
             for i in range(EPOLL_EVENT_SIZE):
                 ev.unsafe_offset(i).unsafe_write(UInt8(0))
-            if _epoll_ctl(self._fd, EPOLL_CTL_DEL, fd, ev) < c_int(0):
-                raise _os_error("epoll_ctl DEL")
+            # EPOLL_CTL_DEL can legitimately fail here, and neither
+            # failure is fatal: if whoever took ownership of the fd has
+            # already closed it, the kernel auto-removed it from the
+            # epoll set and DEL returns EBADF; if it was never armed,
+            # DEL returns ENOENT. Both mean "this fd is no longer
+            # watched" -- exactly the post-state unregister() wants.
+            #
+            # Raising instead would skip the ``_registered.pop(fd)``
+            # below and leave a stale bookkeeping entry. Because the
+            # kernel hands out the lowest free descriptor, the very next
+            # accept(2) reuses that number and ``register`` then rejects
+            # it as already-registered, silently dropping the
+            # connection. The kqueue branch below already ignores its
+            # EV_DELETE result for exactly this reason.
+            _ = _epoll_ctl(self._fd, EPOLL_CTL_DEL, fd, ev)
         else:
             # Delete both possible filters. EV_DELETE on a non-registered
             # filter returns ENOENT, which we ignore.
