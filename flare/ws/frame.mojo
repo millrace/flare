@@ -495,10 +495,7 @@ struct WsFrame(Movable, Writable):
         """
         if not _is_valid_utf8(self.payload):
             raise WsProtocolError("TEXT frame payload is not valid UTF-8")
-        var s = String(capacity=len(self.payload) + 1)
-        for b in self.payload:
-            s += chr(Int(b))
-        return s^
+        return String(unsafe_from_utf8=Span[UInt8, _](self.payload))
 
     def write_to[W: Writer](self, mut writer: W):
         writer.write(
