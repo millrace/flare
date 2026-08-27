@@ -290,6 +290,19 @@ def test_encode_decode_roundtrip_text() raises:
     assert_equal(result.consumed, len(wire))
 
 
+def test_encode_decode_roundtrip_text_utf8() raises:
+    """A non-ASCII text frame must decode per code point, not per byte.
+
+    Covers 2-, 3- and 4-byte sequences: decoding byte-by-byte via ``chr``
+    maps each byte to its own code point, so the payload came back with
+    one character per byte.
+    """
+    var src = String("café 日本語 😀")
+    var wire = WsFrame.text(src).encode()
+    var result = WsFrame.decode_one(Span[UInt8, _](wire))
+    assert_equal(result.frame.text_payload(), src)
+
+
 def test_encode_decode_roundtrip_binary() raises:
     """Encode then decode a binary frame must reproduce all bytes."""
     var payload = List[UInt8](capacity=256)
