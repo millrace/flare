@@ -4,6 +4,7 @@ from json import loads, Value
 from .headers import HeaderMap
 from .cookie import Cookie, CookieJar, parse_set_cookie_header
 from .error import HttpError
+from .proto.utf8 import utf8_lossy_string
 
 
 struct Status:
@@ -148,10 +149,7 @@ struct Response(Movable):
         """
         if len(self.body) == 0:
             return ""
-        # Bulk UTF-8 copy in ONE pass. The previous byte-by-byte `out += chr(b)`
-        # was O(n^2) (String += reallocates), turning a 358 KB response into 20s+
-        # at 100% CPU — AND mis-decoded multi-byte UTF-8 (chr per byte = Latin-1).
-        return String(unsafe_from_utf8=Span(self.body))
+        return utf8_lossy_string(Span[UInt8, _](self.body))
 
     def json(self) raises -> Value:
         """Parse the body as JSON and return a ``json.Value``.
