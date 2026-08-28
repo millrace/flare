@@ -757,6 +757,7 @@ struct HttpServer(Movable):
         ws_handler: WsHandlerFn,
         num_workers: Int = 1,
         pin_cores: Bool = True,
+        ws_offload: Bool = False,
     ) raises:
         """Serve HTTP and WebSocket on one listener, on one port.
 
@@ -798,6 +799,11 @@ struct HttpServer(Movable):
                 handler is a plain function pointer, so it copies into
                 each per-worker ``ServerConfig`` for free.
             pin_cores: On Linux, pin worker N to core ``N % num_cpus``.
+            ws_offload: Give each upgraded connection its own detached
+                thread instead of running it inline on the reactor
+                worker. Turn this on when WebSocket connections are
+                long-lived; see :attr:`ServerConfig.ws_offload` for the
+                trade-off.
 
         Raises:
             NetworkError: On fatal listener errors.
@@ -817,6 +823,7 @@ struct HttpServer(Movable):
             ```
         """
         self.config.ws_handler = Optional[WsHandlerFn](ws_handler)
+        self.config.ws_offload = ws_offload
         self.serve(handler, num_workers, pin_cores)
 
     def serve[H: Handler](mut self, var handler: H) raises:
